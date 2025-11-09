@@ -18,7 +18,7 @@ use crate::{
 use super::{
     files::get_ignore_patterns,
     get_top_level_path,
-    status::{process_deleted_files_for_commit_message, process_git_status, read_git_status},
+    status::{process_deleted_files_for_commit_message, process_git_status},
 };
 
 pub const COMMIT_MESSAGE_FILE_PATH: &str = "commit_message.md";
@@ -34,8 +34,7 @@ pub const COMMIT_TYPES: [&str; 4] = ["chore", "feat", "fix", "test"];
 ///
 /// Returns an error if:
 /// - Not currently in a git repository
-/// - The git command fails to execute
-/// - The commit count cannot be parsed as a number
+/// - Unable to walk the commit history
 ///
 /// # Returns
 ///
@@ -55,46 +54,42 @@ pub const COMMIT_TYPES: [&str; 4] = ["chore", "feat", "fix", "test"];
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 pub fn get_current_commit_nb() -> Result<u32> {
-    let output = Command::new("git")
-        .args(["rev-list", "--count", "HEAD"])
-        .output()?;
+    use super::repository::open_repo;
 
-    if output.status.success() {
-        let commit_count_output = String::from_utf8_lossy(&output.stdout);
-        let commit_count_str = commit_count_output.trim();
-        let commit_count = commit_count_str.parse::<u32>().map_err(|_| {
+    let repo = open_repo()?;
+
+    // Try to get HEAD first
+    if let Ok(head) = repo.head() {
+        // Get the OID of HEAD
+        let head_oid = head
+            .target()
+            .ok_or(RonaError::Git(GitError::InvalidStatus {
+                output: "HEAD does not point to a valid commit".to_string(),
+            }))?;
+
+        // Create a revwalk to count commits
+        let mut revwalk = repo.revwalk()?;
+        revwalk.push(head_oid)?;
+
+        // Count the commits
+        let count = revwalk.count();
+        u32::try_from(count).map_err(|_| {
             RonaError::Git(GitError::InvalidStatus {
-                output: format!("Invalid commit count: {commit_count_str}"),
+                output: format!("Commit count too large: {count}"),
             })
-        })?;
-
-        Ok(commit_count)
+        })
     } else {
-        // HEAD might not exist in a freshly initialized repository
+        // HEAD doesn't exist, likely a fresh repository with no commits
         // Try counting all commits across all branches
-        let fallback_output = Command::new("git")
-            .args(["rev-list", "--count", "--all"])
-            .output()?;
+        let mut revwalk = repo.revwalk()?;
+        revwalk.push_glob("refs/*")?;
 
-        if fallback_output.status.success() {
-            let commit_count_output = String::from_utf8_lossy(&fallback_output.stdout);
-            let commit_count_str = commit_count_output.trim();
-            let commit_count = commit_count_str.parse::<u32>().map_err(|_| {
-                RonaError::Git(GitError::InvalidStatus {
-                    output: format!("Invalid commit count: {commit_count_str}"),
-                })
-            })?;
-
-            Ok(commit_count)
-        } else {
-            // Return original error from the HEAD command
-            let error_message = String::from_utf8_lossy(&output.stderr);
-
-            Err(RonaError::Git(GitError::CommandFailed {
-                command: "git rev-list --count HEAD".to_string(),
-                output: error_message.to_string(),
-            }))
-        }
+        let count = revwalk.count();
+        u32::try_from(count).map_err(|_| {
+            RonaError::Git(GitError::InvalidStatus {
+                output: format!("Commit count too large: {count}"),
+            })
+        })
     }
 }
 
@@ -125,39 +120,38 @@ pub fn get_current_commit_nb() -> Result<u32> {
 /// ```
 #[must_use]
 pub fn is_gpg_signing_available() -> bool {
+    use super::repository::open_repo;
+
+    // Try to open repository and get config
+    let Ok(repo) = open_repo() else {
+        return false;
+    };
+
+    let Ok(config) = repo.config() else {
+        return false;
+    };
+
     // Check if git has a signing key configured
-    let git_signing_key = Command::new("git")
-        .args(["config", "--get", "user.signingkey"])
+    let signing_key = match config.get_string("user.signingkey") {
+        Ok(key) if !key.is_empty() => key,
+        _ => return false, // No signing key configured
+    };
+
+    // Check if GPG is available and the key exists
+    let gpg_check = Command::new("gpg")
+        .args(["--list-secret-keys", &signing_key])
         .output();
 
-    if let Ok(output) = git_signing_key {
-        if !output.status.success() || output.stdout.is_empty() {
-            // No signing key configured
-            return false;
-        }
-
-        let signing_key = String::from_utf8_lossy(&output.stdout).trim().to_string();
-
-        // Check if GPG is available and the key exists
-        let gpg_check = Command::new("gpg")
-            .args(["--list-secret-keys", &signing_key])
-            .output();
-
-        if let Ok(gpg_output) = gpg_check {
-            return gpg_output.status.success();
-        }
+    if let Ok(gpg_output) = gpg_check
+        && gpg_output.status.success()
+    {
+        return true;
     }
 
     // As a fallback, check if gpg.program is configured and accessible
-    let git_gpg_program = Command::new("git")
-        .args(["config", "--get", "gpg.program"])
-        .output();
-
-    if let Ok(output) = git_gpg_program
-        && output.status.success()
-        && !output.stdout.is_empty()
+    if let Ok(gpg_program) = config.get_string("gpg.program")
+        && !gpg_program.is_empty()
     {
-        let gpg_program = String::from_utf8_lossy(&output.stdout).trim().to_string();
         // Test if the configured GPG program is available
         if let Ok(test_gpg) = Command::new(gpg_program).arg("--version").output() {
             return test_gpg.status.success();
@@ -335,9 +329,8 @@ pub fn generate_commit_message(
     }
 
     // Get git status info
-    let git_status = read_git_status()?;
-    let modified_files = process_git_status(&git_status)?;
-    let deleted_files = process_deleted_files_for_commit_message(&git_status)?;
+    let modified_files = process_git_status()?;
+    let deleted_files = process_deleted_files_for_commit_message()?;
 
     // Open the commit file for writing
     let mut commit_file = OpenOptions::new()
