@@ -14,7 +14,7 @@ Thank you for your interest in contributing to Rona! This document provides guid
 
 1. **Clone the repository**:
 ```bash
-git clone https://github.com/TomPlanche/rona.git
+git clone https://github.com/rona-rs/rona.git
 cd rona
 ```
 
