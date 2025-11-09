@@ -18,6 +18,7 @@ jobs:
               with:
                   fetch-depth: 0
                   fetch-tags: true
+                  token: ${{ secrets.PAT_TOKEN }}
 
             - name: Determine previous and current versions
               id: versions
