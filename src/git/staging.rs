@@ -2,17 +2,13 @@
 //!
 //! File staging functionality with pattern exclusion and dry-run capabilities.
 
-use std::process::Command;
-
 use glob::Pattern;
 
 use crate::errors::Result;
 
 use super::{
-    repository::get_top_level_path,
-    status::{
-        count_renamed_files, get_status_files, process_deleted_files_for_staging, read_git_status,
-    },
+    repository::open_repo,
+    status::{count_renamed_files, get_status_files, process_deleted_files_for_staging},
 };
 
 /// Adds files to the git index.
@@ -85,8 +81,7 @@ pub fn git_add_with_exclude_patterns(
         println!("Adding files...");
     }
 
-    let git_status = read_git_status()?;
-    let deleted_files = process_deleted_files_for_staging(&git_status)?;
+    let deleted_files = process_deleted_files_for_staging()?;
     let deleted_files_count = deleted_files.len();
 
     let staged_files = get_status_files()?;
@@ -107,30 +102,27 @@ pub fn git_add_with_exclude_patterns(
         return Ok(());
     }
 
-    let top_level_dir = get_top_level_path()?;
+    let repo = open_repo()?;
+    let mut index = repo.index()?;
 
-    let _ = Command::new("git")
-        .current_dir(&top_level_dir)
-        .arg("add")
-        .args(&files_to_add)
-        .args(&deleted_files)
-        .output()?;
+    // Add files to the index
+    for file in &files_to_add {
+        index.add_path(std::path::Path::new(file))?;
+    }
+
+    // Add deleted files to the index (this stages the deletion)
+    for file in &deleted_files {
+        index.remove_path(std::path::Path::new(file))?;
+    }
+
+    // Write the index
+    index.write()?;
 
     // Get the new git status after staging to count renamed files
-    let new_git_status = read_git_status()?;
-    let renamed_count = count_renamed_files(&new_git_status);
+    let renamed_count = count_renamed_files()?;
 
-    let staged = Command::new("git")
-        .args(["diff", "--cached", "--numstat"])
-        .output()?;
-
-    // Calculate counts:
-    // - git diff --cached --numstat shows 2 lines per renamed file (deletion + addition)
-    // - We need to subtract renamed_count to get the actual number of added files
-    // - We also subtract deleted_files_count since those appear separately
-    let staged_count = String::from_utf8_lossy(&staged.stdout).lines().count()
-        - deleted_files_count
-        - renamed_count;
+    // Count the actual number of files staged
+    let staged_count = files_to_add.len();
     let excluded_count = staged_files_len - files_to_add.len();
 
     println!(
