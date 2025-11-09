@@ -3,7 +3,7 @@ authors = ["Tom Planche <tomplanche@proton.me>"]
 categories = ["command-line-utilities"]
 description = "A simple CLI tool to help you with your git workflow."
 edition = "2024"
-homepage = "https://github.com/tomplanche/rona"
+homepage = "https://github.com/rona-rs/rona"
 include = [
     "/Cargo.toml",
     "/LICENSE-APACHE",
@@ -15,7 +15,7 @@ keywords = ["cli", "git", "helper", "commands"]
 license = "Apache-2.0 OR MIT"
 name = "rona"
 readme = "README.md"
-repository = "https://github.com/tomplanche/rona"
+repository = "https://github.com/rona-rs/rona"
 version = "2.11.0"
 
 [[bin]]

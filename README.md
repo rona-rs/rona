@@ -9,8 +9,8 @@
   <a href="https://sonarcloud.io/summary/new_code?id=TomPlanche_rona"><img src="https://sonarcloud.io/api/project_badges/measure?project=TomPlanche_rona&metric=alert_status" alt="SonarCloud Status"></a>
   <a href="https://sonarcloud.io/summary/new_code?id=TomPlanche_rona"><img src="https://sonarcloud.io/api/project_badges/measure?project=TomPlanche_rona&metric=sqale_rating" alt="SonarCloud SQALE Rating"></a>
   <a href="https://sonarcloud.io/summary/new_code?id=TomPlanche_rona"><img src="https://sonarcloud.io/api/project_badges/measure?project=TomPlanche_rona&metric=security_rating" alt="SonarCloud Security Rating"></a>
-  <a href="https://github.com/TomPlanche/rona/blob/main/LICENSE"><img src="https://img.shields.io/crates/l/rona" alt="License"></a>
-  <a href="https://github.com/TomPlanche/rona/actions/workflows/rust.yaml"><img src="https://github.com/TomPlanche/rona/actions/workflows/rust.yaml/badge.svg" alt="Build Status"></a>
+  <a href="https://github.com/rona-rs/rona/blob/main/LICENSE"><img src="https://img.shields.io/crates/l/rona" alt="License"></a>
+  <a href="https://github.com/rona-rs/rona/actions/workflows/rust.yaml"><img src="https://github.com/rona-rs/rona/actions/workflows/rust.yaml/badge.svg" alt="Build Status"></a>
 </p>
 
 ## Overview
@@ -535,7 +535,7 @@ The completions include:
 
 ### Building from Source
 ```bash
-git clone https://github.com/TomPlanche/rona.git
+git clone https://github.com/rona-rs/rona.git
 cd rona
 cargo build --release
 ```
@@ -554,4 +554,4 @@ at your option.
 
 ## Support
 
-For bugs, questions, and discussions please use the [GitHub Issues](https://github.com/TomPlanche/rona/issues).
+For bugs, questions, and discussions please use the [GitHub Issues](https://github.com/rona-rs/rona/issues).
