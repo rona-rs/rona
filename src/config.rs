@@ -28,7 +28,8 @@ use std::{env, io::Write, path::PathBuf};
 
 use crate::{
     errors::{ConfigError, GitError, Result},
-    utils::{find_project_root, print_error},
+    git::get_top_level_path,
+    utils::print_error,
 };
 
 // Define your default commit types
@@ -254,9 +255,7 @@ impl Config {
             .map_err(|_| ConfigError::InvalidConfig)?;
 
         let config_path = match selection {
-            "Project (./.rona.toml)" => find_project_root()
-                .map(|root| root.join(".rona.toml"))
-                .map_err(|_| ConfigError::ConfigNotFound)?,
+            "Project (./.rona.toml)" => get_top_level_path().map(|root| root.join(".rona.toml"))?,
             "Global (~/.config/rona.toml)" => {
                 let home = dirs::home_dir().ok_or(ConfigError::ConfigNotFound)?;
                 home.join(".config/rona.toml")

@@ -12,8 +12,8 @@ use std::{
 
 use crate::{
     errors::Result,
-    git::{COMMIT_MESSAGE_FILE_PATH, find_git_root},
-    utils::{find_project_root, print_error},
+    git::{COMMIT_MESSAGE_FILE_PATH, find_git_root, get_top_level_path},
+    utils::print_error,
 };
 
 const COMMITIGNORE_FILE_PATH: &str = ".commitignore";
@@ -90,13 +90,13 @@ pub fn add_to_git_exclude(paths: &[&str]) -> Result<()> {
     Ok(())
 }
 
-/// Creates the necessary files in the project root.
+/// Creates the necessary files in the git repository root.
 ///
 /// # Errors
 /// * If the files cannot be created.
 /// * If the git add command fails.
 pub fn create_needed_files() -> Result<()> {
-    let project_root = find_project_root()?;
+    let project_root = get_top_level_path()?;
 
     let commit_file_path = Path::new(&project_root).join(COMMIT_MESSAGE_FILE_PATH);
     let commitignore_file_path = Path::new(&project_root).join(COMMITIGNORE_FILE_PATH);

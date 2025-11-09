@@ -13,11 +13,11 @@ use std::{
 use crate::{
     errors::{GitError, Result, RonaError},
     git::branch::{format_branch_name, get_current_branch},
-    utils::find_project_root,
 };
 
 use super::{
     files::get_ignore_patterns,
+    get_top_level_path,
     status::{process_deleted_files_for_commit_message, process_git_status, read_git_status},
 };
 
@@ -272,7 +272,7 @@ pub fn git_commit(args: &[String], unsigned: bool, verbose: bool, dry_run: bool)
         println!("Committing files...");
     }
 
-    let project_root = find_project_root()?;
+    let project_root = get_top_level_path()?;
     let commit_file_path = project_root.join(COMMIT_MESSAGE_FILE_PATH);
 
     if !commit_file_path.exists() {
@@ -326,11 +326,12 @@ pub fn generate_commit_message(
     verbose: bool,
     no_commit_number: bool,
 ) -> Result<()> {
-    let commit_message_path = Path::new(COMMIT_MESSAGE_FILE_PATH);
+    let project_root = get_top_level_path()?;
+    let commit_message_path = project_root.join(COMMIT_MESSAGE_FILE_PATH);
 
     // Empty the file if it exists
     if commit_message_path.exists() {
-        write(commit_message_path, "")?;
+        write(&commit_message_path, "")?;
     }
 
     // Get git status info
@@ -342,7 +343,7 @@ pub fn generate_commit_message(
     let mut commit_file = OpenOptions::new()
         .append(true)
         .create(true)
-        .open(commit_message_path)?;
+        .open(&commit_message_path)?;
 
     // Write header
     write_commit_header(&mut commit_file, commit_type, no_commit_number)?;
@@ -366,7 +367,7 @@ pub fn generate_commit_message(
     commit_file.flush()?;
 
     if verbose {
-        println!("{COMMIT_MESSAGE_FILE_PATH} created ✅ ");
+        println!("{} created ✅ ", commit_message_path.display());
     }
 
     Ok(())
