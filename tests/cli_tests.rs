@@ -20,6 +20,7 @@
 //! - No interference with user's actual git configuration
 
 use assert_cmd::Command;
+use assert_cmd::cargo::cargo_bin_cmd;
 use mockall::predicate;
 use std::fs;
 use tempfile::TempDir;
@@ -32,7 +33,7 @@ use tempfile::TempDir;
 /// - Output contains options documentation
 #[test]
 fn test_help_command() {
-    let mut cmd = Command::cargo_bin("rona").unwrap();
+    let mut cmd = cargo_bin_cmd!("rona");
     cmd.arg("--help");
     cmd.assert()
         .success()
@@ -47,7 +48,7 @@ fn test_help_command() {
 /// - Output contains the correct version number from Cargo.toml
 #[test]
 fn test_version_command() {
-    let mut cmd = Command::cargo_bin("rona").unwrap();
+    let mut cmd = cargo_bin_cmd!("rona");
     cmd.arg("--version");
     cmd.assert()
         .success()
@@ -76,7 +77,7 @@ fn test_add_command() {
     fs::write(temp_path.join("test3.md"), "test content").unwrap();
 
     // Test rona add with pattern exclusion
-    let mut cmd = Command::cargo_bin("rona").unwrap();
+    let mut cmd = cargo_bin_cmd!("rona");
     cmd.current_dir(temp_path).arg("-a").arg(r"*.md"); // exclude all markdown files
     cmd.assert().success();
 
@@ -111,18 +112,31 @@ fn test_commit_command() {
     git_init.current_dir(temp_path).arg("init");
     git_init.assert().success();
 
-    // Configure git user
+    // Configure git user (using --local to only affect this test repository)
     let mut git_config = Command::new("git");
     git_config
         .current_dir(temp_path)
-        .args(["config", "user.name", "Test User"]);
+        .args(["config", "--local", "user.name", "Test User"]);
     git_config.assert().success();
 
     let mut git_config_email = Command::new("git");
-    git_config_email
-        .current_dir(temp_path)
-        .args(["config", "user.email", "test@example.com"]);
+    git_config_email.current_dir(temp_path).args([
+        "config",
+        "--local",
+        "user.email",
+        "test@example.com",
+    ]);
     git_config_email.assert().success();
+
+    // Ensure GPG signing does not interfere with the test (using --local)
+    let mut git_disable_gpgsign = Command::new("git");
+    git_disable_gpgsign.current_dir(temp_path).args([
+        "config",
+        "--local",
+        "commit.gpgsign",
+        "false",
+    ]);
+    git_disable_gpgsign.assert().success();
 
     // Create and stage a test file
     fs::write(temp_path.join("test.txt"), "test content").unwrap();
@@ -135,7 +149,7 @@ fn test_commit_command() {
     fs::write(temp_path.join("commit_message.md"), commit_msg).unwrap();
 
     // Test rona commit
-    let mut cmd = Command::cargo_bin("rona").unwrap();
+    let mut cmd = cargo_bin_cmd!("rona");
     cmd.current_dir(temp_path).arg("-c");
     cmd.assert().success();
 

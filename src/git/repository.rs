@@ -3,21 +3,38 @@
 //! Core repository-level operations for Git repositories including repository detection,
 //! path resolution, and basic repository information.
 
-use std::{path::PathBuf, process::Command};
+use std::path::PathBuf;
 
 use crate::errors::{GitError, Result, RonaError};
 
-/// Finds the root directory of the git repository.
+/// Opens the git repository from the current directory or any parent directory.
 ///
-/// This function uses `git rev-parse --git-dir` to locate the `.git` directory
-/// of the current repository. It works from any subdirectory within a git repository.
+/// This function discovers the git repository by searching upward from the current
+/// working directory. It's a helper function used internally by other repository operations.
 ///
 /// # Errors
 ///
 /// Returns an error if:
 /// - Not currently in a git repository
-/// - The git command fails to execute
-/// - The `.git` directory doesn't exist at the reported location
+/// - Unable to open the repository
+///
+/// # Returns
+///
+/// A `git2::Repository` object for the discovered repository
+pub fn open_repo() -> Result<git2::Repository> {
+    git2::Repository::discover(".").map_err(|_| RonaError::Git(GitError::RepositoryNotFound))
+}
+
+/// Finds the root directory of the git repository.
+///
+/// This function locates the `.git` directory of the current repository.
+/// It works from any subdirectory within a git repository.
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - Not currently in a git repository
+/// - Unable to determine the git directory path
 ///
 /// # Returns
 ///
@@ -35,21 +52,12 @@ use crate::errors::{GitError, Result, RonaError};
 /// }
 /// ```
 pub fn find_git_root() -> Result<PathBuf> {
-    let output = Command::new("git")
-        .args(["rev-parse", "--git-dir"])
-        .output()?;
+    let repo = open_repo()?;
 
-    if output.status.success() {
-        let git_root = PathBuf::from(String::from_utf8_lossy(&output.stdout).trim());
-
-        if git_root.exists() {
-            Ok(git_root)
-        } else {
-            Err(RonaError::Git(GitError::RepositoryNotFound))
-        }
-    } else {
-        Err(RonaError::Git(GitError::RepositoryNotFound))
-    }
+    repo.path()
+        .to_path_buf()
+        .canonicalize()
+        .map_err(RonaError::Io)
 }
 
 /// Retrieves the top-level path of the git repository.
@@ -62,8 +70,7 @@ pub fn find_git_root() -> Result<PathBuf> {
 ///
 /// Returns an error if:
 /// - Not currently in a git repository
-/// - The git command fails to execute
-/// - Unable to parse the command output
+/// - Unable to determine the working directory
 ///
 /// # Returns
 ///
@@ -81,12 +88,9 @@ pub fn find_git_root() -> Result<PathBuf> {
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 pub fn get_top_level_path() -> Result<PathBuf> {
-    let output = Command::new("git")
-        .args(["rev-parse", "--show-toplevel"])
-        .output()?;
+    let repo = open_repo()?;
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let git_top_level_path = PathBuf::from(stdout.trim());
-
-    Ok(git_top_level_path)
+    repo.workdir()
+        .ok_or(RonaError::Git(GitError::RepositoryNotFound))
+        .map(std::path::Path::to_path_buf)
 }

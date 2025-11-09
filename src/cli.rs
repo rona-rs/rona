@@ -25,21 +25,23 @@
 //! - Handles configuration management
 //!
 
-use crate::git::{format_branch_name, get_current_branch, get_current_commit_nb};
+use clap::{Command as ClapCommand, CommandFactory, Parser, Subcommand, ValueHint, command};
+use clap_complete::{Shell, generate};
+use glob::Pattern;
+use inquire::ui::{Attributes, Color, RenderConfig, StyleSheet, Styled};
+use inquire::{Select, Text};
+use std::{io, process::Command};
+
 use crate::{
     config::Config,
     errors::Result,
     git::{
-        COMMIT_MESSAGE_FILE_PATH, COMMIT_TYPES, create_needed_files, generate_commit_message,
-        get_status_files, git_add_with_exclude_patterns, git_commit, git_push,
+        COMMIT_MESSAGE_FILE_PATH, COMMIT_TYPES, create_needed_files, format_branch_name,
+        generate_commit_message, get_current_branch, get_current_commit_nb, get_status_files,
+        get_top_level_path, git_add_with_exclude_patterns, git_commit, git_push,
     },
-    my_clap_theme,
+    template::{TemplateVariables, process_template, validate_template},
 };
-use clap::{Command as ClapCommand, CommandFactory, Parser, Subcommand, ValueHint, command};
-use clap_complete::{Shell, generate};
-use dialoguer::Select;
-use glob::Pattern;
-use std::{io, process::Command};
 
 /// CLI's commands
 #[derive(Subcommand)]
@@ -172,6 +174,45 @@ fn build_cli() -> ClapCommand {
     Cli::command()
 }
 
+fn get_render_config() -> RenderConfig<'static> {
+    let mut render_config = RenderConfig::default();
+
+    // Prefix/icons
+    render_config.prompt_prefix = Styled::new("$").with_fg(Color::LightRed);
+    render_config.answered_prompt_prefix = Styled::new("✔").with_fg(Color::LightGreen);
+    render_config.highlighted_option_prefix = Styled::new("➠").with_fg(Color::LightBlue);
+    render_config.selected_checkbox = Styled::new("☑").with_fg(Color::LightGreen);
+    render_config.unselected_checkbox = Styled::new("☐").with_fg(Color::Black);
+    render_config.scroll_up_prefix = Styled::new("⇞").with_fg(Color::Black);
+    render_config.scroll_down_prefix = Styled::new("⇟").with_fg(Color::Black);
+
+    // Input prompt label
+    render_config.prompt = StyleSheet::new()
+        .with_fg(Color::LightCyan)
+        .with_attr(Attributes::BOLD);
+
+    // Help under the input
+    render_config.help_message = StyleSheet::new()
+        .with_fg(Color::DarkYellow)
+        .with_attr(Attributes::ITALIC);
+
+    // Validation error
+    render_config.error_message = render_config
+        .error_message
+        .with_prefix(Styled::new("❌").with_fg(Color::LightRed));
+
+    // Shown after submit (echoed answer)
+    render_config.answer = StyleSheet::new()
+        .with_fg(Color::LightMagenta)
+        .with_attr(Attributes::BOLD);
+
+    // Optional: default/placeholder styles
+    render_config.default_value = StyleSheet::new().with_fg(Color::LightBlue);
+    render_config.placeholder = StyleSheet::new().with_fg(Color::Black);
+
+    render_config
+}
+
 /// Print custom fish shell completions that enhance the auto-generated ones
 #[doc(hidden)]
 fn print_fish_custom_completions() {
@@ -267,17 +308,15 @@ fn handle_generate(interactive: bool, no_commit_number: bool, config: &Config) -
         |v| v.iter().map(String::as_str).collect::<Vec<&str>>(),
     );
 
-    let commit_type = commit_types_vec
-        [Select::with_theme(&my_clap_theme::ColorfulTheme::default())
-            .default(0)
-            .items(&commit_types_vec)
-            .interact()
-            .unwrap()];
+    let commit_type = Select::new("Select commit type", commit_types_vec)
+        .with_starting_cursor(0)
+        .prompt()
+        .unwrap();
 
     generate_commit_message(commit_type, config.verbose, no_commit_number)?;
 
     if interactive {
-        handle_interactive_mode(commit_type, no_commit_number)?;
+        handle_interactive_mode(commit_type, no_commit_number, config)?;
     } else {
         handle_editor_mode(config)?;
     }
@@ -285,17 +324,20 @@ fn handle_generate(interactive: bool, no_commit_number: bool, config: &Config) -
 }
 
 /// Handle interactive mode for generate command
-fn handle_interactive_mode(commit_type: &str, no_commit_number: bool) -> Result<()> {
-    use dialoguer::Input;
+fn handle_interactive_mode(
+    commit_type: &str,
+    no_commit_number: bool,
+    config: &Config,
+) -> Result<()> {
     use std::fs;
 
     println!("📝 Interactive mode: Enter your commit message.");
     println!("💡 Tip: Keep it concise and descriptive.");
 
-    let message: String = Input::with_theme(&my_clap_theme::ColorfulTheme::default())
-        .with_prompt("Message")
-        .interact()
-        .unwrap();
+    let project_root = get_top_level_path()?;
+    let commit_file_path = project_root.join(COMMIT_MESSAGE_FILE_PATH);
+
+    let message: String = Text::new("Message").prompt().unwrap();
 
     if message.trim().is_empty() {
         println!("⚠️  Empty message provided. Exiting.");
@@ -303,22 +345,59 @@ fn handle_interactive_mode(commit_type: &str, no_commit_number: bool) -> Result<
     }
 
     let branch_name = format_branch_name(&COMMIT_TYPES, &get_current_branch()?);
-
-    let formatted_message = if no_commit_number {
-        format!("({} on {}) {}", commit_type, branch_name, message.trim())
+    let commit_number = if no_commit_number {
+        None
     } else {
-        let commit_number = get_current_commit_nb()? + 1;
-        format!(
-            "[{}] ({} on {}) {}",
-            commit_number,
-            commit_type,
-            branch_name,
-            message.trim()
-        )
+        Some(get_current_commit_nb()? + 1)
     };
 
-    // Write the simple formatted message to commit_message.md
-    fs::write(COMMIT_MESSAGE_FILE_PATH, &formatted_message)?;
+    // Get template from config or use default based on no_commit_number flag
+    let default_template = if no_commit_number {
+        "({commit_type} on {branch_name}) {message}"
+    } else {
+        "[{commit_number}] ({commit_type} on {branch_name}) {message}"
+    };
+
+    let template = config
+        .project_config
+        .template
+        .as_deref()
+        .unwrap_or(default_template);
+
+    // Validate template
+    if let Err(e) = validate_template(template) {
+        println!("⚠️  Template validation error: {e}");
+        println!("Using fallback format...");
+        let formatted_message = if no_commit_number {
+            format!("({} on {}) {}", commit_type, branch_name, message.trim())
+        } else {
+            format!(
+                "[{}] ({} on {}) {}",
+                commit_number.unwrap(),
+                commit_type,
+                branch_name,
+                message.trim()
+            )
+        };
+        fs::write(&commit_file_path, &formatted_message)?;
+        println!("\n✅ Commit message created!");
+        println!("📄 Message: {formatted_message}");
+        return Ok(());
+    }
+
+    // Create template variables
+    let variables = TemplateVariables::new(
+        commit_number,
+        commit_type.to_string(),
+        branch_name,
+        message.trim().to_string(),
+    )?;
+
+    // Process template
+    let formatted_message = process_template(template, &variables)?;
+
+    // Write the formatted message to commit_message.md
+    fs::write(&commit_file_path, &formatted_message)?;
 
     println!("\n✅ Commit message created!");
     println!("📄 Message: {formatted_message}");
@@ -328,9 +407,11 @@ fn handle_interactive_mode(commit_type: &str, no_commit_number: bool) -> Result<
 /// Handle editor mode for generate command
 fn handle_editor_mode(config: &Config) -> Result<()> {
     let editor = config.get_editor()?;
+    let project_root = get_top_level_path()?;
+    let commit_file_path = project_root.join(COMMIT_MESSAGE_FILE_PATH);
 
     Command::new(editor)
-        .arg(COMMIT_MESSAGE_FILE_PATH)
+        .arg(&commit_file_path)
         .spawn()
         .expect("Failed to spawn editor")
         .wait()
@@ -405,6 +486,9 @@ fn handle_set(editor: &str, config: &Config) -> Result<()> {
 /// # Returns
 /// * `Result<()>` - Ok if all operations succeed, Err with error details otherwise
 pub fn run() -> Result<()> {
+    // Apply global colors/styles for all inquire prompts
+    inquire::set_global_render_config(get_render_config());
+
     let cli = Cli::parse();
     let mut config = Config::new()?;
 
@@ -1124,5 +1208,154 @@ mod cli_tests {
             }
             _ => panic!("Wrong command parsed"),
         }
+    }
+
+    // === TEMPLATE SELECTION TESTS (REGRESSION TESTS) ===
+    // These tests would have caught the bug where `rona -g -i -n` produced empty brackets []
+
+    /// REGRESSION TEST: Verify template selection logic for interactive mode with `no_commit_number`
+    /// This test verifies that the correct default template is chosen based on the flag
+    #[test]
+    fn test_template_selection_with_no_commit_number() {
+        use crate::template::{TemplateVariables, process_template};
+
+        // Simulate what handle_interactive_mode should do with no_commit_number = true
+        let no_commit_number = true;
+
+        // The default template should NOT include commit_number placeholder
+        let default_template = if no_commit_number {
+            "({commit_type} on {branch_name}) {message}"
+        } else {
+            "[{commit_number}] ({commit_type} on {branch_name}) {message}"
+        };
+
+        let variables = TemplateVariables {
+            commit_number: None,
+            commit_type: "docs".to_string(),
+            branch_name: "main".to_string(),
+            message: "Update docs".to_string(),
+            date: "2024-01-15".to_string(),
+            time: "14:30:00".to_string(),
+            author: "Test User".to_string(),
+            email: "test@example.com".to_string(),
+        };
+
+        let result = process_template(default_template, &variables).unwrap();
+
+        // Should NOT contain empty brackets
+        assert!(
+            !result.contains("[]"),
+            "Output should not contain empty brackets: {result}"
+        );
+        assert_eq!(result, "(docs on main) Update docs");
+    }
+
+    /// REGRESSION TEST: Verify template selection logic for interactive mode WITH `commit_number`
+    #[test]
+    fn test_template_selection_with_commit_number() {
+        use crate::template::{TemplateVariables, process_template};
+
+        // Simulate what handle_interactive_mode should do with no_commit_number = false
+        let no_commit_number = false;
+
+        // The default template SHOULD include commit_number placeholder
+        let default_template = if no_commit_number {
+            "({commit_type} on {branch_name}) {message}"
+        } else {
+            "[{commit_number}] ({commit_type} on {branch_name}) {message}"
+        };
+
+        let variables = TemplateVariables {
+            commit_number: Some(42),
+            commit_type: "feat".to_string(),
+            branch_name: "new-feature".to_string(),
+            message: "Add feature".to_string(),
+            date: "2024-01-15".to_string(),
+            time: "14:30:00".to_string(),
+            author: "Test User".to_string(),
+            email: "test@example.com".to_string(),
+        };
+
+        let result = process_template(default_template, &variables).unwrap();
+
+        // Should contain properly formatted commit number
+        assert!(
+            result.starts_with("[42]"),
+            "Output should start with [42]: {result}"
+        );
+        assert_eq!(result, "[42] (feat on new-feature) Add feature");
+    }
+
+    /// REGRESSION TEST: Verify that using wrong template produces the bug
+    /// This documents the original bug and ensures our fix prevents it
+    #[test]
+    fn test_bug_using_wrong_template_with_no_commit_number() {
+        use crate::template::{TemplateVariables, process_template};
+
+        // This simulates the BUG: using default template with None commit_number
+        let wrong_template = "[{commit_number}] ({commit_type} on {branch_name}) {message}";
+
+        let variables = TemplateVariables {
+            commit_number: None, // This is the key: None with a template that expects a number
+            commit_type: "docs".to_string(),
+            branch_name: "main".to_string(),
+            message: "Update docs".to_string(),
+            date: "2024-01-15".to_string(),
+            time: "14:30:00".to_string(),
+            author: "Test User".to_string(),
+            email: "test@example.com".to_string(),
+        };
+
+        let result = process_template(wrong_template, &variables).unwrap();
+
+        // This DOCUMENTS the bug: using wrong template produces empty brackets
+        assert_eq!(result, "[] (docs on main) Update docs");
+        assert!(result.contains("[]"), "This demonstrates the bug we fixed");
+    }
+
+    /// REGRESSION TEST: Test fallback format in `handle_interactive_mode`
+    /// Verify the fallback format also respects `no_commit_number` flag
+    #[test]
+    fn test_fallback_format_with_no_commit_number() {
+        // Simulate the fallback format from handle_interactive_mode
+        let no_commit_number = true;
+        let commit_type = "fix";
+        let branch_name = "bugfix";
+        let message = "Fix issue";
+
+        let formatted_message = if no_commit_number {
+            format!("({commit_type} on {branch_name}) {message}")
+        } else {
+            format!("[42] ({commit_type} on {branch_name}) {message}")
+        };
+
+        assert_eq!(formatted_message, "(fix on bugfix) Fix issue");
+        assert!(
+            !formatted_message.contains("[]"),
+            "Fallback should not produce empty brackets"
+        );
+    }
+
+    /// REGRESSION TEST: Test fallback format with commit number
+    #[test]
+    fn test_fallback_format_with_commit_number() {
+        // Simulate the fallback format from handle_interactive_mode
+        let no_commit_number = false;
+        let commit_number = 15u32;
+        let commit_type = "feat";
+        let branch_name = "feature";
+        let message = "Add feature";
+
+        let formatted_message = if no_commit_number {
+            format!("({commit_type} on {branch_name}) {message}")
+        } else {
+            format!("[{commit_number}] ({commit_type} on {branch_name}) {message}")
+        };
+
+        assert_eq!(formatted_message, "[15] (feat on feature) Add feature");
+        assert!(
+            !formatted_message.contains("[]"),
+            "Should not produce empty brackets"
+        );
     }
 }

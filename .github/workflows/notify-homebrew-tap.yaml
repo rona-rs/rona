@@ -1,0 +1,66 @@
+name: Notify Homebrew Tap
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release (e.g., v1.2.3)"
+        required: true
+        type: string
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ inputs.tag || github.event.release.tag_name || github.ref_name }}
+    steps:
+      - name: Debug event context
+        run: |
+          echo "Event name: ${{ github.event_name }}"
+          echo "Event action: ${{ github.event.action }}"
+          echo "Tag from release: ${{ github.event.release.tag_name }}"
+          echo "Ref name: ${{ github.ref_name }}"
+          echo "Resolved TAG: $TAG"
+
+      - name: Validate tag
+        run: |
+          if [ -z "$TAG" ]; then
+            echo "ERROR: No tag available (both github.event.release.tag_name and github.ref_name are empty)"
+            exit 1
+          fi
+          echo "Using tag: $TAG"
+
+      - name: Check if PR already exists in tap (guard)
+        id: guard
+        env:
+          TOKEN: ${{ secrets.HOMEBREW_RONA_TOKEN }}
+        run: |
+          OWNER="rona-rs"
+          REPO="homebrew-rona"
+          HEAD="${OWNER}:bump/rona-${TAG}"
+          # Query open PRs with the expected head branch
+          RES=$(curl -s -H "Authorization: token ${TOKEN}" \
+            "https://api.github.com/repos/${OWNER}/${REPO}/pulls?state=open&head=${HEAD}")
+          COUNT=$(echo "$RES" | jq 'length')
+          if [ "$COUNT" -gt 0 ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Found existing PR for ${HEAD}, skipping dispatch"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "No existing PR for ${HEAD}, will dispatch"
+          fi
+
+      - name: Dispatch update to homebrew-rona
+        if: steps.guard.outputs.exists == 'false'
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.HOMEBREW_RONA_TOKEN }}
+          repository: rona-rs/homebrew-rona
+          event-type: rona-release
+          client-payload: |
+            {
+              "tag": "${{ env.TAG }}",
+              "tarball_url": "https://github.com/rona-rs/rona/archive/refs/tags/${{ env.TAG }}.tar.gz"
+            }

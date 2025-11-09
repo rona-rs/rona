@@ -3,7 +3,7 @@ name: Update Dependencies
 on:
   schedule:
     # Run at 00:00 UTC on Mondays and Thursdays
-    - cron: '0 0 * * 1,4'
+    - cron: "0 0 * * 1,4"
   workflow_dispatch: # Allow manual triggering
 
 jobs:
@@ -43,15 +43,16 @@ jobs:
         if: steps.git-check.outputs.changes == 'true'
         uses: peter-evans/create-pull-request@v5
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: "chore: update dependencies"
-          title: "chore: update dependencies"
+          assignees: TomPlanche
+          base: main
           body: |
             Automated dependency updates:
             - Updated all dependencies to their latest versions
             - Please review the changes before merging
           branch: update-dependencies
-          base: main
+          commit-message: "(chore on update-dependencies) update dependencies"
           labels: |
             dependencies
-            automated pr 
+            automated pr
+          title: "[chore] update dependencies"
+          token: ${{ secrets.RONA_PR_TOKEN }}

@@ -25,11 +25,32 @@ Rona is a command-line interface tool designed to enhance your Git workflow with
 - 🎯 Interactive commit type selection with customizable types
 - 🛠 Multi-shell completion support (Bash, Fish, Zsh, PowerShell)
 - ⚙️ Flexible configuration system (global and project-level)
+ - 🎨 Colored interactive prompts powered by Inquire
 
 ## Installation
 
+### Homebrew (macOS/Linux)
+
+```bash
+brew install rona-rs/rona/rona
+```
+
+Or, if you prefer to tap explicitly:
+
+```bash
+brew tap rona-rs/rona
+brew install rona
+```
+
+### Cargo (Alternative)
+
 ```bash
 cargo install rona
+```
+
+After installation, initialize Rona (optional, to set your preferred editor):
+
+```bash
 rona init [editor] # The editor to use for commit messages (default: nano)
 ```
 
@@ -54,9 +75,47 @@ commit_types = [
     "test",    # Adding or updating tests
     "chore"    # Maintenance tasks
 ]
+
+# Template for interactive commit message generation
+# Available variables: {commit_number}, {commit_type}, {branch_name}, {message}, {date}, {time}, {author}, {email}
+template = "[{commit_number}] ({commit_type} on {branch_name}) {message}"
 ```
 
 **Note**: When no configuration exists, Rona falls back to: `["chore", "feat", "fix", "test"]`
+
+### Template Configuration
+
+Rona supports customizable templates for interactive commit message generation. You can define how your commit messages are formatted using variables:
+
+**Available Template Variables:**
+- `{commit_number}` - The commit number (incremental)
+- `{commit_type}` - The selected commit type (feat, fix, etc.)
+- `{branch_name}` - The current branch name
+- `{message}` - Your input message
+- `{date}` - Current date (YYYY-MM-DD)
+- `{time}` - Current time (HH:MM:SS)
+- `{author}` - Git author name
+- `{email}` - Git author email
+
+**Template Examples:**
+```toml
+# Default template
+template = "[{commit_number}] ({commit_type} on {branch_name}) {message}"
+
+# Simple format without commit number
+template = "({commit_type}) {message}"
+
+# Include date and time
+template = "[{date} {time}] {commit_type}: {message}"
+
+# Include author information
+template = "{commit_type}: {message} (by {author})"
+
+# Custom format
+template = "🚀 {commit_type} on {branch_name}: {message}"
+```
+
+**Note**: If no template is specified, Rona uses the default format: `[{commit_number}] ({commit_type} on {branch_name}) {message}`
 
 ### Working with Configuration
 
@@ -337,6 +396,20 @@ When using the `-i` flag, Rona will:
 4. Save directly to `commit_message.md` without file details
 
 This is perfect for quick, clean commits without the detailed file listing.
+
+### Prompt UI and Colors
+
+Rona uses the `inquire` crate for interactive prompts with a custom color scheme applied globally:
+
+- Prompt prefix: `$` (light red)
+- Answered prefix: `✔` (light green)
+- Highlighted option prefix: `➠` (light blue)
+- Prompt label: light cyan + bold
+- Help message: dark yellow + italic
+- Answer text: light magenta + bold
+- Default values: light blue; placeholders: black
+
+If you prefer different colors, you can fork and adjust the render configuration in `src/cli.rs` (function `get_render_config`). You can also override styles for a specific prompt using `with_render_config(...)` on that prompt.
 
 **Commit Types:**
 - Uses commit types from your configuration (`.rona.toml` or `~/.config/rona.toml`)

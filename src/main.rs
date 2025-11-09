@@ -51,14 +51,13 @@ pub mod cli;
 pub mod config;
 pub mod errors;
 pub mod git;
-pub mod my_clap_theme;
 pub mod performance;
+pub mod template;
 pub mod utils;
 
 use cli::run;
 use errors::Result;
 use std::process::exit;
-use utils::print_error;
 
 fn main() {
     if let Err(e) = inner_main() {

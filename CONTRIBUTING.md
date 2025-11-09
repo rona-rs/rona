@@ -35,7 +35,7 @@ hooksmith install
 ```bash
 cargo build
 cargo test
-cargo clippy --all-targets --all-features -- -D warnings
+cargo clippy --workspace --release --all-targets --all-features -- --deny warnings -D warnings -W clippy::correctness -W clippy::suspicious -W clippy::complexity -W clippy::perf -W clippy::style -W clippy::pedantic
 ```
 
 ## 📁 Project Structure
@@ -43,19 +43,21 @@ cargo clippy --all-targets --all-features -- -D warnings
 ```
 src/
 ├── main.rs              # Application entry point
-├── cli.rs               # Command-line interface and argument parsing
-├── config.rs            # Configuration management
-├── errors.rs            # Error types and handling
-├── git_related.rs       # Legacy git operations (being refactored)
-├── git/                 # New modular git operations
-│   ├── mod.rs          # Git module exports
-│   ├── utils.rs        # Git utility functions
-│   ├── commit.rs       # Commit operations (planned)
-│   ├── operations.rs   # Git operations (planned)
-│   └── status.rs       # Status operations (planned)
-├── my_clap_theme.rs    # Custom CLI themes
-├── performance.rs      # Performance utilities
-└── utils.rs            # General utility functions
+├── cli.rs               # Command-line interface, argument parsing, and render config
+├── config.rs            # Configuration management (two-tier: global + project)
+├── errors.rs            # Error types and handling (using thiserror)
+├── template.rs          # Commit message template processing with variables
+├── performance.rs       # Performance measurement utilities
+├── utils.rs             # General utility functions
+└── git/                 # Modular git operations
+    ├── mod.rs           # Git module exports and shared utilities
+    ├── branch.rs        # Branch operations and name formatting
+    ├── commit.rs        # Commit counting, committing, and GPG signing
+    ├── status.rs        # Parsing git status output with regex
+    ├── staging.rs       # File staging with glob pattern exclusion
+    ├── files.rs         # File creation and .gitignore management
+    ├── remote.rs        # Push operations
+    └── repository.rs    # Finding git root and repository paths
 ```
 
 ## 🛠 Development Guidelines
@@ -105,16 +107,19 @@ git checkout -b feature/your-feature-name
 3. **Test your changes**:
 ```bash
 cargo test
-cargo clippy --all-targets --all-features -- -D warnings
+cargo clippy --workspace --release --all-targets --all-features -- --deny warnings -D warnings -W clippy::correctness -W clippy::suspicious -W clippy::complexity -W clippy::perf -W clippy::style -W clippy::pedantic
 cargo fmt --all -- --check
 ```
 
 4. **Commit your changes**:
 ```bash
 # Use rona itself for commits!
-rona -a "*.rs"  # Add files excluding patterns
-rona -g         # Generate commit message
-rona -c         # Commit changes
+rona -a              # Add all files (or specify patterns to exclude)
+rona -g              # Generate commit message (opens editor)
+rona -g -i           # Generate interactively (no editor)
+rona -g -i -n        # Generate interactively without commit number
+rona -c              # Commit changes
+rona -c -p           # Commit and push
 ```
 
 ### Pull Request Process
@@ -126,22 +131,29 @@ rona -c         # Commit changes
 
 ### Commit Message Format
 
-We follow conventional commits format:
+Rona uses a structured commit message format with commit numbers and branch context:
 
+**Default template:**
 ```
-type(scope): description
-
-[optional body]
-
-[optional footer]
+[{commit_number}] ({commit_type} on {branch_name}) {message}
 ```
 
-Types: `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`
+**Available commit types:** `chore`, `feat`, `fix`, `test`
 
-Examples:
-- `feat(cli): add dry-run mode for all commands`
-- `fix(git): handle empty repository error gracefully`
-- `docs(readme): update installation instructions`
+**Example commits:**
+- `[42] (feat on new-feature) Add dry-run mode for all commands`
+- `[15] (fix on bugfix) Handle empty repository error gracefully`
+- `[3] (docs on documentation) Update installation instructions`
+
+**Template variables available:**
+- `{commit_number}` - Auto-incremented commit number
+- `{commit_type}` - Selected commit type
+- `{branch_name}` - Current branch (formatted without type prefix)
+- `{message}` - Your commit message
+- `{date}`, `{time}` - Current date/time
+- `{author}`, `{email}` - Git author info
+
+You can customize the template in `.rona.toml` or use `--no-commit-number` flag to omit the commit number.
 
 ## 🧪 Testing
 
@@ -158,7 +170,7 @@ cargo test -- --nocapture
 cargo test test_name
 
 # Run tests in specific module
-cargo test cli::tests
+cargo test cli::cli_tests
 ```
 
 ### Writing Tests
@@ -179,10 +191,10 @@ mod tests {
     fn test_function_name_success_case() {
         // Arrange
         let input = "test input";
-        
+
         // Act
         let result = function_name(input);
-        
+
         // Assert
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), "expected output");
@@ -254,4 +266,4 @@ Contributors will be recognized in:
 - Release notes for significant contributions
 - GitHub contributor graphs
 
-Thank you for contributing to Rona! 🚀 
+Thank you for contributing to Rona! 🚀

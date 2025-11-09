@@ -21,18 +21,16 @@
 //! - Invalid configuration format
 //! - Home directory not found
 
+use config;
+use inquire::Select;
+use serde::{Deserialize, Serialize};
+use std::{env, io::Write, path::PathBuf};
+
 use crate::{
     errors::{ConfigError, GitError, Result},
+    git::get_top_level_path,
     utils::print_error,
 };
-use std::io::Write;
-use std::{env, path::PathBuf};
-
-use crate::my_clap_theme;
-use crate::utils::find_project_root;
-use config as config_crate;
-use dialoguer::Select;
-use serde::{Deserialize, Serialize};
 
 // Define your default commit types
 const DEFAULT_COMMIT_TYPES: &[&str] = &["feat", "fix", "docs", "test", "chore"];
@@ -45,6 +43,10 @@ pub struct ProjectConfig {
 
     /// Custom commit types for this project
     pub commit_types: Option<Vec<String>>,
+
+    /// Template for interactive commit message generation
+    /// Available variables: {`commit_number`}, {`commit_type`}, {`branch_name`}, {`message`}, {`date`}, {`time`}, {`author`}, {`email`}
+    pub template: Option<String>,
 }
 
 impl Default for ProjectConfig {
@@ -56,6 +58,9 @@ impl Default for ProjectConfig {
                     .iter()
                     .map(std::string::ToString::to_string)
                     .collect(),
+            ),
+            template: Some(
+                "[{commit_number}] ({commit_type} on {branch_name}) {message}".to_string(),
             ),
         }
     }
@@ -76,26 +81,24 @@ impl ProjectConfig {
             return Ok(Self::default());
         }
 
-        let mut builder = config_crate::Config::builder();
+        let mut builder = config::Config::builder();
 
         // Support both old and new global config paths
         let home = dirs::home_dir().ok_or(ConfigError::ConfigNotFound)?;
         let old_global = home.join(".config/rona/config.toml");
         let new_global = home.join(".config/rona.toml");
+
         if old_global.exists() {
-            builder =
-                builder.add_source(config_crate::File::from(old_global.clone()).required(false));
+            builder = builder.add_source(config::File::from(old_global).required(false));
         }
         if new_global.exists() {
-            builder =
-                builder.add_source(config_crate::File::from(new_global.clone()).required(false));
+            builder = builder.add_source(config::File::from(new_global).required(false));
         }
 
         // Add project config if it exists
         let project_config_path = env::current_dir()?.join(".rona.toml");
         if project_config_path.exists() {
-            builder = builder
-                .add_source(config_crate::File::from(project_config_path.clone()).required(false));
+            builder = builder.add_source(config::File::from(project_config_path).required(false));
         }
 
         // Build the config
@@ -243,20 +246,16 @@ impl Config {
             return Ok(());
         }
 
-        let options = ["Project (./.rona.toml)", "Global (~/.config/rona.toml)"];
+        let options = vec!["Project (./.rona.toml)", "Global (~/.config/rona.toml)"];
 
-        let selection = Select::with_theme(&my_clap_theme::ColorfulTheme::default())
-            .with_prompt("Where do you want to set the editor?")
-            .items(&options)
-            .default(0)
-            .interact()
+        let selection = Select::new("Where do you want to set the editor?", options)
+            .with_starting_cursor(0)
+            .prompt()
             .map_err(|_| ConfigError::InvalidConfig)?;
 
         let config_path = match selection {
-            0 => find_project_root()
-                .map(|root| root.join(".rona.toml"))
-                .map_err(|_| ConfigError::ConfigNotFound)?,
-            1 => {
+            "Project (./.rona.toml)" => get_top_level_path().map(|root| root.join(".rona.toml"))?,
+            "Global (~/.config/rona.toml)" => {
                 let home = dirs::home_dir().ok_or(ConfigError::ConfigNotFound)?;
                 home.join(".config/rona.toml")
             }
@@ -306,17 +305,15 @@ impl Config {
             return Ok(());
         }
 
-        let options = ["Project (.rona.toml)", "Global (~/.config/rona.toml)"];
-        let selection = Select::with_theme(&my_clap_theme::ColorfulTheme::default())
-            .with_prompt("Where do you want to initialize the config?")
-            .items(&options)
-            .default(0)
-            .interact()
+        let options = vec!["Project (.rona.toml)", "Global (~/.config/rona.toml)"];
+        let selection = Select::new("Where do you want to initialize the config?", options)
+            .with_starting_cursor(0)
+            .prompt()
             .map_err(|_| ConfigError::InvalidConfig)?;
 
         let config_path = match selection {
-            0 => env::current_dir()?.join(".rona.toml"),
-            1 => {
+            "Project (.rona.toml)" => env::current_dir()?.join(".rona.toml"),
+            "Global (~/.config/rona.toml)" => {
                 let home = dirs::home_dir().ok_or(ConfigError::ConfigNotFound)?;
                 home.join(".config/rona.toml")
             }
