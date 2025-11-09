@@ -38,7 +38,7 @@ use crate::{
     git::{
         COMMIT_MESSAGE_FILE_PATH, COMMIT_TYPES, create_needed_files, format_branch_name,
         generate_commit_message, get_current_branch, get_current_commit_nb, get_status_files,
-        git_add_with_exclude_patterns, git_commit, git_push,
+        get_top_level_path, git_add_with_exclude_patterns, git_commit, git_push,
     },
     template::{TemplateVariables, process_template, validate_template},
 };
@@ -334,6 +334,9 @@ fn handle_interactive_mode(
     println!("📝 Interactive mode: Enter your commit message.");
     println!("💡 Tip: Keep it concise and descriptive.");
 
+    let project_root = get_top_level_path()?;
+    let commit_file_path = project_root.join(COMMIT_MESSAGE_FILE_PATH);
+
     let message: String = Text::new("Message").prompt().unwrap();
 
     if message.trim().is_empty() {
@@ -376,7 +379,7 @@ fn handle_interactive_mode(
                 message.trim()
             )
         };
-        fs::write(COMMIT_MESSAGE_FILE_PATH, &formatted_message)?;
+        fs::write(&commit_file_path, &formatted_message)?;
         println!("\n✅ Commit message created!");
         println!("📄 Message: {formatted_message}");
         return Ok(());
@@ -394,7 +397,7 @@ fn handle_interactive_mode(
     let formatted_message = process_template(template, &variables)?;
 
     // Write the formatted message to commit_message.md
-    fs::write(COMMIT_MESSAGE_FILE_PATH, &formatted_message)?;
+    fs::write(&commit_file_path, &formatted_message)?;
 
     println!("\n✅ Commit message created!");
     println!("📄 Message: {formatted_message}");
@@ -404,9 +407,11 @@ fn handle_interactive_mode(
 /// Handle editor mode for generate command
 fn handle_editor_mode(config: &Config) -> Result<()> {
     let editor = config.get_editor()?;
+    let project_root = get_top_level_path()?;
+    let commit_file_path = project_root.join(COMMIT_MESSAGE_FILE_PATH);
 
     Command::new(editor)
-        .arg(COMMIT_MESSAGE_FILE_PATH)
+        .arg(&commit_file_path)
         .spawn()
         .expect("Failed to spawn editor")
         .wait()

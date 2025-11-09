@@ -33,7 +33,7 @@ pub use commit::{
 };
 pub use files::create_needed_files;
 pub use remote::git_push;
-pub use repository::find_git_root;
+pub use repository::{find_git_root, get_top_level_path};
 pub use staging::git_add_with_exclude_patterns;
 pub use status::get_status_files;
 

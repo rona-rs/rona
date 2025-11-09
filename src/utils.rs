@@ -26,10 +26,9 @@
 //! for proper error handling throughout the application.
 
 use std::{
-    env,
     fmt::Display,
     io::{Error as IoError, ErrorKind},
-    path::{Path, PathBuf},
+    path::Path,
 };
 
 /// Trait for message types.
@@ -161,38 +160,6 @@ pub fn check_for_file_in_folder(file_path: &Path, folder_path: &Path) -> Result<
 
     // Check if file_path starts with folder_path
     Ok(file_parent.starts_with(folder_path))
-}
-
-/// Finds the root directory of a project by searching for a `.git` directory.
-///
-/// # Errors
-/// * If getting the current directory fails
-/// * If the project root is not found
-///
-/// Returns:
-/// * `Ok(PathBuf)` - The path to the project root directory
-/// * `Err(std::io::Error)` - If there's an error processing the paths
-pub fn find_project_root() -> Result<PathBuf, IoError> {
-    let mut current_dir = env::current_dir()?;
-
-    while current_dir.parent().is_some() {
-        let git_dir = current_dir.join(".git");
-        if git_dir.exists() {
-            return Ok(current_dir);
-        }
-
-        let parent_dir = current_dir.parent().ok_or(IoError::new(
-            ErrorKind::InvalidInput,
-            "Invalid file path: cannot get parent directory",
-        ))?;
-
-        current_dir = parent_dir.to_path_buf();
-    }
-
-    Err(IoError::new(
-        ErrorKind::InvalidInput,
-        "Invalid file path: cannot get parent directory",
-    ))
 }
 
 #[cfg(test)]

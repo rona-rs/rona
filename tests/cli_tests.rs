@@ -112,24 +112,30 @@ fn test_commit_command() {
     git_init.current_dir(temp_path).arg("init");
     git_init.assert().success();
 
-    // Configure git user
+    // Configure git user (using --local to only affect this test repository)
     let mut git_config = Command::new("git");
     git_config
         .current_dir(temp_path)
-        .args(["config", "user.name", "Test User"]);
+        .args(["config", "--local", "user.name", "Test User"]);
     git_config.assert().success();
 
     let mut git_config_email = Command::new("git");
-    git_config_email
-        .current_dir(temp_path)
-        .args(["config", "user.email", "test@example.com"]);
+    git_config_email.current_dir(temp_path).args([
+        "config",
+        "--local",
+        "user.email",
+        "test@example.com",
+    ]);
     git_config_email.assert().success();
 
-    // Ensure GPG signing does not interfere with the test
+    // Ensure GPG signing does not interfere with the test (using --local)
     let mut git_disable_gpgsign = Command::new("git");
-    git_disable_gpgsign
-        .current_dir(temp_path)
-        .args(["config", "commit.gpgsign", "false"]);
+    git_disable_gpgsign.current_dir(temp_path).args([
+        "config",
+        "--local",
+        "commit.gpgsign",
+        "false",
+    ]);
     git_disable_gpgsign.assert().success();
 
     // Create and stage a test file
