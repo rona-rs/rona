@@ -68,14 +68,6 @@ jobs:
           generate_release_notes: true
           append_body: true
 
-      - name: Publish to crates.io
-        env:
-          CRATES_IO_TOKEN: ${{ secrets.CRATES_TOKEN }}
-        run: |
-          cargo login $CRATES_IO_TOKEN
-          cargo publish --dry-run
-          cargo publish
-
   build-macos-intel:
     needs: extract-version
     name: Build macOS Intel Binary
@@ -179,6 +171,29 @@ jobs:
           files: release/rona-*-macos-arm64.tar.gz
           body_path: release/sha256.md
           append_body: true
+
+  publish-crates-io:
+    name: Publish to crates.io
+    needs: [extract-version, build-linux, build-macos-intel, build-macos-arm]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+          profile: minimal
+
+      - name: Publish to crates.io
+        env:
+          CRATES_IO_TOKEN: ${{ secrets.CRATES_TOKEN }}
+        run: |
+          cargo login $CRATES_IO_TOKEN
+          cargo publish --dry-run
+          cargo publish
 
   notify-homebrew:
     name: Notify Homebrew Tap
