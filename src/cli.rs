@@ -313,11 +313,13 @@ fn handle_generate(interactive: bool, no_commit_number: bool, config: &Config) -
         .prompt()
         .unwrap();
 
-    generate_commit_message(commit_type, config.verbose, no_commit_number)?;
-
     if interactive {
+        // In interactive mode, skip generating the template file
+        // The file will be created/overwritten after message validation
         handle_interactive_mode(commit_type, no_commit_number, config)?;
     } else {
+        // In editor mode, generate the template file first, then open editor
+        generate_commit_message(commit_type, config.verbose, no_commit_number)?;
         handle_editor_mode(config)?;
     }
     Ok(())
