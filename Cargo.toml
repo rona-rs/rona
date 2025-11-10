@@ -16,7 +16,7 @@ license = "Apache-2.0 OR MIT"
 name = "rona"
 readme = "README.md"
 repository = "https://github.com/rona-rs/rona"
-version = "2.11.0"
+version = "2.11.1"
 
 [[bin]]
 doc = true
@@ -41,4 +41,3 @@ git2 = "0.19"
 assert_cmd = "2.1.1"
 mockall = "0.13.1"
 tempfile = "3.23.0"
-
