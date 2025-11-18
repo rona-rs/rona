@@ -3,7 +3,7 @@ name: Build and Release
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
 
 permissions:
   contents: write
@@ -71,7 +71,7 @@ jobs:
   build-macos-intel:
     needs: extract-version
     name: Build macOS Intel Binary
-    runs-on: macos-13
+    runs-on: macos-15-intel
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
