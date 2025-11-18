@@ -43,6 +43,7 @@ set edit:completion:arg-completer[rona] = {|@words|
         &'rona;commit'= {
             cand -p 'Whether to push the commit after committing'
             cand --push 'Whether to push the commit after committing'
+            cand -d 'Show what would be committed without actually committing'
             cand --dry-run 'Show what would be committed without actually committing'
             cand -u 'Create unsigned commit (default is to auto-detect GPG availability and sign if possible)'
             cand --unsigned 'Create unsigned commit (default is to auto-detect GPG availability and sign if possible)'

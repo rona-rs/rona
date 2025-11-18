@@ -40,7 +40,7 @@ complete -c rona -n "__fish_rona_needs_command" -f -a "help" -d 'Print this mess
 complete -c rona -n "__fish_rona_using_subcommand add-with-exclude" -l dry-run -d 'Show what would be added without actually adding files'
 complete -c rona -n "__fish_rona_using_subcommand add-with-exclude" -s h -l help -d 'Print help'
 complete -c rona -n "__fish_rona_using_subcommand commit" -s p -l push -d 'Whether to push the commit after committing'
-complete -c rona -n "__fish_rona_using_subcommand commit" -l dry-run -d 'Show what would be committed without actually committing'
+complete -c rona -n "__fish_rona_using_subcommand commit" -s d -l dry-run -d 'Show what would be committed without actually committing'
 complete -c rona -n "__fish_rona_using_subcommand commit" -s u -l unsigned -d 'Create unsigned commit (default is to auto-detect GPG availability and sign if possible)'
 complete -c rona -n "__fish_rona_using_subcommand commit" -s h -l help -d 'Print help'
 complete -c rona -n "__fish_rona_using_subcommand completion" -s h -l help -d 'Print help'

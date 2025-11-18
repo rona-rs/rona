@@ -43,6 +43,7 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 '-p[Whether to push the commit after committing]' \
 '--push[Whether to push the commit after committing]' \
+'-d[Show what would be committed without actually committing]' \
 '--dry-run[Show what would be committed without actually committing]' \
 '-u[Create unsigned commit (default is to auto-detect GPG availability and sign if possible)]' \
 '--unsigned[Create unsigned commit (default is to auto-detect GPG availability and sign if possible)]' \
