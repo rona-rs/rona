@@ -39,17 +39,18 @@ jobs:
         run: |
           OWNER="rona-rs"
           REPO="homebrew-rona"
-          HEAD="${OWNER}:bump/rona-${TAG}"
-          # Query open PRs with the expected head branch
-          RES=$(curl -s -H "Authorization: token ${TOKEN}" \
-            "https://api.github.com/repos/${OWNER}/${REPO}/pulls?state=open&head=${HEAD}")
+          BRANCH="bump/rona-${TAG}"
+          API_URL="https://api.github.com/repos/${OWNER}/${REPO}/pulls?state=open&head=${BRANCH}"
+          # Query open PRs with the expected head branch (use just branch name, not owner:branch)
+          echo "Checking for existing PRs at: ${API_URL}"
+          RES=$(curl -s -H "Authorization: token ${TOKEN}" "${API_URL}")
           COUNT=$(echo "$RES" | jq 'length')
           if [ "$COUNT" -gt 0 ]; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
-            echo "Found existing PR for ${HEAD}, skipping dispatch"
+            echo "Found existing PR for ${BRANCH}, skipping dispatch"
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
-            echo "No existing PR for ${HEAD}, will dispatch"
+            echo "No existing PR for ${BRANCH}, will dispatch"
           fi
 
       - name: Dispatch update to homebrew-rona
