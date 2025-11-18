@@ -333,9 +333,6 @@ fn handle_interactive_mode(
 ) -> Result<()> {
     use std::fs;
 
-    println!("📝 Interactive mode: Enter your commit message.");
-    println!("💡 Tip: Keep it concise and descriptive.");
-
     let project_root = get_top_level_path()?;
     let commit_file_path = project_root.join(COMMIT_MESSAGE_FILE_PATH);
 
