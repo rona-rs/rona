@@ -66,7 +66,7 @@ pub(crate) enum CliCommand {
         push: bool,
 
         /// Show what would be committed without actually committing
-        #[arg(long, default_value_t = false)]
+        #[arg(short = 'd', long, default_value_t = false)]
         dry_run: bool,
 
         /// Create unsigned commit (default is to auto-detect GPG availability and sign if possible)
@@ -1204,6 +1204,69 @@ mod cli_tests {
                 assert_eq!(args, vec!["--amend"]);
                 assert!(!dry_run);
                 assert!(unsigned);
+            }
+            _ => panic!("Wrong command parsed"),
+        }
+    }
+
+    #[test]
+    fn test_commit_dry_run_short_flag() {
+        let args = vec!["rona", "-c", "-d"];
+        let cli = Cli::try_parse_from(args).unwrap();
+
+        match cli.command {
+            CliCommand::Commit {
+                args,
+                push,
+                dry_run,
+                unsigned,
+            } => {
+                assert!(!push);
+                assert!(args.is_empty());
+                assert!(dry_run);
+                assert!(!unsigned);
+            }
+            _ => panic!("Wrong command parsed"),
+        }
+    }
+
+    #[test]
+    fn test_commit_dry_run_long_flag() {
+        let args = vec!["rona", "-c", "--dry-run"];
+        let cli = Cli::try_parse_from(args).unwrap();
+
+        match cli.command {
+            CliCommand::Commit {
+                args,
+                push,
+                dry_run,
+                unsigned,
+            } => {
+                assert!(!push);
+                assert!(args.is_empty());
+                assert!(dry_run);
+                assert!(!unsigned);
+            }
+            _ => panic!("Wrong command parsed"),
+        }
+    }
+
+    #[test]
+    fn test_commit_dry_run_with_push() {
+        let args = vec!["rona", "-c", "-d", "--push"];
+        let cli = Cli::try_parse_from(args).unwrap();
+
+        match cli.command {
+            CliCommand::Commit {
+                args,
+                push,
+                dry_run,
+                unsigned,
+            } => {
+                assert!(push);
+                assert!(args.is_empty());
+                assert!(dry_run);
+                assert!(!unsigned);
             }
             _ => panic!("Wrong command parsed"),
         }
