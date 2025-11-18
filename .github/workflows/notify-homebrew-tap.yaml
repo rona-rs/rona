@@ -44,6 +44,14 @@ jobs:
           # Query open PRs with the expected head branch (use just branch name, not owner:branch)
           echo "Checking for existing PRs at: ${API_URL}"
           RES=$(curl -s -H "Authorization: token ${TOKEN}" "${API_URL}")
+
+          # Check if response is valid JSON array (not an error object)
+          if ! echo "$RES" | jq -e 'type == "array"' > /dev/null 2>&1; then
+            echo "ERROR: Invalid API response (possibly auth issue)"
+            echo "Response: $RES"
+            exit 1
+          fi
+
           COUNT=$(echo "$RES" | jq 'length')
           if [ "$COUNT" -gt 0 ]; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
