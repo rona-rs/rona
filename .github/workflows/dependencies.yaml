@@ -55,4 +55,4 @@ jobs:
             dependencies
             automated pr
           title: "[chore] update dependencies"
-          token: ${{ secrets.RONA_PR_TOKEN }}
+          token: ${{ secrets.RONA_PRS_TOKEN }}
