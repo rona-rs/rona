@@ -13,7 +13,6 @@ use std::{
 use crate::{
     errors::Result,
     git::{COMMIT_MESSAGE_FILE_PATH, find_git_root, get_top_level_path},
-    utils::print_error,
 };
 
 const COMMITIGNORE_FILE_PATH: &str = ".commitignore";
@@ -31,17 +30,12 @@ const GITIGNORE_FILE_PATH: &str = ".gitignore";
 /// * `Result<(), std::io::Error>` - Result of the operation.
 pub fn add_to_git_exclude(paths: &[&str]) -> Result<()> {
     let git_root_path = find_git_root()?;
+    let info_dir = git_root_path.join("info");
+    let exclude_file = info_dir.join("exclude");
 
-    let exclude_file = git_root_path.join("info").join("exclude");
-
-    if !exclude_file.exists() {
-        print_error(
-            "No `.git/info/exclude` file found.",
-            "This file is used to exclude paths from being tracked by Git.",
-            "Please ensure you have a valid Git repository or submodule.",
-        );
-
-        std::process::exit(1);
+    // Ensure the info directory exists
+    if !info_dir.exists() {
+        std::fs::create_dir_all(&info_dir)?;
     }
 
     // Read existing content to avoid duplicates
