@@ -35,7 +35,7 @@ jobs:
       - name: Check if PR already exists in tap (guard)
         id: guard
         env:
-          TOKEN: ${{ secrets.HOMEBREW_RONA_TOKEN }}
+          TOKEN: ${{ secrets.RONA_PRS_TOKEN }}
         run: |
           OWNER="rona-rs"
           REPO="homebrew-rona"
@@ -65,7 +65,7 @@ jobs:
         if: steps.guard.outputs.exists == 'false'
         uses: peter-evans/repository-dispatch@v3
         with:
-          token: ${{ secrets.HOMEBREW_RONA_TOKEN }}
+          token: ${{ secrets.RONA_PRS_TOKEN }}
           repository: rona-rs/homebrew-rona
           event-type: rona-release
           client-payload: |
