@@ -47,6 +47,8 @@ set edit:completion:arg-completer[rona] = {|@words|
             cand --dry-run 'Show what would be committed without actually committing'
             cand -u 'Create unsigned commit (default is to auto-detect GPG availability and sign if possible)'
             cand --unsigned 'Create unsigned commit (default is to auto-detect GPG availability and sign if possible)'
+            cand -y 'Skip confirmation prompt and commit directly'
+            cand --yes 'Skip confirmation prompt and commit directly'
             cand -h 'Print help'
             cand --help 'Print help'
         }

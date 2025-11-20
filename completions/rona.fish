@@ -42,6 +42,7 @@ complete -c rona -n "__fish_rona_using_subcommand add-with-exclude" -s h -l help
 complete -c rona -n "__fish_rona_using_subcommand commit" -s p -l push -d 'Whether to push the commit after committing'
 complete -c rona -n "__fish_rona_using_subcommand commit" -s d -l dry-run -d 'Show what would be committed without actually committing'
 complete -c rona -n "__fish_rona_using_subcommand commit" -s u -l unsigned -d 'Create unsigned commit (default is to auto-detect GPG availability and sign if possible)'
+complete -c rona -n "__fish_rona_using_subcommand commit" -s y -l yes -d 'Skip confirmation prompt and commit directly'
 complete -c rona -n "__fish_rona_using_subcommand commit" -s h -l help -d 'Print help'
 complete -c rona -n "__fish_rona_using_subcommand completion" -s h -l help -d 'Print help'
 complete -c rona -n "__fish_rona_using_subcommand generate" -l dry-run -d 'Show what would be generated without creating files'
