@@ -29,8 +29,8 @@ use clap::{Command as ClapCommand, CommandFactory, Parser, Subcommand, ValueHint
 use clap_complete::{Shell, generate};
 use glob::Pattern;
 use inquire::ui::{Attributes, Color, RenderConfig, StyleSheet, Styled};
-use inquire::{Select, Text};
-use std::{io, process::Command};
+use inquire::{Confirm, Select, Text};
+use std::{fs::read_to_string, io, process::Command};
 
 use crate::{
     config::Config,
@@ -72,6 +72,10 @@ pub(crate) enum CliCommand {
         /// Create unsigned commit (default is to auto-detect GPG availability and sign if possible)
         #[arg(short = 'u', long = "unsigned", default_value_t = false)]
         unsigned: bool,
+
+        /// Skip confirmation prompt and commit directly
+        #[arg(short = 'y', long = "yes", default_value_t = false)]
+        yes: bool,
 
         /// Additional arguments to pass to the commit command
         #[arg(allow_hyphen_values = true)]
@@ -256,12 +260,48 @@ fn handle_add_with_exclude(exclude: &[String], config: &Config) -> Result<()> {
 /// * `args` - Additional arguments to pass to git commit
 /// * `push` - Whether to push changes after committing
 /// * `unsigned` - Whether to create an unsigned commit (skips -S flag)
+/// * `yes` - Whether to skip the confirmation prompt
 /// * `config` - Global configuration including verbose and dry-run settings
 ///
 /// # Errors
 /// * If git commit operation fails
 /// * If push is true and git push operation fails
-fn handle_commit(args: &[String], push: bool, unsigned: bool, config: &Config) -> Result<()> {
+/// * If commit message file doesn't exist or cannot be read
+/// * If user cancels the commit confirmation
+fn handle_commit(
+    args: &[String],
+    push: bool,
+    unsigned: bool,
+    yes: bool,
+    config: &Config,
+) -> Result<()> {
+    // Read the commit message file
+    let project_root = get_top_level_path()?;
+    let commit_file_path = project_root.join(COMMIT_MESSAGE_FILE_PATH);
+
+    if !commit_file_path.exists() {
+        return Err(crate::errors::RonaError::Io(std::io::Error::other(
+            "Commit message file not found. Run 'rona -g' to generate one.",
+        )));
+    }
+
+    let commit_message = read_to_string(&commit_file_path)?;
+
+    // Show confirmation prompt unless --yes flag is set or in dry-run mode
+    if !yes && !config.dry_run {
+        // Show confirmation prompt
+        let confirmation_message = format!("Commit with message:\n{}", commit_message.trim());
+        let confirm = Confirm::new(&confirmation_message)
+            .with_default(true)
+            .prompt()
+            .unwrap_or(false);
+
+        if !confirm {
+            println!("Commit cancelled.");
+            return Ok(());
+        }
+    }
+
     git_commit(args, unsigned, config.verbose, config.dry_run)?;
 
     if push {
@@ -508,9 +548,10 @@ pub fn run() -> Result<()> {
             push,
             dry_run,
             unsigned,
+            yes,
         } => {
             config.set_dry_run(dry_run);
-            handle_commit(&args, push, unsigned, &config)
+            handle_commit(&args, push, unsigned, yes, &config)
         }
 
         CliCommand::Completion { shell } => {
@@ -634,11 +675,13 @@ mod cli_tests {
                 push,
                 dry_run,
                 unsigned,
+                yes,
             } => {
                 assert!(!push);
                 assert!(args.is_empty());
                 assert!(!dry_run);
                 assert!(!unsigned);
+                assert!(!yes);
             }
             _ => panic!("Wrong command parsed"),
         }
@@ -655,11 +698,13 @@ mod cli_tests {
                 push,
                 dry_run,
                 unsigned,
+                yes,
             } => {
                 assert!(push);
                 assert!(args.is_empty());
                 assert!(!dry_run);
                 assert!(!unsigned);
+                assert!(!yes);
             }
             _ => panic!("Wrong command parsed"),
         }
@@ -676,11 +721,13 @@ mod cli_tests {
                 push,
                 dry_run,
                 unsigned,
+                yes,
             } => {
                 assert!(!push);
                 assert_eq!(args, vec!["Regular commit message"]);
                 assert!(!dry_run);
                 assert!(!unsigned);
+                assert!(!yes);
             }
             _ => panic!("Wrong command parsed"),
         }
@@ -697,11 +744,13 @@ mod cli_tests {
                 push,
                 dry_run,
                 unsigned,
+                yes,
             } => {
                 assert!(!push);
                 assert_eq!(args, vec!["--amend"]);
                 assert!(!dry_run);
                 assert!(!unsigned);
+                assert!(!yes);
             }
             _ => panic!("Wrong command parsed"),
         }
@@ -718,11 +767,13 @@ mod cli_tests {
                 push,
                 dry_run,
                 unsigned,
+                yes,
             } => {
                 assert!(!push);
                 assert_eq!(args, vec!["--amend", "--no-edit"]);
                 assert!(!dry_run);
                 assert!(!unsigned);
+                assert!(!yes);
             }
             _ => panic!("Wrong command parsed"),
         }
@@ -739,11 +790,13 @@ mod cli_tests {
                 push,
                 dry_run,
                 unsigned,
+                yes,
             } => {
                 assert!(push);
                 assert_eq!(args, vec!["--amend", "--no-edit"]);
                 assert!(!dry_run);
                 assert!(!unsigned);
+                assert!(!yes);
             }
             _ => panic!("Wrong command parsed"),
         }
@@ -760,11 +813,13 @@ mod cli_tests {
                 push,
                 dry_run,
                 unsigned,
+                yes,
             } => {
                 assert!(push);
                 assert_eq!(args, vec!["Commit message"]);
                 assert!(!dry_run);
                 assert!(!unsigned);
+                assert!(!yes);
             }
             _ => panic!("Wrong command parsed"),
         }
@@ -1081,11 +1136,13 @@ mod cli_tests {
                 push,
                 dry_run,
                 unsigned,
+                yes,
             } => {
                 assert!(!push); // --push should be treated as git arg
                 assert_eq!(args, vec!["--amend", "--push"]);
                 assert!(!dry_run);
                 assert!(!unsigned);
+                assert!(!yes);
             }
             _ => panic!("Wrong command parsed"),
         }
@@ -1102,11 +1159,13 @@ mod cli_tests {
                 push,
                 dry_run,
                 unsigned,
+                yes,
             } => {
                 assert!(!push);
                 assert_eq!(args, vec!["--push-to-upstream"]);
                 assert!(!dry_run);
                 assert!(!unsigned);
+                assert!(!yes);
             }
             _ => panic!("Wrong command parsed"),
         }
@@ -1136,11 +1195,13 @@ mod cli_tests {
                 push,
                 dry_run,
                 unsigned,
+                yes,
             } => {
                 assert!(push);
                 assert_eq!(args, vec!["--amend", "--no-edit"]);
                 assert!(!dry_run);
                 assert!(!unsigned);
+                assert!(!yes);
             }
             _ => panic!("Wrong command parsed"),
         }
@@ -1157,11 +1218,13 @@ mod cli_tests {
                 push,
                 dry_run,
                 unsigned,
+                yes,
             } => {
                 assert!(!push);
                 assert!(args.is_empty());
                 assert!(!dry_run);
                 assert!(unsigned);
+                assert!(!yes);
             }
             _ => panic!("Wrong command parsed"),
         }
@@ -1178,11 +1241,13 @@ mod cli_tests {
                 push,
                 dry_run,
                 unsigned,
+                yes,
             } => {
                 assert!(!push);
                 assert!(args.is_empty());
                 assert!(!dry_run);
                 assert!(unsigned);
+                assert!(!yes);
             }
             _ => panic!("Wrong command parsed"),
         }
@@ -1199,11 +1264,13 @@ mod cli_tests {
                 push,
                 dry_run,
                 unsigned,
+                yes,
             } => {
                 assert!(push);
                 assert_eq!(args, vec!["--amend"]);
                 assert!(!dry_run);
                 assert!(unsigned);
+                assert!(!yes);
             }
             _ => panic!("Wrong command parsed"),
         }
@@ -1220,11 +1287,13 @@ mod cli_tests {
                 push,
                 dry_run,
                 unsigned,
+                yes,
             } => {
                 assert!(!push);
                 assert!(args.is_empty());
                 assert!(dry_run);
                 assert!(!unsigned);
+                assert!(!yes);
             }
             _ => panic!("Wrong command parsed"),
         }
@@ -1241,11 +1310,13 @@ mod cli_tests {
                 push,
                 dry_run,
                 unsigned,
+                yes,
             } => {
                 assert!(!push);
                 assert!(args.is_empty());
                 assert!(dry_run);
                 assert!(!unsigned);
+                assert!(!yes);
             }
             _ => panic!("Wrong command parsed"),
         }
@@ -1262,11 +1333,13 @@ mod cli_tests {
                 push,
                 dry_run,
                 unsigned,
+                yes,
             } => {
                 assert!(push);
                 assert!(args.is_empty());
                 assert!(dry_run);
                 assert!(!unsigned);
+                assert!(!yes);
             }
             _ => panic!("Wrong command parsed"),
         }

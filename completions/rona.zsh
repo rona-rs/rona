@@ -47,6 +47,8 @@ _arguments "${_arguments_options[@]}" : \
 '--dry-run[Show what would be committed without actually committing]' \
 '-u[Create unsigned commit (default is to auto-detect GPG availability and sign if possible)]' \
 '--unsigned[Create unsigned commit (default is to auto-detect GPG availability and sign if possible)]' \
+'-y[Skip confirmation prompt and commit directly]' \
+'--yes[Skip confirmation prompt and commit directly]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '*::args -- Additional arguments to pass to the commit command:_default' \

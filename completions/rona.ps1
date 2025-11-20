@@ -52,6 +52,8 @@ Register-ArgumentCompleter -Native -CommandName 'rona' -ScriptBlock {
             [CompletionResult]::new('--dry-run', '--dry-run', [CompletionResultType]::ParameterName, 'Show what would be committed without actually committing')
             [CompletionResult]::new('-u', '-u', [CompletionResultType]::ParameterName, 'Create unsigned commit (default is to auto-detect GPG availability and sign if possible)')
             [CompletionResult]::new('--unsigned', '--unsigned', [CompletionResultType]::ParameterName, 'Create unsigned commit (default is to auto-detect GPG availability and sign if possible)')
+            [CompletionResult]::new('-y', '-y', [CompletionResultType]::ParameterName, 'Skip confirmation prompt and commit directly')
+            [CompletionResult]::new('--yes', '--yes', [CompletionResultType]::ParameterName, 'Skip confirmation prompt and commit directly')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break

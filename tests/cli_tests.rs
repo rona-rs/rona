@@ -148,9 +148,9 @@ fn test_commit_command() {
     let commit_msg = "[1] (feat on main)\n\n- `test.txt`:\n\n\t\n";
     fs::write(temp_path.join("commit_message.md"), commit_msg).unwrap();
 
-    // Test rona commit
+    // Test rona commit with --yes to skip confirmation
     let mut cmd = cargo_bin_cmd!("rona");
-    cmd.current_dir(temp_path).arg("-c");
+    cmd.current_dir(temp_path).arg("-c").arg("--yes");
     cmd.assert().success();
 
     // Verify commit message in git log
