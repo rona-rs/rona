@@ -24,8 +24,8 @@ name = "rona"
 path = "src/main.rs"
 
 [dependencies]
-clap = { version = "4.5.51", features = ["derive"] }
-clap_complete = "4.5.60"
+clap = { version = "4.5.53", features = ["derive"] }
+clap_complete = "4.5.61"
 inquire = { version = "0.7" }
 glob = "0.3.3"
 regex = "1.12.2"
