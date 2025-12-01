@@ -31,6 +31,7 @@ Register-ArgumentCompleter -Native -CommandName 'rona' -ScriptBlock {
             [CompletionResult]::new('add-with-exclude', 'add-with-exclude', [CompletionResultType]::ParameterValue, 'Add all files to the `git add` command and exclude the patterns passed as positional arguments')
             [CompletionResult]::new('commit', 'commit', [CompletionResultType]::ParameterValue, 'Directly commit the file with the text in `commit_message.md`')
             [CompletionResult]::new('completion', 'completion', [CompletionResultType]::ParameterValue, 'Generate shell completions for your shell')
+            [CompletionResult]::new('config', 'config', [CompletionResultType]::ParameterValue, 'Manage configuration files (create or edit local or global config)')
             [CompletionResult]::new('generate', 'generate', [CompletionResultType]::ParameterValue, 'Directly generate the `commit_message.md` file')
             [CompletionResult]::new('init', 'init', [CompletionResultType]::ParameterValue, 'Initialize the rona configuration file')
             [CompletionResult]::new('list-status', 'list-status', [CompletionResultType]::ParameterValue, 'List files from git status (for shell completion on the -a)')
@@ -61,6 +62,12 @@ Register-ArgumentCompleter -Native -CommandName 'rona' -ScriptBlock {
         'rona;completion' {
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'rona;config' {
+            [CompletionResult]::new('--dry-run', '--dry-run', [CompletionResultType]::ParameterName, 'Show what would be created without actually creating the config file')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help (see more with ''--help'')')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help (see more with ''--help'')')
             break
         }
         'rona;generate' {
@@ -100,6 +107,7 @@ Register-ArgumentCompleter -Native -CommandName 'rona' -ScriptBlock {
             [CompletionResult]::new('add-with-exclude', 'add-with-exclude', [CompletionResultType]::ParameterValue, 'Add all files to the `git add` command and exclude the patterns passed as positional arguments')
             [CompletionResult]::new('commit', 'commit', [CompletionResultType]::ParameterValue, 'Directly commit the file with the text in `commit_message.md`')
             [CompletionResult]::new('completion', 'completion', [CompletionResultType]::ParameterValue, 'Generate shell completions for your shell')
+            [CompletionResult]::new('config', 'config', [CompletionResultType]::ParameterValue, 'Manage configuration files (create or edit local or global config)')
             [CompletionResult]::new('generate', 'generate', [CompletionResultType]::ParameterValue, 'Directly generate the `commit_message.md` file')
             [CompletionResult]::new('init', 'init', [CompletionResultType]::ParameterValue, 'Initialize the rona configuration file')
             [CompletionResult]::new('list-status', 'list-status', [CompletionResultType]::ParameterValue, 'List files from git status (for shell completion on the -a)')
@@ -115,6 +123,9 @@ Register-ArgumentCompleter -Native -CommandName 'rona' -ScriptBlock {
             break
         }
         'rona;help;completion' {
+            break
+        }
+        'rona;help;config' {
             break
         }
         'rona;help;generate' {

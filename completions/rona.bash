@@ -25,6 +25,9 @@ _rona() {
             rona,completion)
                 cmd="rona__completion"
                 ;;
+            rona,config)
+                cmd="rona__config"
+                ;;
             rona,generate)
                 cmd="rona__generate"
                 ;;
@@ -52,6 +55,9 @@ _rona() {
             rona__help,completion)
                 cmd="rona__help__completion"
                 ;;
+            rona__help,config)
+                cmd="rona__help__config"
+                ;;
             rona__help,generate)
                 cmd="rona__help__generate"
                 ;;
@@ -77,7 +83,7 @@ _rona() {
 
     case "${cmd}" in
         rona)
-            opts="-v -h -V --verbose --config --help --version add-with-exclude commit completion generate init list-status push set-editor help"
+            opts="-v -h -V --verbose --config --help --version add-with-exclude commit completion config generate init list-status push set-editor help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 1 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -136,6 +142,20 @@ _rona() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
+        rona__config)
+            opts="-h --dry-run --help local global"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
         rona__generate)
             opts="-i -n -h --dry-run --interactive --no-commit-number --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
@@ -151,7 +171,7 @@ _rona() {
             return 0
             ;;
         rona__help)
-            opts="add-with-exclude commit completion generate init list-status push set-editor help"
+            opts="add-with-exclude commit completion config generate init list-status push set-editor help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -193,6 +213,20 @@ _rona() {
             return 0
             ;;
         rona__help__completion)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        rona__help__config)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )

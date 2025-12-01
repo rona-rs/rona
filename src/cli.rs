@@ -10,6 +10,7 @@
 //! The CLI supports several commands:
 //! - `add-with-exclude`: Add files to git while excluding specified patterns
 //! - `commit`: Commit changes using the commit message from `commit_message.md`
+//! - `config`: Create or manage local/global configuration files
 //! - `generate`: Generate a new commit message file
 //! - `init`: Initialize Rona configuration
 //! - `list-status`: List git status files (for shell completion)
@@ -25,7 +26,9 @@
 //! - Handles configuration management
 //!
 
-use clap::{Command as ClapCommand, CommandFactory, Parser, Subcommand, ValueHint, command};
+use clap::{
+    Command as ClapCommand, CommandFactory, Parser, Subcommand, ValueEnum, ValueHint, command,
+};
 use clap_complete::{Shell, generate};
 use glob::Pattern;
 use inquire::ui::{Attributes, Color, RenderConfig, StyleSheet, Styled};
@@ -42,6 +45,15 @@ use crate::{
     },
     template::{TemplateVariables, process_template, validate_template},
 };
+
+/// Configuration scope for config command
+#[derive(Clone, Copy, Debug, ValueEnum)]
+pub(crate) enum ConfigScope {
+    /// Local project configuration (.rona.toml)
+    Local,
+    /// Global configuration (~/.config/rona.toml)
+    Global,
+}
 
 /// CLI's commands
 #[derive(Subcommand)]
@@ -88,6 +100,18 @@ pub(crate) enum CliCommand {
         /// The shell to generate completions for
         #[arg(value_enum)]
         shell: Shell,
+    },
+
+    /// Manage configuration files (create or edit local or global config)
+    #[command(name = "config")]
+    Config {
+        /// Scope of the configuration (local project or global)
+        #[arg(value_enum)]
+        scope: ConfigScope,
+
+        /// Show what would be created without actually creating the config file
+        #[arg(long, default_value_t = false)]
+        dry_run: bool,
     },
 
     /// Directly generate the `commit_message.md` file.
@@ -515,6 +539,74 @@ fn handle_set(editor: &str, config: &Config) -> Result<()> {
     Ok(())
 }
 
+/// Handle the Config command which creates or manages configuration files.
+///
+/// # Arguments
+/// * `scope` - Whether to create local (.rona.toml) or global (~/.config/rona.toml) config
+/// * `config` - Global configuration including verbose and dry-run settings
+///
+/// # Errors
+/// * If creating configuration file fails
+/// * If writing configuration content fails
+fn handle_config_command(scope: ConfigScope, config: &Config) -> Result<()> {
+    use std::io::Write;
+
+    // Determine the config path based on scope
+    let config_path = match scope {
+        ConfigScope::Local => {
+            let project_root = get_top_level_path()?;
+            project_root.join(".rona.toml")
+        }
+        ConfigScope::Global => {
+            let home = dirs::home_dir().ok_or(crate::errors::ConfigError::ConfigNotFound)?;
+            home.join(".config/rona.toml")
+        }
+    };
+
+    if config.dry_run {
+        println!(
+            "Would create {} configuration file at: {}",
+            match scope {
+                ConfigScope::Local => "local",
+                ConfigScope::Global => "global",
+            },
+            config_path.display()
+        );
+        return Ok(());
+    }
+
+    // Check if config already exists
+    if config_path.exists() {
+        println!(
+            "Configuration file already exists at: {}",
+            config_path.display()
+        );
+        println!("Use 'rona set-editor <editor>' to modify the editor setting.");
+        return Ok(());
+    }
+
+    // Create parent directory if it doesn't exist (for global config)
+    if let Some(parent) = config_path.parent()
+        && !parent.exists()
+    {
+        std::fs::create_dir_all(parent)?;
+    }
+
+    // Get default config and serialize to TOML
+    let default_config = crate::config::ProjectConfig::default();
+    let toml_content = toml::to_string_pretty(&default_config)
+        .map_err(|_| crate::errors::ConfigError::InvalidConfig)?;
+
+    // Write the config file
+    let mut file = std::fs::File::create(&config_path)?;
+    file.write_all(toml_content.as_bytes())?;
+
+    println!("Configuration file created at: {}", config_path.display());
+    println!("You can now edit this file to customize your settings.");
+
+    Ok(())
+}
+
 /// Runs the program by parsing command line arguments and executing the appropriate command.
 ///
 /// # Errors
@@ -557,6 +649,11 @@ pub fn run() -> Result<()> {
         CliCommand::Completion { shell } => {
             handle_completion(shell);
             Ok(())
+        }
+
+        CliCommand::Config { scope, dry_run } => {
+            config.set_dry_run(dry_run);
+            handle_config_command(scope, &config)
         }
 
         CliCommand::Generate {
@@ -1343,6 +1440,76 @@ mod cli_tests {
             }
             _ => panic!("Wrong command parsed"),
         }
+    }
+
+    // === CONFIG COMMAND TESTS ===
+
+    #[test]
+    fn test_config_local() {
+        let args = vec!["rona", "config", "local"];
+        let cli = Cli::try_parse_from(args).unwrap();
+
+        match cli.command {
+            CliCommand::Config { scope, dry_run } => {
+                assert!(matches!(scope, ConfigScope::Local));
+                assert!(!dry_run);
+            }
+            _ => panic!("Wrong command parsed"),
+        }
+    }
+
+    #[test]
+    fn test_config_global() {
+        let args = vec!["rona", "config", "global"];
+        let cli = Cli::try_parse_from(args).unwrap();
+
+        match cli.command {
+            CliCommand::Config { scope, dry_run } => {
+                assert!(matches!(scope, ConfigScope::Global));
+                assert!(!dry_run);
+            }
+            _ => panic!("Wrong command parsed"),
+        }
+    }
+
+    #[test]
+    fn test_config_local_dry_run() {
+        let args = vec!["rona", "config", "local", "--dry-run"];
+        let cli = Cli::try_parse_from(args).unwrap();
+
+        match cli.command {
+            CliCommand::Config { scope, dry_run } => {
+                assert!(matches!(scope, ConfigScope::Local));
+                assert!(dry_run);
+            }
+            _ => panic!("Wrong command parsed"),
+        }
+    }
+
+    #[test]
+    fn test_config_global_dry_run() {
+        let args = vec!["rona", "config", "global", "--dry-run"];
+        let cli = Cli::try_parse_from(args).unwrap();
+
+        match cli.command {
+            CliCommand::Config { scope, dry_run } => {
+                assert!(matches!(scope, ConfigScope::Global));
+                assert!(dry_run);
+            }
+            _ => panic!("Wrong command parsed"),
+        }
+    }
+
+    #[test]
+    fn test_config_missing_scope() {
+        let args = vec!["rona", "config"];
+        assert!(Cli::try_parse_from(args).is_err());
+    }
+
+    #[test]
+    fn test_config_invalid_scope() {
+        let args = vec!["rona", "config", "invalid"];
+        assert!(Cli::try_parse_from(args).is_err());
     }
 
     // === TEMPLATE SELECTION TESTS (REGRESSION TESTS) ===
