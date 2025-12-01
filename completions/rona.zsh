@@ -61,6 +61,15 @@ _arguments "${_arguments_options[@]}" : \
 ':shell -- The shell to generate completions for:(bash elvish fish powershell zsh)' \
 && ret=0
 ;;
+(config)
+_arguments "${_arguments_options[@]}" : \
+'--dry-run[Show what would be created without actually creating the config file]' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+':scope -- Scope of the configuration (local project or global):((local\:"Local project configuration (.rona.toml)"
+global\:"Global configuration (~/.config/rona.toml)"))' \
+&& ret=0
+;;
 (generate)
 _arguments "${_arguments_options[@]}" : \
 '--dry-run[Show what would be generated without creating files]' \
@@ -126,6 +135,10 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
+(config)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
 (generate)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
@@ -165,6 +178,7 @@ _rona_commands() {
 'add-with-exclude:Add all files to the \`git add\` command and exclude the patterns passed as positional arguments' \
 'commit:Directly commit the file with the text in \`commit_message.md\`' \
 'completion:Generate shell completions for your shell' \
+'config:Manage configuration files (create or edit local or global config)' \
 'generate:Directly generate the \`commit_message.md\` file' \
 'init:Initialize the rona configuration file' \
 'list-status:List files from git status (for shell completion on the -a)' \
@@ -189,6 +203,11 @@ _rona__completion_commands() {
     local commands; commands=()
     _describe -t commands 'rona completion commands' commands "$@"
 }
+(( $+functions[_rona__config_commands] )) ||
+_rona__config_commands() {
+    local commands; commands=()
+    _describe -t commands 'rona config commands' commands "$@"
+}
 (( $+functions[_rona__generate_commands] )) ||
 _rona__generate_commands() {
     local commands; commands=()
@@ -200,6 +219,7 @@ _rona__help_commands() {
 'add-with-exclude:Add all files to the \`git add\` command and exclude the patterns passed as positional arguments' \
 'commit:Directly commit the file with the text in \`commit_message.md\`' \
 'completion:Generate shell completions for your shell' \
+'config:Manage configuration files (create or edit local or global config)' \
 'generate:Directly generate the \`commit_message.md\` file' \
 'init:Initialize the rona configuration file' \
 'list-status:List files from git status (for shell completion on the -a)' \
@@ -223,6 +243,11 @@ _rona__help__commit_commands() {
 _rona__help__completion_commands() {
     local commands; commands=()
     _describe -t commands 'rona help completion commands' commands "$@"
+}
+(( $+functions[_rona__help__config_commands] )) ||
+_rona__help__config_commands() {
+    local commands; commands=()
+    _describe -t commands 'rona help config commands' commands "$@"
 }
 (( $+functions[_rona__help__generate_commands] )) ||
 _rona__help__generate_commands() {

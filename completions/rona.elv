@@ -28,6 +28,7 @@ set edit:completion:arg-completer[rona] = {|@words|
             cand add-with-exclude 'Add all files to the `git add` command and exclude the patterns passed as positional arguments'
             cand commit 'Directly commit the file with the text in `commit_message.md`'
             cand completion 'Generate shell completions for your shell'
+            cand config 'Manage configuration files (create or edit local or global config)'
             cand generate 'Directly generate the `commit_message.md` file'
             cand init 'Initialize the rona configuration file'
             cand list-status 'List files from git status (for shell completion on the -a)'
@@ -55,6 +56,11 @@ set edit:completion:arg-completer[rona] = {|@words|
         &'rona;completion'= {
             cand -h 'Print help'
             cand --help 'Print help'
+        }
+        &'rona;config'= {
+            cand --dry-run 'Show what would be created without actually creating the config file'
+            cand -h 'Print help (see more with ''--help'')'
+            cand --help 'Print help (see more with ''--help'')'
         }
         &'rona;generate'= {
             cand --dry-run 'Show what would be generated without creating files'
@@ -88,6 +94,7 @@ set edit:completion:arg-completer[rona] = {|@words|
             cand add-with-exclude 'Add all files to the `git add` command and exclude the patterns passed as positional arguments'
             cand commit 'Directly commit the file with the text in `commit_message.md`'
             cand completion 'Generate shell completions for your shell'
+            cand config 'Manage configuration files (create or edit local or global config)'
             cand generate 'Directly generate the `commit_message.md` file'
             cand init 'Initialize the rona configuration file'
             cand list-status 'List files from git status (for shell completion on the -a)'
@@ -100,6 +107,8 @@ set edit:completion:arg-completer[rona] = {|@words|
         &'rona;help;commit'= {
         }
         &'rona;help;completion'= {
+        }
+        &'rona;help;config'= {
         }
         &'rona;help;generate'= {
         }
