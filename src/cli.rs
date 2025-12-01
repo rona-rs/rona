@@ -169,6 +169,26 @@ pub(crate) enum CliCommand {
         #[arg(long, default_value_t = false)]
         dry_run: bool,
     },
+
+    /// Sync current branch with main (or another branch) by pulling and merging/rebasing.
+    #[command(name = "sync")]
+    Sync {
+        /// Branch to sync from (default: main)
+        #[arg(short = 'b', long = "branch", default_value = "main")]
+        source_branch: String,
+
+        /// Use rebase instead of merge
+        #[arg(short = 'r', long = "rebase", default_value_t = false)]
+        rebase: bool,
+
+        /// Create a new branch before syncing
+        #[arg(short = 'n', long = "new-branch")]
+        new_branch: Option<String>,
+
+        /// Show what would be done without actually doing it
+        #[arg(long, default_value_t = false)]
+        dry_run: bool,
+    },
 }
 
 #[derive(Parser)]
@@ -541,6 +561,73 @@ fn handle_set(editor: &str, config: &Config) -> Result<()> {
     Ok(())
 }
 
+/// Handle the Sync command which syncs the current branch with another branch.
+///
+/// # Arguments
+/// * `source_branch` - The branch to sync from (e.g., "main")
+/// * `rebase` - Whether to use rebase instead of merge
+/// * `new_branch` - Optional name for a new branch to create before syncing
+/// * `config` - Global configuration including verbose and dry-run settings
+///
+/// # Errors
+/// * If git operations fail
+/// * If the source branch doesn't exist
+/// * If there are uncommitted changes that would be lost
+fn handle_sync(
+    source_branch: &str,
+    rebase: bool,
+    new_branch: Option<&str>,
+    config: &Config,
+) -> Result<()> {
+    use crate::git::{git_create_branch, git_merge, git_pull, git_rebase, git_switch};
+
+    // Get current branch before any operations
+    let original_branch = get_current_branch()?;
+
+    if config.dry_run {
+        if let Some(branch_name) = new_branch {
+            println!("Would create new branch: {branch_name}");
+        }
+        println!("Would switch to: {source_branch}");
+        println!("Would pull latest changes");
+        println!(
+            "Would switch back to: {}",
+            new_branch.unwrap_or(&original_branch)
+        );
+        if rebase {
+            println!("Would rebase with: {source_branch}");
+        } else {
+            println!("Would merge with: {source_branch}");
+        }
+        return Ok(());
+    }
+
+    // Create new branch if specified
+    if let Some(branch_name) = new_branch {
+        git_create_branch(branch_name, config.verbose)?;
+        git_switch(branch_name, config.verbose)?;
+    }
+
+    let target_branch = new_branch.unwrap_or(&original_branch);
+
+    // Switch to source branch and pull
+    git_switch(source_branch, config.verbose)?;
+    git_pull(config.verbose)?;
+
+    // Switch back to target branch
+    git_switch(target_branch, config.verbose)?;
+
+    // Merge or rebase
+    if rebase {
+        git_rebase(source_branch, config.verbose)?;
+    } else {
+        git_merge(source_branch, config.verbose)?;
+    }
+
+    println!("\nSuccessfully synced '{target_branch}' with '{source_branch}'");
+    Ok(())
+}
+
 /// Handle the Config command which creates or manages configuration files.
 ///
 /// # Arguments
@@ -682,6 +769,16 @@ pub fn run() -> Result<()> {
         CliCommand::Set { editor, dry_run } => {
             config.set_dry_run(dry_run);
             handle_set(&editor, &config)
+        }
+
+        CliCommand::Sync {
+            source_branch,
+            rebase,
+            new_branch,
+            dry_run,
+        } => {
+            config.set_dry_run(dry_run);
+            handle_sync(&source_branch, rebase, new_branch.as_deref(), &config)
         }
     }
 }
@@ -1661,5 +1758,234 @@ mod cli_tests {
             !formatted_message.contains("[]"),
             "Should not produce empty brackets"
         );
+    }
+
+    // === SYNC COMMAND TESTS ===
+
+    #[test]
+    fn test_sync_basic() {
+        let args = vec!["rona", "sync"];
+        let cli = Cli::try_parse_from(args).unwrap();
+
+        match cli.command {
+            CliCommand::Sync {
+                source_branch,
+                rebase,
+                new_branch,
+                dry_run,
+            } => {
+                assert_eq!(source_branch, "main");
+                assert!(!rebase);
+                assert!(new_branch.is_none());
+                assert!(!dry_run);
+            }
+            _ => panic!("Wrong command parsed"),
+        }
+    }
+
+    #[test]
+    fn test_sync_with_branch() {
+        let args = vec!["rona", "sync", "--branch", "develop"];
+        let cli = Cli::try_parse_from(args).unwrap();
+
+        match cli.command {
+            CliCommand::Sync {
+                source_branch,
+                rebase,
+                new_branch,
+                dry_run,
+            } => {
+                assert_eq!(source_branch, "develop");
+                assert!(!rebase);
+                assert!(new_branch.is_none());
+                assert!(!dry_run);
+            }
+            _ => panic!("Wrong command parsed"),
+        }
+    }
+
+    #[test]
+    fn test_sync_with_branch_short_flag() {
+        let args = vec!["rona", "sync", "-b", "staging"];
+        let cli = Cli::try_parse_from(args).unwrap();
+
+        match cli.command {
+            CliCommand::Sync {
+                source_branch,
+                rebase,
+                new_branch,
+                dry_run,
+            } => {
+                assert_eq!(source_branch, "staging");
+                assert!(!rebase);
+                assert!(new_branch.is_none());
+                assert!(!dry_run);
+            }
+            _ => panic!("Wrong command parsed"),
+        }
+    }
+
+    #[test]
+    fn test_sync_with_rebase() {
+        let args = vec!["rona", "sync", "--rebase"];
+        let cli = Cli::try_parse_from(args).unwrap();
+
+        match cli.command {
+            CliCommand::Sync {
+                source_branch,
+                rebase,
+                new_branch,
+                dry_run,
+            } => {
+                assert_eq!(source_branch, "main");
+                assert!(rebase);
+                assert!(new_branch.is_none());
+                assert!(!dry_run);
+            }
+            _ => panic!("Wrong command parsed"),
+        }
+    }
+
+    #[test]
+    fn test_sync_with_rebase_short_flag() {
+        let args = vec!["rona", "sync", "-r"];
+        let cli = Cli::try_parse_from(args).unwrap();
+
+        match cli.command {
+            CliCommand::Sync {
+                source_branch,
+                rebase,
+                new_branch,
+                dry_run,
+            } => {
+                assert_eq!(source_branch, "main");
+                assert!(rebase);
+                assert!(new_branch.is_none());
+                assert!(!dry_run);
+            }
+            _ => panic!("Wrong command parsed"),
+        }
+    }
+
+    #[test]
+    fn test_sync_with_new_branch() {
+        let args = vec!["rona", "sync", "--new-branch", "feature/new-feature"];
+        let cli = Cli::try_parse_from(args).unwrap();
+
+        match cli.command {
+            CliCommand::Sync {
+                source_branch,
+                rebase,
+                new_branch,
+                dry_run,
+            } => {
+                assert_eq!(source_branch, "main");
+                assert!(!rebase);
+                assert_eq!(new_branch, Some("feature/new-feature".to_string()));
+                assert!(!dry_run);
+            }
+            _ => panic!("Wrong command parsed"),
+        }
+    }
+
+    #[test]
+    fn test_sync_with_new_branch_short_flag() {
+        let args = vec!["rona", "sync", "-n", "bugfix/issue-123"];
+        let cli = Cli::try_parse_from(args).unwrap();
+
+        match cli.command {
+            CliCommand::Sync {
+                source_branch,
+                rebase,
+                new_branch,
+                dry_run,
+            } => {
+                assert_eq!(source_branch, "main");
+                assert!(!rebase);
+                assert_eq!(new_branch, Some("bugfix/issue-123".to_string()));
+                assert!(!dry_run);
+            }
+            _ => panic!("Wrong command parsed"),
+        }
+    }
+
+    #[test]
+    fn test_sync_with_dry_run() {
+        let args = vec!["rona", "sync", "--dry-run"];
+        let cli = Cli::try_parse_from(args).unwrap();
+
+        match cli.command {
+            CliCommand::Sync {
+                source_branch,
+                rebase,
+                new_branch,
+                dry_run,
+            } => {
+                assert_eq!(source_branch, "main");
+                assert!(!rebase);
+                assert!(new_branch.is_none());
+                assert!(dry_run);
+            }
+            _ => panic!("Wrong command parsed"),
+        }
+    }
+
+    #[test]
+    fn test_sync_all_options() {
+        let args = vec![
+            "rona",
+            "sync",
+            "--branch",
+            "develop",
+            "--rebase",
+            "--new-branch",
+            "feature/test",
+            "--dry-run",
+        ];
+        let cli = Cli::try_parse_from(args).unwrap();
+
+        match cli.command {
+            CliCommand::Sync {
+                source_branch,
+                rebase,
+                new_branch,
+                dry_run,
+            } => {
+                assert_eq!(source_branch, "develop");
+                assert!(rebase);
+                assert_eq!(new_branch, Some("feature/test".to_string()));
+                assert!(dry_run);
+            }
+            _ => panic!("Wrong command parsed"),
+        }
+    }
+
+    #[test]
+    fn test_sync_short_flags_combination() {
+        let args = vec![
+            "rona",
+            "sync",
+            "-b",
+            "staging",
+            "-r",
+            "-n",
+            "hotfix/critical",
+        ];
+        let cli = Cli::try_parse_from(args).unwrap();
+
+        match cli.command {
+            CliCommand::Sync {
+                source_branch,
+                rebase,
+                new_branch,
+                dry_run,
+            } => {
+                assert_eq!(source_branch, "staging");
+                assert!(rebase);
+                assert_eq!(new_branch, Some("hotfix/critical".to_string()));
+                assert!(!dry_run);
+            }
+            _ => panic!("Wrong command parsed"),
+        }
     }
 }

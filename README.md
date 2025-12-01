@@ -22,10 +22,11 @@ Rona is a command-line interface tool designed to enhance your Git workflow with
 - 🚀 Intelligent file staging with pattern exclusion
 - 📝 Structured commit message generation
 - 🔄 Streamlined push operations
+- 🔀 Branch synchronization with merge/rebase support
 - 🎯 Interactive commit type selection with customizable types
 - 🛠 Multi-shell completion support (Bash, Fish, Zsh, PowerShell)
 - ⚙️ Flexible configuration system (global and project-level)
- - 🎨 Colored interactive prompts powered by Inquire
+- 🎨 Colored interactive prompts powered by Inquire
 
 ## Installation
 
@@ -220,6 +221,19 @@ rona -c -p
 # Switch back to main and merge
 git checkout main
 git merge feature/new-feature
+
+# Or use the sync command to update your branch with latest main
+git checkout feature/new-feature
+rona sync              # Merges main into current branch
+
+# Update branch with rebase instead of merge
+rona sync --rebase     # Rebases current branch onto main
+
+# Create new branch and sync with develop
+rona sync -b develop -n feature/new-feature
+
+# Preview sync operation
+rona sync --dry-run
 ```
 
 #### Handling Large Changes
@@ -463,6 +477,71 @@ rona set-editor zed
 rona set-editor "code --wait"  # VS Code
 rona set-editor emacs
 rona set-editor nano
+```
+
+### `sync`
+Sync your current branch with another branch by pulling latest changes and merging or rebasing.
+
+```bash
+rona sync [OPTIONS]
+```
+
+**Options:**
+- `-b, --branch <BRANCH>` - Branch to sync from (default: main)
+- `-r, --rebase` - Use rebase instead of merge
+- `-n, --new-branch <NAME>` - Create a new branch before syncing
+- `--dry-run` - Preview what would be done
+
+**Workflow:**
+1. Optionally creates a new branch (if `-n` specified)
+2. Switches to the source branch
+3. Pulls latest changes from remote
+4. Switches back to your target branch
+5. Merges or rebases the source branch into your target branch
+
+**Examples:**
+
+```bash
+# Basic usage: sync current branch with main
+rona sync
+
+# Sync with a different branch
+rona sync --branch develop
+rona sync -b staging
+
+# Use rebase instead of merge
+rona sync --rebase
+rona sync -r
+
+# Create new branch and sync with main
+rona sync --new-branch feature/my-feature
+rona sync -n bugfix/issue-123
+
+# Create new branch and sync from develop using rebase
+rona sync -b develop -r -n feature/new-feature
+
+# Preview what would happen without making changes
+rona sync --dry-run
+
+# Combine all options
+rona sync -b develop -r -n feature/test --dry-run
+```
+
+**Common Use Cases:**
+
+```bash
+# Keep feature branch up-to-date with main
+git checkout feature/my-feature
+rona sync
+
+# Start new feature from latest main
+rona sync -n feature/new-feature
+
+# Update branch with staging before deploying
+rona sync -b staging
+
+# Rebase feature branch onto latest main for clean history
+rona sync --rebase
 ```
 
 ### `help` (`-h`)

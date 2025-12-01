@@ -34,6 +34,7 @@ set edit:completion:arg-completer[rona] = {|@words|
             cand list-status 'List files from git status (for shell completion on the -a)'
             cand push 'Push to a git repository'
             cand set-editor 'Set the editor to use for editing the commit message'
+            cand sync 'Sync current branch with main (or another branch) by pulling and merging/rebasing'
             cand help 'Print this message or the help of the given subcommand(s)'
         }
         &'rona;add-with-exclude'= {
@@ -90,6 +91,17 @@ set edit:completion:arg-completer[rona] = {|@words|
             cand -h 'Print help'
             cand --help 'Print help'
         }
+        &'rona;sync'= {
+            cand -b 'Branch to sync from (default: main)'
+            cand --branch 'Branch to sync from (default: main)'
+            cand -n 'Create a new branch before syncing'
+            cand --new-branch 'Create a new branch before syncing'
+            cand -r 'Use rebase instead of merge'
+            cand --rebase 'Use rebase instead of merge'
+            cand --dry-run 'Show what would be done without actually doing it'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
         &'rona;help'= {
             cand add-with-exclude 'Add all files to the `git add` command and exclude the patterns passed as positional arguments'
             cand commit 'Directly commit the file with the text in `commit_message.md`'
@@ -100,6 +112,7 @@ set edit:completion:arg-completer[rona] = {|@words|
             cand list-status 'List files from git status (for shell completion on the -a)'
             cand push 'Push to a git repository'
             cand set-editor 'Set the editor to use for editing the commit message'
+            cand sync 'Sync current branch with main (or another branch) by pulling and merging/rebasing'
             cand help 'Print this message or the help of the given subcommand(s)'
         }
         &'rona;help;add-with-exclude'= {
@@ -119,6 +132,8 @@ set edit:completion:arg-completer[rona] = {|@words|
         &'rona;help;push'= {
         }
         &'rona;help;set-editor'= {
+        }
+        &'rona;help;sync'= {
         }
         &'rona;help;help'= {
         }

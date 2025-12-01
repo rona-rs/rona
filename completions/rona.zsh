@@ -111,6 +111,19 @@ _arguments "${_arguments_options[@]}" : \
 ':editor -- The editor to use for the commit message:_default' \
 && ret=0
 ;;
+(sync)
+_arguments "${_arguments_options[@]}" : \
+'-b+[Branch to sync from (default\: main)]:SOURCE_BRANCH:_default' \
+'--branch=[Branch to sync from (default\: main)]:SOURCE_BRANCH:_default' \
+'-n+[Create a new branch before syncing]:NEW_BRANCH:_default' \
+'--new-branch=[Create a new branch before syncing]:NEW_BRANCH:_default' \
+'-r[Use rebase instead of merge]' \
+'--rebase[Use rebase instead of merge]' \
+'--dry-run[Show what would be done without actually doing it]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
 (help)
 _arguments "${_arguments_options[@]}" : \
 ":: :_rona__help_commands" \
@@ -159,6 +172,10 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
+(sync)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
 (help)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
@@ -184,6 +201,7 @@ _rona_commands() {
 'list-status:List files from git status (for shell completion on the -a)' \
 'push:Push to a git repository' \
 'set-editor:Set the editor to use for editing the commit message' \
+'sync:Sync current branch with main (or another branch) by pulling and merging/rebasing' \
 'help:Print this message or the help of the given subcommand(s)' \
     )
     _describe -t commands 'rona commands' commands "$@"
@@ -225,6 +243,7 @@ _rona__help_commands() {
 'list-status:List files from git status (for shell completion on the -a)' \
 'push:Push to a git repository' \
 'set-editor:Set the editor to use for editing the commit message' \
+'sync:Sync current branch with main (or another branch) by pulling and merging/rebasing' \
 'help:Print this message or the help of the given subcommand(s)' \
     )
     _describe -t commands 'rona help commands' commands "$@"
@@ -279,6 +298,11 @@ _rona__help__set-editor_commands() {
     local commands; commands=()
     _describe -t commands 'rona help set-editor commands' commands "$@"
 }
+(( $+functions[_rona__help__sync_commands] )) ||
+_rona__help__sync_commands() {
+    local commands; commands=()
+    _describe -t commands 'rona help sync commands' commands "$@"
+}
 (( $+functions[_rona__init_commands] )) ||
 _rona__init_commands() {
     local commands; commands=()
@@ -298,6 +322,11 @@ _rona__push_commands() {
 _rona__set-editor_commands() {
     local commands; commands=()
     _describe -t commands 'rona set-editor commands' commands "$@"
+}
+(( $+functions[_rona__sync_commands] )) ||
+_rona__sync_commands() {
+    local commands; commands=()
+    _describe -t commands 'rona sync commands' commands "$@"
 }
 
 if [ "$funcstack[1]" = "_rona" ]; then
