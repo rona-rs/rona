@@ -60,13 +60,14 @@ jobs:
           sed -i.bak "s/\${GITHUB_REF#refs\/tags\/v}/${VERSION}/g" release_body.md
 
       - name: Release
-        uses: softprops/action-gh-release@v2
+        uses: ncipollo/release-action@v1
         with:
-          tag_name: ${{ needs.extract-version.outputs.version }}
-          files: release/rona-*-linux-x86_64.tar.gz
-          body_path: release_body.md
-          generate_release_notes: true
-          append_body: true
+          tag: ${{ needs.extract-version.outputs.version }}
+          artifacts: release/rona-*-linux-x86_64.tar.gz
+          bodyFile: release_body.md
+          generateReleaseNotes: true
+          allowUpdates: true
+          updateOnlyUnreleased: false
 
   build-macos-intel:
     needs: extract-version
@@ -113,12 +114,13 @@ jobs:
           echo '```' >> sha256.md
 
       - name: Release
-        uses: softprops/action-gh-release@v2
+        uses: ncipollo/release-action@v1
         with:
-          tag_name: ${{ needs.extract-version.outputs.version }}
-          files: release/rona-*-macos-x86_64.tar.gz
-          body_path: release/sha256.md
-          append_body: true
+          tag: ${{ needs.extract-version.outputs.version }}
+          artifacts: release/rona-*-macos-x86_64.tar.gz
+          bodyFile: release/sha256.md
+          allowUpdates: true
+          updateOnlyUnreleased: false
 
   build-macos-arm:
     needs: extract-version
@@ -165,12 +167,13 @@ jobs:
           echo '```' >> sha256.md
 
       - name: Release
-        uses: softprops/action-gh-release@v2
+        uses: ncipollo/release-action@v1
         with:
-          tag_name: ${{ needs.extract-version.outputs.version }}
-          files: release/rona-*-macos-arm64.tar.gz
-          body_path: release/sha256.md
-          append_body: true
+          tag: ${{ needs.extract-version.outputs.version }}
+          artifacts: release/rona-*-macos-arm64.tar.gz
+          bodyFile: release/sha256.md
+          allowUpdates: true
+          updateOnlyUnreleased: false
 
   publish-crates-io:
     name: Publish to crates.io
