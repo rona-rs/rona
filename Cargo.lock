@@ -1204,7 +1204,7 @@ dependencies = [
 
 [[package]]
 name = "rona"
-version = "2.13.0"
+version = "2.13.1"
 dependencies = [
  "assert_cmd",
  "chrono",

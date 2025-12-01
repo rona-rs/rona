@@ -61,8 +61,13 @@ use std::process::exit;
 
 fn main() {
     if let Err(e) = inner_main() {
-        eprintln!("{e}");
+        // Handle user cancellation gracefully with a friendly message
+        if matches!(e, errors::RonaError::UserCancelled) {
+            println!("\nBye from Rona!");
+            exit(0);
+        }
 
+        eprintln!("{e}");
         exit(1);
     }
 }
