@@ -5,8 +5,9 @@
 
 use crate::{
     errors::{GitError, Result, RonaError},
-    git::{commit::get_current_commit_nb, repository::open_repo},
+    git::{commit::get_current_commit_nb, handle_output, repository::open_repo},
 };
+use std::process::Command;
 
 /// Attempts to get the default branch name from git config.
 ///
@@ -169,4 +170,110 @@ pub fn format_branch_name(commit_types: &[&str; 4], branch: &str) -> String {
     }
 
     formatted_branch
+}
+
+/// Switches to a different branch.
+///
+/// # Arguments
+/// * `branch_name` - The name of the branch to switch to
+/// * `verbose` - Whether to print verbose output during the operation
+///
+/// # Errors
+/// * If the branch doesn't exist
+/// * If there are uncommitted changes that would be lost
+/// * If the git switch command fails
+pub fn git_switch(branch_name: &str, verbose: bool) -> Result<()> {
+    if verbose {
+        println!("\nSwitching to branch: {branch_name}");
+    }
+
+    let output = Command::new("git")
+        .arg("switch")
+        .arg(branch_name)
+        .output()?;
+
+    handle_output("switch", &output, verbose)
+}
+
+/// Creates a new branch.
+///
+/// # Arguments
+/// * `branch_name` - The name of the branch to create
+/// * `verbose` - Whether to print verbose output during the operation
+///
+/// # Errors
+/// * If a branch with that name already exists
+/// * If the git branch command fails
+pub fn git_create_branch(branch_name: &str, verbose: bool) -> Result<()> {
+    if verbose {
+        println!("\nCreating new branch: {branch_name}");
+    }
+
+    let output = Command::new("git")
+        .arg("switch")
+        .arg("-c")
+        .arg(branch_name)
+        .output()?;
+
+    handle_output("create branch", &output, verbose)
+}
+
+/// Pulls changes from the remote repository.
+///
+/// # Arguments
+/// * `verbose` - Whether to print verbose output during the operation
+///
+/// # Errors
+/// * If there's no remote repository configured
+/// * If the git pull command fails
+/// * If there are merge conflicts
+pub fn git_pull(verbose: bool) -> Result<()> {
+    if verbose {
+        println!("\nPulling latest changes...");
+    }
+
+    let output = Command::new("git").arg("pull").output()?;
+
+    handle_output("pull", &output, verbose)
+}
+
+/// Merges a branch into the current branch.
+///
+/// # Arguments
+/// * `branch_name` - The name of the branch to merge
+/// * `verbose` - Whether to print verbose output during the operation
+///
+/// # Errors
+/// * If there are merge conflicts
+/// * If the git merge command fails
+pub fn git_merge(branch_name: &str, verbose: bool) -> Result<()> {
+    if verbose {
+        println!("\nMerging {branch_name} into current branch...");
+    }
+
+    let output = Command::new("git").arg("merge").arg(branch_name).output()?;
+
+    handle_output("merge", &output, verbose)
+}
+
+/// Rebases the current branch onto another branch.
+///
+/// # Arguments
+/// * `branch_name` - The name of the branch to rebase onto
+/// * `verbose` - Whether to print verbose output during the operation
+///
+/// # Errors
+/// * If there are rebase conflicts
+/// * If the git rebase command fails
+pub fn git_rebase(branch_name: &str, verbose: bool) -> Result<()> {
+    if verbose {
+        println!("\nRebasing onto {branch_name}...");
+    }
+
+    let output = Command::new("git")
+        .arg("rebase")
+        .arg(branch_name)
+        .output()?;
+
+    handle_output("rebase", &output, verbose)
 }
