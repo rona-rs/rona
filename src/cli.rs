@@ -37,7 +37,7 @@ use std::{fs::read_to_string, io, process::Command};
 
 use crate::{
     config::Config,
-    errors::Result,
+    errors::{Result, RonaError},
     git::{
         COMMIT_MESSAGE_FILE_PATH, COMMIT_TYPES, create_needed_files, format_branch_name,
         generate_commit_message, get_current_branch, get_current_commit_nb, get_status_files,
@@ -375,7 +375,7 @@ fn handle_generate(interactive: bool, no_commit_number: bool, config: &Config) -
     let commit_type = Select::new("Select commit type", commit_types_vec)
         .with_starting_cursor(0)
         .prompt()
-        .unwrap();
+        .map_err(|_| RonaError::UserCancelled)?;
 
     if interactive {
         // In interactive mode, skip generating the template file
@@ -400,7 +400,9 @@ fn handle_interactive_mode(
     let project_root = get_top_level_path()?;
     let commit_file_path = project_root.join(COMMIT_MESSAGE_FILE_PATH);
 
-    let message: String = Text::new("Message").prompt().unwrap();
+    let message: String = Text::new("Message")
+        .prompt()
+        .map_err(|_| RonaError::UserCancelled)?;
 
     if message.trim().is_empty() {
         println!("⚠️  Empty message provided. Exiting.");
