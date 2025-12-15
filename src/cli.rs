@@ -26,9 +26,7 @@
 //! - Handles configuration management
 //!
 
-use clap::{
-    Command as ClapCommand, CommandFactory, Parser, Subcommand, ValueEnum, ValueHint, command,
-};
+use clap::{Command as ClapCommand, CommandFactory, Parser, Subcommand, ValueEnum, ValueHint};
 use clap_complete::{Shell, generate};
 use glob::Pattern;
 use inquire::ui::{Attributes, Color, RenderConfig, StyleSheet, Styled};
