@@ -436,12 +436,9 @@ fn handle_interactive_mode(
         Some(get_current_commit_nb()? + 1)
     };
 
-    // Get template from config or use default based on no_commit_number flag
-    let default_template = if no_commit_number {
-        "({commit_type} on {branch_name}) {message}"
-    } else {
-        "[{commit_number}] ({commit_type} on {branch_name}) {message}"
-    };
+    // Get template from config or use default with conditional syntax
+    // The conditional block {?commit_number}...{/commit_number} is only included if commit_number has a value
+    let default_template = "{?commit_number}[{commit_number}] {/commit_number}({commit_type} on {branch_name}) {message}";
 
     let template = config
         .project_config
@@ -1615,20 +1612,13 @@ mod cli_tests {
     // These tests would have caught the bug where `rona -g -i -n` produced empty brackets []
 
     /// REGRESSION TEST: Verify template selection logic for interactive mode with `no_commit_number`
-    /// This test verifies that the correct default template is chosen based on the flag
+    /// This test verifies that the new conditional block syntax properly handles None `commit_number`
     #[test]
     fn test_template_selection_with_no_commit_number() {
         use crate::template::{TemplateVariables, process_template};
 
-        // Simulate what handle_interactive_mode should do with no_commit_number = true
-        let no_commit_number = true;
-
-        // The default template should NOT include commit_number placeholder
-        let default_template = if no_commit_number {
-            "({commit_type} on {branch_name}) {message}"
-        } else {
-            "[{commit_number}] ({commit_type} on {branch_name}) {message}"
-        };
+        // With the new conditional block syntax, we use ONE template for both cases
+        let default_template = "{?commit_number}[{commit_number}] {/commit_number}({commit_type} on {branch_name}) {message}";
 
         let variables = TemplateVariables {
             commit_number: None,
@@ -1656,15 +1646,8 @@ mod cli_tests {
     fn test_template_selection_with_commit_number() {
         use crate::template::{TemplateVariables, process_template};
 
-        // Simulate what handle_interactive_mode should do with no_commit_number = false
-        let no_commit_number = false;
-
-        // The default template SHOULD include commit_number placeholder
-        let default_template = if no_commit_number {
-            "({commit_type} on {branch_name}) {message}"
-        } else {
-            "[{commit_number}] ({commit_type} on {branch_name}) {message}"
-        };
+        // With the new conditional block syntax, we use ONE template for both cases
+        let default_template = "{?commit_number}[{commit_number}] {/commit_number}({commit_type} on {branch_name}) {message}";
 
         let variables = TemplateVariables {
             commit_number: Some(42),

@@ -73,6 +73,74 @@ impl TemplateVariables {
     }
 }
 
+/// Processes conditional blocks in a template string
+///
+/// Conditional blocks have the syntax: `{?variable_name}content{/variable_name}`
+/// The content is only included if the variable has a non-empty value
+///
+/// # Arguments
+/// * `template` - The template string containing conditional blocks
+/// * `variables` - The variables to check
+///
+/// # Returns
+/// * `Result<String>` - The template with conditional blocks processed
+///
+/// # Errors
+/// * If the template contains mismatched or invalid conditional blocks
+fn process_conditional_blocks(template: &str, variables: &TemplateVariables) -> Result<String> {
+    let variable_map = variables.to_map();
+    let mut result = template.to_string();
+
+    // Regex to find opening conditional tags: {?variable_name}
+    let open_regex = Regex::new(r"\{\?(\w+)\}").map_err(|e| {
+        RonaError::Io(std::io::Error::other(format!(
+            "Invalid conditional regex: {e}"
+        )))
+    })?;
+
+    // Process conditional blocks iteratively
+    loop {
+        // Find the first opening tag
+        let open_match = open_regex.find(&result);
+        if open_match.is_none() {
+            break;
+        }
+
+        let open_match = open_match.unwrap();
+        let open_start = open_match.start();
+        let open_end = open_match.end();
+
+        // Extract variable name from the opening tag
+        if let Some(captures) = open_regex.captures(&result[open_start..open_end]) {
+            let var_name = captures.get(1).unwrap().as_str();
+
+            // Look for the matching closing tag {/variable_name}
+            let close_pattern = format!("{{/{var_name}}}");
+            if let Some(close_pos) = result[open_end..].find(&close_pattern) {
+                let close_start = open_end + close_pos;
+                let close_end = close_start + close_pattern.len();
+
+                // Extract the content between opening and closing tags
+                let content = &result[open_end..close_start];
+
+                // Check if variable has a non-empty value
+                let has_value = variable_map.get(var_name).is_some_and(|v| !v.is_empty());
+
+                // Replace the entire block
+                let replacement = if has_value { content } else { "" };
+                let full_block = &result[open_start..close_end];
+                result = result.replace(full_block, replacement);
+            } else {
+                return Err(RonaError::Io(std::io::Error::other(format!(
+                    "Unclosed conditional block: {{?{var_name}}}"
+                ))));
+            }
+        }
+    }
+
+    Ok(result)
+}
+
 /// Processes a template string by substituting variables with their values
 ///
 /// # Arguments
@@ -86,8 +154,10 @@ impl TemplateVariables {
 /// * If the template contains invalid variable syntax
 /// * If required variables are missing
 pub fn process_template(template: &str, variables: &TemplateVariables) -> Result<String> {
+    // First, process conditional blocks
+    let after_conditionals = process_conditional_blocks(template, variables)?;
+
     let variable_map = variables.to_map();
-    let mut result = template.to_string();
 
     // Find all variables in the template
     let regex = Regex::new(r"\{([^}]+)\}").map_err(|e| {
@@ -96,8 +166,10 @@ pub fn process_template(template: &str, variables: &TemplateVariables) -> Result
         )))
     })?;
 
+    let mut result = after_conditionals.clone();
+
     // Replace each variable with its value
-    for capture in regex.captures_iter(template) {
+    for capture in regex.captures_iter(&after_conditionals) {
         if let Some(variable_name) = capture.get(1) {
             let var_name = variable_name.as_str();
             let empty_string = String::new();
@@ -110,15 +182,17 @@ pub fn process_template(template: &str, variables: &TemplateVariables) -> Result
 }
 
 /// Validates a template string to ensure it contains only valid variables
+/// and properly matched conditional blocks
 ///
 /// # Arguments
 /// * `template` - The template string to validate
 ///
 /// # Returns
-/// * `Result<()>` - Ok if valid, Err if invalid variables found
+/// * `Result<()>` - Ok if valid, Err if invalid variables found or mismatched blocks
 ///
 /// # Errors
 /// * If the template contains unknown variables
+/// * If conditional blocks are mismatched or malformed
 pub fn validate_template(template: &str) -> Result<()> {
     let valid_variables = [
         "commit_number",
@@ -131,7 +205,68 @@ pub fn validate_template(template: &str) -> Result<()> {
         "email",
     ];
 
-    let regex = Regex::new(r"\{([^}]+)\}").map_err(|e| {
+    // First, validate conditional blocks are properly matched
+    let conditional_regex = Regex::new(r"\{\?(\w+)\}").map_err(|e| {
+        RonaError::Io(std::io::Error::other(format!(
+            "Invalid conditional regex: {e}"
+        )))
+    })?;
+
+    let closing_regex = Regex::new(r"\{/(\w+)\}")
+        .map_err(|e| RonaError::Io(std::io::Error::other(format!("Invalid closing regex: {e}"))))?;
+
+    // Collect all opening and closing tags
+    let open_tags: Vec<(usize, &str)> = conditional_regex
+        .captures_iter(template)
+        .filter_map(|cap| {
+            let pos = cap.get(0)?.start();
+            let name = cap.get(1)?.as_str();
+            Some((pos, name))
+        })
+        .collect();
+
+    let mut close_tags: Vec<(usize, &str)> = closing_regex
+        .captures_iter(template)
+        .filter_map(|cap| {
+            let pos = cap.get(0)?.start();
+            let name = cap.get(1)?.as_str();
+            Some((pos, name))
+        })
+        .collect();
+
+    // Check that each opening tag has a matching closing tag
+    for (open_pos, open_name) in &open_tags {
+        let matching_close = close_tags
+            .iter()
+            .position(|(close_pos, close_name)| close_pos > open_pos && close_name == open_name);
+
+        let Some(matching_close_idx) = matching_close else {
+            return Err(RonaError::Io(std::io::Error::other(format!(
+                "Unclosed conditional block: {{?{open_name}}}"
+            ))));
+        };
+
+        // Validate that the variable in the conditional block is valid
+        if !valid_variables.contains(open_name) {
+            return Err(RonaError::Io(std::io::Error::other(format!(
+                "Unknown variable in conditional block: {{?{open_name}}}. Valid variables are: {}",
+                valid_variables.join(", ")
+            ))));
+        }
+
+        close_tags.remove(matching_close_idx);
+    }
+
+    // Check for unmatched closing tags
+    if !close_tags.is_empty() {
+        let (_, unmatched_name) = close_tags[0];
+        return Err(RonaError::Io(std::io::Error::other(format!(
+            "Unmatched closing tag: {{/{unmatched_name}}}"
+        ))));
+    }
+
+    // Now validate regular variables (excluding conditional syntax)
+    let regex = Regex::new(r"\{([^}?/]+)\}").map_err(|e| {
         RonaError::Io(std::io::Error::other(format!(
             "Invalid template regex: {e}"
         )))
@@ -140,6 +275,10 @@ pub fn validate_template(template: &str) -> Result<()> {
     for capture in regex.captures_iter(template) {
         if let Some(variable_name) = capture.get(1) {
             let var_name = variable_name.as_str();
+            // Skip if it's part of a conditional block syntax
+            if var_name.starts_with('?') || var_name.starts_with('/') {
+                continue;
+            }
             if !valid_variables.contains(&var_name) {
                 return Err(RonaError::Io(std::io::Error::other(format!(
                     "Unknown template variable: {{{var_name}}}. Valid variables are: {}",
@@ -453,5 +592,206 @@ mod tests {
         assert_eq!(map.get("commit_type").unwrap(), "test");
 
         // This empty string is what causes the bug when used in "[{commit_number}]"
+    }
+
+    // CONDITIONAL BLOCK TESTS
+
+    #[test]
+    fn test_conditional_block_with_value() {
+        let template = "{?commit_number}[{commit_number}] {/commit_number}({commit_type} on {branch_name}) {message}";
+        let variables = TemplateVariables {
+            commit_number: Some(42),
+            commit_type: "feat".to_string(),
+            branch_name: "new-feature".to_string(),
+            message: "Add feature".to_string(),
+            date: "2024-01-15".to_string(),
+            time: "14:30:00".to_string(),
+            author: "John Doe".to_string(),
+            email: "john@example.com".to_string(),
+        };
+
+        let result = process_template(template, &variables).unwrap();
+        assert_eq!(result, "[42] (feat on new-feature) Add feature");
+    }
+
+    #[test]
+    fn test_conditional_block_without_value() {
+        let template = "{?commit_number}[{commit_number}] {/commit_number}({commit_type} on {branch_name}) {message}";
+        let variables = TemplateVariables {
+            commit_number: None,
+            commit_type: "feat".to_string(),
+            branch_name: "new-feature".to_string(),
+            message: "Add feature".to_string(),
+            date: "2024-01-15".to_string(),
+            time: "14:30:00".to_string(),
+            author: "John Doe".to_string(),
+            email: "john@example.com".to_string(),
+        };
+
+        let result = process_template(template, &variables).unwrap();
+        // The conditional block should be completely removed, including the space after it
+        assert_eq!(result, "(feat on new-feature) Add feature");
+        // Verify no empty brackets
+        assert!(!result.contains("[]"));
+    }
+
+    #[test]
+    fn test_multiple_conditional_blocks() {
+        let template = "{?commit_number}[{commit_number}]{/commit_number} {?date}on {date}{/date} ({commit_type}) {message}";
+        let variables = TemplateVariables {
+            commit_number: Some(5),
+            commit_type: "fix".to_string(),
+            branch_name: "bugfix".to_string(),
+            message: "Fix bug".to_string(),
+            date: "2024-01-15".to_string(),
+            time: "14:30:00".to_string(),
+            author: "Jane Doe".to_string(),
+            email: "jane@example.com".to_string(),
+        };
+
+        let result = process_template(template, &variables).unwrap();
+        assert_eq!(result, "[5] on 2024-01-15 (fix) Fix bug");
+    }
+
+    #[test]
+    fn test_multiple_conditional_blocks_partial() {
+        let template = "{?commit_number}[{commit_number}]{/commit_number} {?author}by {author}{/author} - {message}";
+        let variables = TemplateVariables {
+            commit_number: None,
+            commit_type: "docs".to_string(),
+            branch_name: "docs".to_string(),
+            message: "Update docs".to_string(),
+            date: "2024-01-15".to_string(),
+            time: "14:30:00".to_string(),
+            author: "Alice".to_string(),
+            email: "alice@example.com".to_string(),
+        };
+
+        let result = process_template(template, &variables).unwrap();
+        // commit_number is None, so first block removed; author has value, so second block kept
+        assert_eq!(result, " by Alice - Update docs");
+    }
+
+    #[test]
+    fn test_conditional_block_with_static_text() {
+        let template = "{?commit_number}Commit #{commit_number}: {/commit_number}{message}";
+        let variables = TemplateVariables {
+            commit_number: Some(100),
+            commit_type: "chore".to_string(),
+            branch_name: "main".to_string(),
+            message: "Update dependencies".to_string(),
+            date: "2024-01-15".to_string(),
+            time: "14:30:00".to_string(),
+            author: "Bob".to_string(),
+            email: "bob@example.com".to_string(),
+        };
+
+        let result = process_template(template, &variables).unwrap();
+        assert_eq!(result, "Commit #100: Update dependencies");
+    }
+
+    #[test]
+    fn test_conditional_block_validation_valid() {
+        let template =
+            "{?commit_number}[{commit_number}] {/commit_number}({commit_type}) {message}";
+        assert!(validate_template(template).is_ok());
+    }
+
+    #[test]
+    fn test_conditional_block_validation_unclosed() {
+        let template = "{?commit_number}[{commit_number}] ({commit_type}) {message}";
+        let result = validate_template(template);
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Unclosed conditional block")
+        );
+    }
+
+    #[test]
+    fn test_conditional_block_validation_unmatched_closing() {
+        let template = "[{commit_number}] {/commit_number}({commit_type}) {message}";
+        let result = validate_template(template);
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Unmatched closing tag")
+        );
+    }
+
+    #[test]
+    fn test_conditional_block_validation_invalid_variable() {
+        let template = "{?invalid_var}[{invalid_var}]{/invalid_var} {message}";
+        let result = validate_template(template);
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Unknown variable in conditional block")
+        );
+    }
+
+    #[test]
+    fn test_conditional_block_empty_string_variable() {
+        // Test that empty string is treated as "no value"
+        let template = "{?commit_number}[{commit_number}] {/commit_number}{message}";
+        let variables = TemplateVariables {
+            commit_number: None,
+            commit_type: "test".to_string(),
+            branch_name: "test".to_string(),
+            message: "Test".to_string(),
+            date: "2024-01-15".to_string(),
+            time: "14:30:00".to_string(),
+            author: "Tester".to_string(),
+            email: "test@example.com".to_string(),
+        };
+
+        let result = process_template(template, &variables).unwrap();
+        assert_eq!(result, "Test");
+        assert!(!result.contains("[]"));
+    }
+
+    #[test]
+    fn test_original_bug_fix() {
+        // This is the original problem: using -n flag should not produce empty brackets
+        let template = "{?commit_number}[{commit_number}] {/commit_number}({commit_type} on {branch_name}) {message}";
+
+        // Scenario 1: With commit number (normal flow)
+        let with_number = TemplateVariables {
+            commit_number: Some(42),
+            commit_type: "feat".to_string(),
+            branch_name: "new-feature".to_string(),
+            message: "Add feature".to_string(),
+            date: "2024-01-15".to_string(),
+            time: "14:30:00".to_string(),
+            author: "Dev".to_string(),
+            email: "dev@example.com".to_string(),
+        };
+
+        let result_with = process_template(template, &with_number).unwrap();
+        assert_eq!(result_with, "[42] (feat on new-feature) Add feature");
+
+        // Scenario 2: Without commit number (-n flag)
+        let without_number = TemplateVariables {
+            commit_number: None,
+            commit_type: "feat".to_string(),
+            branch_name: "new-feature".to_string(),
+            message: "Add feature".to_string(),
+            date: "2024-01-15".to_string(),
+            time: "14:30:00".to_string(),
+            author: "Dev".to_string(),
+            email: "dev@example.com".to_string(),
+        };
+
+        let result_without = process_template(template, &without_number).unwrap();
+        assert_eq!(result_without, "(feat on new-feature) Add feature");
+        // CRITICAL: No empty brackets!
+        assert!(!result_without.contains("[]"));
+        assert!(!result_without.starts_with("[]"));
     }
 }

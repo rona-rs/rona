@@ -98,25 +98,48 @@ Rona supports customizable templates for interactive commit message generation. 
 - `{author}` - Git author name
 - `{email}` - Git author email
 
+**Conditional Blocks:**
+
+You can use conditional blocks to include or exclude content based on whether a variable has a value. This is useful for handling optional elements like commit numbers.
+
+**Syntax:** `{?variable_name}content{/variable_name}`
+
+The content inside the block will only be included if the variable has a non-empty value.
+
+**Example with `-n` flag:**
+```toml
+# Template with conditional commit number
+template = "{?commit_number}[{commit_number}] {/commit_number}({commit_type} on {branch_name}) {message}"
+```
+
+**Results:**
+- `rona -g` (with commit number): `[42] (feat on new-feature) Add feature`
+- `rona -g -n` (without commit number): `(feat on new-feature) Add feature`
+
+This eliminates empty brackets when using the `-n` flag!
+
 **Template Examples:**
 ```toml
-# Default template
-template = "[{commit_number}] ({commit_type} on {branch_name}) {message}"
+# Default template with conditional commit number
+template = "{?commit_number}[{commit_number}] {/commit_number}({commit_type} on {branch_name}) {message}"
 
 # Simple format without commit number
 template = "({commit_type}) {message}"
 
-# Include date and time
-template = "[{date} {time}] {commit_type}: {message}"
+# Conditional date with static text
+template = "{?date}Date: {date} | {/date}{commit_type}: {message}"
 
-# Include author information
-template = "{commit_type}: {message} (by {author})"
+# Multiple conditional blocks
+template = "{?commit_number}#{commit_number} {/commit_number}{?author}by {author} - {/author}{message}"
 
-# Custom format
-template = "🚀 {commit_type} on {branch_name}: {message}"
+# Include date and time conditionally
+template = "{?date}[{date} {time}] {/date}{commit_type}: {message}"
+
+# Custom format with optional commit number
+template = "{?commit_number}Commit {commit_number}: {/commit_number}{commit_type} on {branch_name} - {message}"
 ```
 
-**Note**: If no template is specified, Rona uses the default format: `[{commit_number}] ({commit_type} on {branch_name}) {message}`
+**Note**: If no template is specified, Rona uses the default format: `{?commit_number}[{commit_number}] {/commit_number}({commit_type} on {branch_name}) {message}`
 
 ### Working with Configuration
 
@@ -380,9 +403,9 @@ rona completion fish > ~/.config/fish/completions/rona.fish
 Generate or update commit message template.
 
 ```bash
-rona generate [--interactive]
+rona generate [--interactive] [--no-commit-number]
 # or
-rona -g [-i | --interactive]
+rona -g [-i | --interactive] [-n | --no-commit-number]
 ```
 
 **Features:**
@@ -391,6 +414,11 @@ rona -g [-i | --interactive]
 - Automatic file change tracking
 - **Interactive mode:** Input commit message directly in terminal (`-i` flag)
 - **Editor mode:** Opens in configured editor (default behavior)
+- **No commit number:** Omit commit number from message (`-n` flag)
+
+**Options:**
+- `-i, --interactive` - Input commit message directly in terminal instead of opening editor
+- `-n, --no-commit-number` - Generate commit message without commit number
 
 **Examples:**
 
@@ -400,14 +428,26 @@ rona -g
 
 # Interactive mode: Input message directly in terminal
 rona -g -i
+
+# Without commit number (useful with conditional templates)
+rona -g -n
+
+# Interactive mode without commit number
+rona -g -i -n
 ```
 
 **Interactive Mode Usage:**
 When using the `-i` flag, Rona will:
 1. Show the commit type selector (uses configured types or defaults: feat, fix, docs, test, chore)
 2. Prompt for a single commit message input
-3. Generate a clean format: `[commit_nb] (type on branch) message`
+3. Generate a clean format using your template (or default)
 4. Save directly to `commit_message.md` without file details
+
+**No Commit Number Flag:**
+The `-n` flag sets `commit_number` to `None`, which works perfectly with conditional templates:
+- With conditional template: `{?commit_number}[{commit_number}] {/commit_number}({commit_type}) {message}`
+- Result with `-n`: `(feat) Add feature` (no empty brackets!)
+- Result without `-n`: `[42] (feat) Add feature`
 
 This is perfect for quick, clean commits without the detailed file listing.
 
