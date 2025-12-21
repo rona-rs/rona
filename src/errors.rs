@@ -53,6 +53,9 @@ pub enum GitError {
     #[error("IO error during git operation: {0}")]
     IoError(#[from] std::io::Error),
 
+    #[error("Git2 error: {0}")]
+    Git2Error(#[from] git2::Error),
+
     #[error("Not in a git repository - please run this command from within a git repository")]
     RepositoryNotFound,
 
@@ -83,6 +86,13 @@ pub enum GitError {
 
 /// Type alias for Result using `RonaError`
 pub type Result<T> = std::result::Result<T, RonaError>;
+
+// Manual From implementation for git2::Error
+impl From<git2::Error> for RonaError {
+    fn from(err: git2::Error) -> Self {
+        RonaError::Git(GitError::Git2Error(err))
+    }
+}
 
 /// Formats and prints error messages in a clean, readable format.
 ///

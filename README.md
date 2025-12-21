@@ -9,8 +9,8 @@
   <a href="https://sonarcloud.io/summary/new_code?id=TomPlanche_rona"><img src="https://sonarcloud.io/api/project_badges/measure?project=TomPlanche_rona&metric=alert_status" alt="SonarCloud Status"></a>
   <a href="https://sonarcloud.io/summary/new_code?id=TomPlanche_rona"><img src="https://sonarcloud.io/api/project_badges/measure?project=TomPlanche_rona&metric=sqale_rating" alt="SonarCloud SQALE Rating"></a>
   <a href="https://sonarcloud.io/summary/new_code?id=TomPlanche_rona"><img src="https://sonarcloud.io/api/project_badges/measure?project=TomPlanche_rona&metric=security_rating" alt="SonarCloud Security Rating"></a>
-  <a href="https://github.com/TomPlanche/rona/blob/main/LICENSE"><img src="https://img.shields.io/crates/l/rona" alt="License"></a>
-  <a href="https://github.com/TomPlanche/rona/actions/workflows/rust.yaml"><img src="https://github.com/TomPlanche/rona/actions/workflows/rust.yaml/badge.svg" alt="Build Status"></a>
+  <a href="https://github.com/rona-rs/rona/blob/main/LICENSE"><img src="https://img.shields.io/crates/l/rona" alt="License"></a>
+  <a href="https://github.com/rona-rs/rona/actions/workflows/rust.yaml"><img src="https://github.com/rona-rs/rona/actions/workflows/rust.yaml/badge.svg" alt="Build Status"></a>
 </p>
 
 ## Overview
@@ -22,15 +22,36 @@ Rona is a command-line interface tool designed to enhance your Git workflow with
 - 🚀 Intelligent file staging with pattern exclusion
 - 📝 Structured commit message generation
 - 🔄 Streamlined push operations
+- 🔀 Branch synchronization with merge/rebase support
 - 🎯 Interactive commit type selection with customizable types
 - 🛠 Multi-shell completion support (Bash, Fish, Zsh, PowerShell)
 - ⚙️ Flexible configuration system (global and project-level)
- - 🎨 Colored interactive prompts powered by Inquire
+- 🎨 Colored interactive prompts powered by Inquire
 
 ## Installation
 
+### Homebrew (macOS/Linux)
+
+```bash
+brew install rona-rs/rona/rona
+```
+
+Or, if you prefer to tap explicitly:
+
+```bash
+brew tap rona-rs/rona
+brew install rona
+```
+
+### Cargo (Alternative)
+
 ```bash
 cargo install rona
+```
+
+After installation, initialize Rona (optional, to set your preferred editor):
+
+```bash
 rona init [editor] # The editor to use for commit messages (default: nano)
 ```
 
@@ -77,25 +98,48 @@ Rona supports customizable templates for interactive commit message generation. 
 - `{author}` - Git author name
 - `{email}` - Git author email
 
+**Conditional Blocks:**
+
+You can use conditional blocks to include or exclude content based on whether a variable has a value. This is useful for handling optional elements like commit numbers.
+
+**Syntax:** `{?variable_name}content{/variable_name}`
+
+The content inside the block will only be included if the variable has a non-empty value.
+
+**Example with `-n` flag:**
+```toml
+# Template with conditional commit number
+template = "{?commit_number}[{commit_number}] {/commit_number}({commit_type} on {branch_name}) {message}"
+```
+
+**Results:**
+- `rona -g` (with commit number): `[42] (feat on new-feature) Add feature`
+- `rona -g -n` (without commit number): `(feat on new-feature) Add feature`
+
+This eliminates empty brackets when using the `-n` flag!
+
 **Template Examples:**
 ```toml
-# Default template
-template = "[{commit_number}] ({commit_type} on {branch_name}) {message}"
+# Default template with conditional commit number
+template = "{?commit_number}[{commit_number}] {/commit_number}({commit_type} on {branch_name}) {message}"
 
 # Simple format without commit number
 template = "({commit_type}) {message}"
 
-# Include date and time
-template = "[{date} {time}] {commit_type}: {message}"
+# Conditional date with static text
+template = "{?date}Date: {date} | {/date}{commit_type}: {message}"
 
-# Include author information
-template = "{commit_type}: {message} (by {author})"
+# Multiple conditional blocks
+template = "{?commit_number}#{commit_number} {/commit_number}{?author}by {author} - {/author}{message}"
 
-# Custom format
-template = "🚀 {commit_type} on {branch_name}: {message}"
+# Include date and time conditionally
+template = "{?date}[{date} {time}] {/date}{commit_type}: {message}"
+
+# Custom format with optional commit number
+template = "{?commit_number}Commit {commit_number}: {/commit_number}{commit_type} on {branch_name} - {message}"
 ```
 
-**Note**: If no template is specified, Rona uses the default format: `[{commit_number}] ({commit_type} on {branch_name}) {message}`
+**Note**: If no template is specified, Rona uses the default format: `{?commit_number}[{commit_number}] {/commit_number}({commit_type} on {branch_name}) {message}`
 
 ### Working with Configuration
 
@@ -200,6 +244,19 @@ rona -c -p
 # Switch back to main and merge
 git checkout main
 git merge feature/new-feature
+
+# Or use the sync command to update your branch with latest main
+git checkout feature/new-feature
+rona sync              # Merges main into current branch
+
+# Update branch with rebase instead of merge
+rona sync --rebase     # Rebases current branch onto main
+
+# Create new branch and sync with develop
+rona sync -b develop -n feature/new-feature
+
+# Preview sync operation
+rona sync --dry-run
 ```
 
 #### Handling Large Changes
@@ -346,9 +403,9 @@ rona completion fish > ~/.config/fish/completions/rona.fish
 Generate or update commit message template.
 
 ```bash
-rona generate [--interactive]
+rona generate [--interactive] [--no-commit-number]
 # or
-rona -g [-i | --interactive]
+rona -g [-i | --interactive] [-n | --no-commit-number]
 ```
 
 **Features:**
@@ -357,6 +414,11 @@ rona -g [-i | --interactive]
 - Automatic file change tracking
 - **Interactive mode:** Input commit message directly in terminal (`-i` flag)
 - **Editor mode:** Opens in configured editor (default behavior)
+- **No commit number:** Omit commit number from message (`-n` flag)
+
+**Options:**
+- `-i, --interactive` - Input commit message directly in terminal instead of opening editor
+- `-n, --no-commit-number` - Generate commit message without commit number
 
 **Examples:**
 
@@ -366,14 +428,26 @@ rona -g
 
 # Interactive mode: Input message directly in terminal
 rona -g -i
+
+# Without commit number (useful with conditional templates)
+rona -g -n
+
+# Interactive mode without commit number
+rona -g -i -n
 ```
 
 **Interactive Mode Usage:**
 When using the `-i` flag, Rona will:
 1. Show the commit type selector (uses configured types or defaults: feat, fix, docs, test, chore)
 2. Prompt for a single commit message input
-3. Generate a clean format: `[commit_nb] (type on branch) message`
+3. Generate a clean format using your template (or default)
 4. Save directly to `commit_message.md` without file details
+
+**No Commit Number Flag:**
+The `-n` flag sets `commit_number` to `None`, which works perfectly with conditional templates:
+- With conditional template: `{?commit_number}[{commit_number}] {/commit_number}({commit_type}) {message}`
+- Result with `-n`: `(feat) Add feature` (no empty brackets!)
+- Result without `-n`: `[42] (feat) Add feature`
 
 This is perfect for quick, clean commits without the detailed file listing.
 
@@ -443,6 +517,71 @@ rona set-editor zed
 rona set-editor "code --wait"  # VS Code
 rona set-editor emacs
 rona set-editor nano
+```
+
+### `sync`
+Sync your current branch with another branch by pulling latest changes and merging or rebasing.
+
+```bash
+rona sync [OPTIONS]
+```
+
+**Options:**
+- `-b, --branch <BRANCH>` - Branch to sync from (default: main)
+- `-r, --rebase` - Use rebase instead of merge
+- `-n, --new-branch <NAME>` - Create a new branch before syncing
+- `--dry-run` - Preview what would be done
+
+**Workflow:**
+1. Optionally creates a new branch (if `-n` specified)
+2. Switches to the source branch
+3. Pulls latest changes from remote
+4. Switches back to your target branch
+5. Merges or rebases the source branch into your target branch
+
+**Examples:**
+
+```bash
+# Basic usage: sync current branch with main
+rona sync
+
+# Sync with a different branch
+rona sync --branch develop
+rona sync -b staging
+
+# Use rebase instead of merge
+rona sync --rebase
+rona sync -r
+
+# Create new branch and sync with main
+rona sync --new-branch feature/my-feature
+rona sync -n bugfix/issue-123
+
+# Create new branch and sync from develop using rebase
+rona sync -b develop -r -n feature/new-feature
+
+# Preview what would happen without making changes
+rona sync --dry-run
+
+# Combine all options
+rona sync -b develop -r -n feature/test --dry-run
+```
+
+**Common Use Cases:**
+
+```bash
+# Keep feature branch up-to-date with main
+git checkout feature/my-feature
+rona sync
+
+# Start new feature from latest main
+rona sync -n feature/new-feature
+
+# Update branch with staging before deploying
+rona sync -b staging
+
+# Rebase feature branch onto latest main for clean history
+rona sync --rebase
 ```
 
 ### `help` (`-h`)
@@ -515,7 +654,7 @@ The completions include:
 
 ### Building from Source
 ```bash
-git clone https://github.com/TomPlanche/rona.git
+git clone https://github.com/rona-rs/rona.git
 cd rona
 cargo build --release
 ```
@@ -534,4 +673,4 @@ at your option.
 
 ## Support
 
-For bugs, questions, and discussions please use the [GitHub Issues](https://github.com/TomPlanche/rona/issues).
+For bugs, questions, and discussions please use the [GitHub Issues](https://github.com/rona-rs/rona/issues).

@@ -8,8 +8,11 @@ use crate::errors::Result;
 
 /// Pushes committed changes to the remote repository.
 ///
-/// This function executes `git push` with optional additional arguments.
+/// This function pushes to the remote repository with optional additional arguments.
 /// It provides feedback on the operation's success or failure.
+///
+/// Note: Uses the git command to properly handle authentication (SSH keys, credentials, etc.)
+/// rather than git2's push API which requires complex callback setup.
 ///
 /// # Arguments
 /// * `args` - Additional arguments to pass to the git push command (e.g., `--force`, `origin main`)
@@ -53,6 +56,8 @@ pub fn git_push(args: &[String], verbose: bool, dry_run: bool) -> Result<()> {
         return Ok(());
     }
 
+    // Use the git command for push to properly handle authentication
+    // git2's push API requires complex callback setup for SSH keys, credentials, etc.
     let output = Command::new("git").arg("push").args(args).output()?;
 
     handle_output("push", &output, verbose)

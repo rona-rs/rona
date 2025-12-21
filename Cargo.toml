@@ -3,7 +3,7 @@ authors = ["Tom Planche <tomplanche@proton.me>"]
 categories = ["command-line-utilities"]
 description = "A simple CLI tool to help you with your git workflow."
 edition = "2024"
-homepage = "https://github.com/tomplanche/rona"
+homepage = "https://github.com/rona-rs/rona"
 include = [
     "/Cargo.toml",
     "/LICENSE-APACHE",
@@ -15,8 +15,8 @@ keywords = ["cli", "git", "helper", "commands"]
 license = "Apache-2.0 OR MIT"
 name = "rona"
 readme = "README.md"
-repository = "https://github.com/tomplanche/rona"
-version = "2.9.0"
+repository = "https://github.com/rona-rs/rona"
+version = "2.15.0"
 
 [[bin]]
 doc = true
@@ -24,23 +24,20 @@ name = "rona"
 path = "src/main.rs"
 
 [dependencies]
-clap = { version = "4.5.48", features = ["derive"] }
-clap_complete = "4.5.58"
-console = "0.15.11"
+clap = { version = "4.5.53", features = ["derive"] }
+clap_complete = "4.5.61"
 inquire = { version = "0.7" }
 glob = "0.3.3"
-regex = "1.11.3"
+regex = "1.12.2"
 thiserror = "2.0.17"
 config = "0.14.1"
 serde = { version = "1.0", features = ["derive"] }
 dirs = "5.0.1"
 toml = "0.8"
 chrono = { version = "0.4", features = ["serde"] }
+git2 = "0.19"
 
 [dev-dependencies]
-assert_cmd = "2.0.17"
+assert_cmd = "2.1.1"
 mockall = "0.13.1"
 tempfile = "3.23.0"
-
-[build-dependencies]
-hooksmith = "1.15.0"

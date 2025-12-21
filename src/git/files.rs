@@ -10,13 +10,9 @@ use std::{
     path::Path,
 };
 
-// Regex is now used through the shared extract_filenames function
-
 use crate::{
     errors::Result,
-    git::{COMMIT_MESSAGE_FILE_PATH, find_git_root},
-    print_error,
-    utils::find_project_root,
+    git::{COMMIT_MESSAGE_FILE_PATH, find_git_root, get_top_level_path},
 };
 
 const COMMITIGNORE_FILE_PATH: &str = ".commitignore";
@@ -34,17 +30,12 @@ const GITIGNORE_FILE_PATH: &str = ".gitignore";
 /// * `Result<(), std::io::Error>` - Result of the operation.
 pub fn add_to_git_exclude(paths: &[&str]) -> Result<()> {
     let git_root_path = find_git_root()?;
+    let info_dir = git_root_path.join("info");
+    let exclude_file = info_dir.join("exclude");
 
-    let exclude_file = git_root_path.join("info").join("exclude");
-
-    if !exclude_file.exists() {
-        print_error(
-            "No `.git/info/exclude` file found.",
-            "This file is used to exclude paths from being tracked by Git.",
-            "Please ensure you have a valid Git repository or submodule.",
-        );
-
-        std::process::exit(1);
+    // Ensure the info directory exists
+    if !info_dir.exists() {
+        std::fs::create_dir_all(&info_dir)?;
     }
 
     // Read existing content to avoid duplicates
@@ -93,17 +84,16 @@ pub fn add_to_git_exclude(paths: &[&str]) -> Result<()> {
     Ok(())
 }
 
-/// Creates the necessary files in the project root.
+/// Creates the necessary files in the git repository root.
 ///
 /// # Errors
 /// * If the files cannot be created.
 /// * If the git add command fails.
 pub fn create_needed_files() -> Result<()> {
-    let project_root = find_project_root()?;
-    std::env::set_current_dir(project_root)?;
+    let project_root = get_top_level_path()?;
 
-    let commit_file_path = Path::new(COMMIT_MESSAGE_FILE_PATH);
-    let commitignore_file_path = Path::new(COMMITIGNORE_FILE_PATH);
+    let commit_file_path = Path::new(&project_root).join(COMMIT_MESSAGE_FILE_PATH);
+    let commitignore_file_path = Path::new(&project_root).join(COMMITIGNORE_FILE_PATH);
 
     if !commit_file_path.exists() {
         File::create(commit_file_path)?;

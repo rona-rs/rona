@@ -58,12 +58,16 @@ pub mod utils;
 use cli::run;
 use errors::Result;
 use std::process::exit;
-use utils::print_error;
 
 fn main() {
     if let Err(e) = inner_main() {
-        eprintln!("{e}");
+        // Handle user cancellation gracefully with a friendly message
+        if matches!(e, errors::RonaError::UserCancelled) {
+            println!("\nBye from Rona!");
+            exit(0);
+        }
 
+        eprintln!("{e}");
         exit(1);
     }
 }

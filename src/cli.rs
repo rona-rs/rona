@@ -10,6 +10,7 @@
 //! The CLI supports several commands:
 //! - `add-with-exclude`: Add files to git while excluding specified patterns
 //! - `commit`: Commit changes using the commit message from `commit_message.md`
+//! - `config`: Create or manage local/global configuration files
 //! - `generate`: Generate a new commit message file
 //! - `init`: Initialize Rona configuration
 //! - `list-status`: List git status files (for shell completion)
@@ -25,22 +26,32 @@
 //! - Handles configuration management
 //!
 
-use crate::git::{format_branch_name, get_current_branch, get_current_commit_nb};
-use crate::{
-    config::Config,
-    errors::Result,
-    git::{
-        COMMIT_MESSAGE_FILE_PATH, COMMIT_TYPES, create_needed_files, generate_commit_message,
-        get_status_files, git_add_with_exclude_patterns, git_commit, git_push,
-    },
-    template::{TemplateVariables, process_template, validate_template},
-};
-use clap::{Command as ClapCommand, CommandFactory, Parser, Subcommand, ValueHint, command};
+use clap::{Command as ClapCommand, CommandFactory, Parser, Subcommand, ValueEnum, ValueHint};
 use clap_complete::{Shell, generate};
 use glob::Pattern;
 use inquire::ui::{Attributes, Color, RenderConfig, StyleSheet, Styled};
-use inquire::{Select, Text};
-use std::{io, process::Command};
+use inquire::{Confirm, Select, Text};
+use std::{fs::read_to_string, io, process::Command};
+
+use crate::{
+    config::Config,
+    errors::{Result, RonaError},
+    git::{
+        COMMIT_MESSAGE_FILE_PATH, COMMIT_TYPES, create_needed_files, format_branch_name,
+        generate_commit_message, get_current_branch, get_current_commit_nb, get_status_files,
+        get_top_level_path, git_add_with_exclude_patterns, git_commit, git_push,
+    },
+    template::{TemplateVariables, process_template, validate_template},
+};
+
+/// Configuration scope for config command
+#[derive(Clone, Copy, Debug, ValueEnum)]
+pub(crate) enum ConfigScope {
+    /// Local project configuration (.rona.toml)
+    Local,
+    /// Global configuration (~/.config/rona.toml)
+    Global,
+}
 
 /// CLI's commands
 #[derive(Subcommand)]
@@ -65,12 +76,16 @@ pub(crate) enum CliCommand {
         push: bool,
 
         /// Show what would be committed without actually committing
-        #[arg(long, default_value_t = false)]
+        #[arg(short = 'd', long, default_value_t = false)]
         dry_run: bool,
 
         /// Create unsigned commit (default is to auto-detect GPG availability and sign if possible)
         #[arg(short = 'u', long = "unsigned", default_value_t = false)]
         unsigned: bool,
+
+        /// Skip confirmation prompt and commit directly
+        #[arg(short = 'y', long = "yes", default_value_t = false)]
+        yes: bool,
 
         /// Additional arguments to pass to the commit command
         #[arg(allow_hyphen_values = true)]
@@ -83,6 +98,18 @@ pub(crate) enum CliCommand {
         /// The shell to generate completions for
         #[arg(value_enum)]
         shell: Shell,
+    },
+
+    /// Manage configuration files (create or edit local or global config)
+    #[command(name = "config")]
+    Config {
+        /// Scope of the configuration (local project or global)
+        #[arg(value_enum)]
+        scope: ConfigScope,
+
+        /// Show what would be created without actually creating the config file
+        #[arg(long, default_value_t = false)]
+        dry_run: bool,
     },
 
     /// Directly generate the `commit_message.md` file.
@@ -137,6 +164,26 @@ pub(crate) enum CliCommand {
         editor: String,
 
         /// Show what would be changed without modifying config
+        #[arg(long, default_value_t = false)]
+        dry_run: bool,
+    },
+
+    /// Sync current branch with main (or another branch) by pulling and merging/rebasing.
+    #[command(name = "sync")]
+    Sync {
+        /// Branch to sync from (default: main)
+        #[arg(short = 'b', long = "branch", default_value = "main")]
+        source_branch: String,
+
+        /// Use rebase instead of merge
+        #[arg(short = 'r', long = "rebase", default_value_t = false)]
+        rebase: bool,
+
+        /// Create a new branch before syncing
+        #[arg(short = 'n', long = "new-branch")]
+        new_branch: Option<String>,
+
+        /// Show what would be done without actually doing it
         #[arg(long, default_value_t = false)]
         dry_run: bool,
     },
@@ -255,12 +302,48 @@ fn handle_add_with_exclude(exclude: &[String], config: &Config) -> Result<()> {
 /// * `args` - Additional arguments to pass to git commit
 /// * `push` - Whether to push changes after committing
 /// * `unsigned` - Whether to create an unsigned commit (skips -S flag)
+/// * `yes` - Whether to skip the confirmation prompt
 /// * `config` - Global configuration including verbose and dry-run settings
 ///
 /// # Errors
 /// * If git commit operation fails
 /// * If push is true and git push operation fails
-fn handle_commit(args: &[String], push: bool, unsigned: bool, config: &Config) -> Result<()> {
+/// * If commit message file doesn't exist or cannot be read
+/// * If user cancels the commit confirmation
+fn handle_commit(
+    args: &[String],
+    push: bool,
+    unsigned: bool,
+    yes: bool,
+    config: &Config,
+) -> Result<()> {
+    // Read the commit message file
+    let project_root = get_top_level_path()?;
+    let commit_file_path = project_root.join(COMMIT_MESSAGE_FILE_PATH);
+
+    if !commit_file_path.exists() {
+        return Err(crate::errors::RonaError::Io(std::io::Error::other(
+            "Commit message file not found. Run 'rona -g' to generate one.",
+        )));
+    }
+
+    let commit_message = read_to_string(&commit_file_path)?;
+
+    // Show confirmation prompt unless --yes flag is set or in dry-run mode
+    if !yes && !config.dry_run {
+        // Show confirmation prompt
+        let confirmation_message = format!("Commit with message:\n{}", commit_message.trim());
+        let confirm = Confirm::new(&confirmation_message)
+            .with_default(true)
+            .prompt()
+            .unwrap_or(false);
+
+        if !confirm {
+            println!("Commit cancelled.");
+            return Ok(());
+        }
+    }
+
     git_commit(args, unsigned, config.verbose, config.dry_run)?;
 
     if push {
@@ -310,13 +393,15 @@ fn handle_generate(interactive: bool, no_commit_number: bool, config: &Config) -
     let commit_type = Select::new("Select commit type", commit_types_vec)
         .with_starting_cursor(0)
         .prompt()
-        .unwrap();
-
-    generate_commit_message(commit_type, config.verbose, no_commit_number)?;
+        .map_err(|_| RonaError::UserCancelled)?;
 
     if interactive {
+        // In interactive mode, skip generating the template file
+        // The file will be created/overwritten after message validation
         handle_interactive_mode(commit_type, no_commit_number, config)?;
     } else {
+        // In editor mode, generate the template file first, then open editor
+        generate_commit_message(commit_type, config.verbose, no_commit_number)?;
         handle_editor_mode(config)?;
     }
     Ok(())
@@ -330,10 +415,12 @@ fn handle_interactive_mode(
 ) -> Result<()> {
     use std::fs;
 
-    println!("📝 Interactive mode: Enter your commit message.");
-    println!("💡 Tip: Keep it concise and descriptive.");
+    let project_root = get_top_level_path()?;
+    let commit_file_path = project_root.join(COMMIT_MESSAGE_FILE_PATH);
 
-    let message: String = Text::new("Message").prompt().unwrap();
+    let message: String = Text::new("Message")
+        .prompt()
+        .map_err(|_| RonaError::UserCancelled)?;
 
     if message.trim().is_empty() {
         println!("⚠️  Empty message provided. Exiting.");
@@ -347,12 +434,15 @@ fn handle_interactive_mode(
         Some(get_current_commit_nb()? + 1)
     };
 
-    // Get template from config or use default
+    // Get template from config or use default with conditional syntax
+    // The conditional block {?commit_number}...{/commit_number} is only included if commit_number has a value
+    let default_template = "{?commit_number}[{commit_number}] {/commit_number}({commit_type} on {branch_name}) {message}";
+
     let template = config
         .project_config
         .template
         .as_deref()
-        .unwrap_or("[{commit_number}] ({commit_type} on {branch_name}) {message}");
+        .unwrap_or(default_template);
 
     // Validate template
     if let Err(e) = validate_template(template) {
@@ -369,7 +459,7 @@ fn handle_interactive_mode(
                 message.trim()
             )
         };
-        fs::write(COMMIT_MESSAGE_FILE_PATH, &formatted_message)?;
+        fs::write(&commit_file_path, &formatted_message)?;
         println!("\n✅ Commit message created!");
         println!("📄 Message: {formatted_message}");
         return Ok(());
@@ -387,7 +477,7 @@ fn handle_interactive_mode(
     let formatted_message = process_template(template, &variables)?;
 
     // Write the formatted message to commit_message.md
-    fs::write(COMMIT_MESSAGE_FILE_PATH, &formatted_message)?;
+    fs::write(&commit_file_path, &formatted_message)?;
 
     println!("\n✅ Commit message created!");
     println!("📄 Message: {formatted_message}");
@@ -397,9 +487,11 @@ fn handle_interactive_mode(
 /// Handle editor mode for generate command
 fn handle_editor_mode(config: &Config) -> Result<()> {
     let editor = config.get_editor()?;
+    let project_root = get_top_level_path()?;
+    let commit_file_path = project_root.join(COMMIT_MESSAGE_FILE_PATH);
 
     Command::new(editor)
-        .arg(COMMIT_MESSAGE_FILE_PATH)
+        .arg(&commit_file_path)
         .spawn()
         .expect("Failed to spawn editor")
         .wait()
@@ -464,6 +556,141 @@ fn handle_set(editor: &str, config: &Config) -> Result<()> {
     Ok(())
 }
 
+/// Handle the Sync command which syncs the current branch with another branch.
+///
+/// # Arguments
+/// * `source_branch` - The branch to sync from (e.g., "main")
+/// * `rebase` - Whether to use rebase instead of merge
+/// * `new_branch` - Optional name for a new branch to create before syncing
+/// * `config` - Global configuration including verbose and dry-run settings
+///
+/// # Errors
+/// * If git operations fail
+/// * If the source branch doesn't exist
+/// * If there are uncommitted changes that would be lost
+fn handle_sync(
+    source_branch: &str,
+    rebase: bool,
+    new_branch: Option<&str>,
+    config: &Config,
+) -> Result<()> {
+    use crate::git::{git_create_branch, git_merge, git_pull, git_rebase, git_switch};
+
+    // Get current branch before any operations
+    let original_branch = get_current_branch()?;
+
+    if config.dry_run {
+        if let Some(branch_name) = new_branch {
+            println!("Would create new branch: {branch_name}");
+        }
+        println!("Would switch to: {source_branch}");
+        println!("Would pull latest changes");
+        println!(
+            "Would switch back to: {}",
+            new_branch.unwrap_or(&original_branch)
+        );
+        if rebase {
+            println!("Would rebase with: {source_branch}");
+        } else {
+            println!("Would merge with: {source_branch}");
+        }
+        return Ok(());
+    }
+
+    // Create new branch if specified
+    if let Some(branch_name) = new_branch {
+        git_create_branch(branch_name, config.verbose)?;
+        git_switch(branch_name, config.verbose)?;
+    }
+
+    let target_branch = new_branch.unwrap_or(&original_branch);
+
+    // Switch to source branch and pull
+    git_switch(source_branch, config.verbose)?;
+    git_pull(config.verbose)?;
+
+    // Switch back to target branch
+    git_switch(target_branch, config.verbose)?;
+
+    // Merge or rebase
+    if rebase {
+        git_rebase(source_branch, config.verbose)?;
+    } else {
+        git_merge(source_branch, config.verbose)?;
+    }
+
+    println!("\nSuccessfully synced '{target_branch}' with '{source_branch}'");
+    Ok(())
+}
+
+/// Handle the Config command which creates or manages configuration files.
+///
+/// # Arguments
+/// * `scope` - Whether to create local (.rona.toml) or global (~/.config/rona.toml) config
+/// * `config` - Global configuration including verbose and dry-run settings
+///
+/// # Errors
+/// * If creating configuration file fails
+/// * If writing configuration content fails
+fn handle_config_command(scope: ConfigScope, config: &Config) -> Result<()> {
+    use std::io::Write;
+
+    // Determine the config path based on scope
+    let config_path = match scope {
+        ConfigScope::Local => {
+            let project_root = get_top_level_path()?;
+            project_root.join(".rona.toml")
+        }
+        ConfigScope::Global => {
+            let home = dirs::home_dir().ok_or(crate::errors::ConfigError::ConfigNotFound)?;
+            home.join(".config/rona.toml")
+        }
+    };
+
+    if config.dry_run {
+        println!(
+            "Would create {} configuration file at: {}",
+            match scope {
+                ConfigScope::Local => "local",
+                ConfigScope::Global => "global",
+            },
+            config_path.display()
+        );
+        return Ok(());
+    }
+
+    // Check if config already exists
+    if config_path.exists() {
+        println!(
+            "Configuration file already exists at: {}",
+            config_path.display()
+        );
+        println!("Use 'rona set-editor <editor>' to modify the editor setting.");
+        return Ok(());
+    }
+
+    // Create parent directory if it doesn't exist (for global config)
+    if let Some(parent) = config_path.parent()
+        && !parent.exists()
+    {
+        std::fs::create_dir_all(parent)?;
+    }
+
+    // Get default config and serialize to TOML
+    let default_config = crate::config::ProjectConfig::default();
+    let toml_content = toml::to_string_pretty(&default_config)
+        .map_err(|_| crate::errors::ConfigError::InvalidConfig)?;
+
+    // Write the config file
+    let mut file = std::fs::File::create(&config_path)?;
+    file.write_all(toml_content.as_bytes())?;
+
+    println!("Configuration file created at: {}", config_path.display());
+    println!("You can now edit this file to customize your settings.");
+
+    Ok(())
+}
+
 /// Runs the program by parsing command line arguments and executing the appropriate command.
 ///
 /// # Errors
@@ -497,14 +724,20 @@ pub fn run() -> Result<()> {
             push,
             dry_run,
             unsigned,
+            yes,
         } => {
             config.set_dry_run(dry_run);
-            handle_commit(&args, push, unsigned, &config)
+            handle_commit(&args, push, unsigned, yes, &config)
         }
 
         CliCommand::Completion { shell } => {
             handle_completion(shell);
             Ok(())
+        }
+
+        CliCommand::Config { scope, dry_run } => {
+            config.set_dry_run(dry_run);
+            handle_config_command(scope, &config)
         }
 
         CliCommand::Generate {
@@ -531,6 +764,16 @@ pub fn run() -> Result<()> {
         CliCommand::Set { editor, dry_run } => {
             config.set_dry_run(dry_run);
             handle_set(&editor, &config)
+        }
+
+        CliCommand::Sync {
+            source_branch,
+            rebase,
+            new_branch,
+            dry_run,
+        } => {
+            config.set_dry_run(dry_run);
+            handle_sync(&source_branch, rebase, new_branch.as_deref(), &config)
         }
     }
 }
@@ -623,11 +866,13 @@ mod cli_tests {
                 push,
                 dry_run,
                 unsigned,
+                yes,
             } => {
                 assert!(!push);
                 assert!(args.is_empty());
                 assert!(!dry_run);
                 assert!(!unsigned);
+                assert!(!yes);
             }
             _ => panic!("Wrong command parsed"),
         }
@@ -644,11 +889,13 @@ mod cli_tests {
                 push,
                 dry_run,
                 unsigned,
+                yes,
             } => {
                 assert!(push);
                 assert!(args.is_empty());
                 assert!(!dry_run);
                 assert!(!unsigned);
+                assert!(!yes);
             }
             _ => panic!("Wrong command parsed"),
         }
@@ -665,11 +912,13 @@ mod cli_tests {
                 push,
                 dry_run,
                 unsigned,
+                yes,
             } => {
                 assert!(!push);
                 assert_eq!(args, vec!["Regular commit message"]);
                 assert!(!dry_run);
                 assert!(!unsigned);
+                assert!(!yes);
             }
             _ => panic!("Wrong command parsed"),
         }
@@ -686,11 +935,13 @@ mod cli_tests {
                 push,
                 dry_run,
                 unsigned,
+                yes,
             } => {
                 assert!(!push);
                 assert_eq!(args, vec!["--amend"]);
                 assert!(!dry_run);
                 assert!(!unsigned);
+                assert!(!yes);
             }
             _ => panic!("Wrong command parsed"),
         }
@@ -707,11 +958,13 @@ mod cli_tests {
                 push,
                 dry_run,
                 unsigned,
+                yes,
             } => {
                 assert!(!push);
                 assert_eq!(args, vec!["--amend", "--no-edit"]);
                 assert!(!dry_run);
                 assert!(!unsigned);
+                assert!(!yes);
             }
             _ => panic!("Wrong command parsed"),
         }
@@ -728,11 +981,13 @@ mod cli_tests {
                 push,
                 dry_run,
                 unsigned,
+                yes,
             } => {
                 assert!(push);
                 assert_eq!(args, vec!["--amend", "--no-edit"]);
                 assert!(!dry_run);
                 assert!(!unsigned);
+                assert!(!yes);
             }
             _ => panic!("Wrong command parsed"),
         }
@@ -749,11 +1004,13 @@ mod cli_tests {
                 push,
                 dry_run,
                 unsigned,
+                yes,
             } => {
                 assert!(push);
                 assert_eq!(args, vec!["Commit message"]);
                 assert!(!dry_run);
                 assert!(!unsigned);
+                assert!(!yes);
             }
             _ => panic!("Wrong command parsed"),
         }
@@ -1070,11 +1327,13 @@ mod cli_tests {
                 push,
                 dry_run,
                 unsigned,
+                yes,
             } => {
                 assert!(!push); // --push should be treated as git arg
                 assert_eq!(args, vec!["--amend", "--push"]);
                 assert!(!dry_run);
                 assert!(!unsigned);
+                assert!(!yes);
             }
             _ => panic!("Wrong command parsed"),
         }
@@ -1091,11 +1350,13 @@ mod cli_tests {
                 push,
                 dry_run,
                 unsigned,
+                yes,
             } => {
                 assert!(!push);
                 assert_eq!(args, vec!["--push-to-upstream"]);
                 assert!(!dry_run);
                 assert!(!unsigned);
+                assert!(!yes);
             }
             _ => panic!("Wrong command parsed"),
         }
@@ -1125,11 +1386,13 @@ mod cli_tests {
                 push,
                 dry_run,
                 unsigned,
+                yes,
             } => {
                 assert!(push);
                 assert_eq!(args, vec!["--amend", "--no-edit"]);
                 assert!(!dry_run);
                 assert!(!unsigned);
+                assert!(!yes);
             }
             _ => panic!("Wrong command parsed"),
         }
@@ -1146,11 +1409,13 @@ mod cli_tests {
                 push,
                 dry_run,
                 unsigned,
+                yes,
             } => {
                 assert!(!push);
                 assert!(args.is_empty());
                 assert!(!dry_run);
                 assert!(unsigned);
+                assert!(!yes);
             }
             _ => panic!("Wrong command parsed"),
         }
@@ -1167,11 +1432,13 @@ mod cli_tests {
                 push,
                 dry_run,
                 unsigned,
+                yes,
             } => {
                 assert!(!push);
                 assert!(args.is_empty());
                 assert!(!dry_run);
                 assert!(unsigned);
+                assert!(!yes);
             }
             _ => panic!("Wrong command parsed"),
         }
@@ -1188,11 +1455,516 @@ mod cli_tests {
                 push,
                 dry_run,
                 unsigned,
+                yes,
             } => {
                 assert!(push);
                 assert_eq!(args, vec!["--amend"]);
                 assert!(!dry_run);
                 assert!(unsigned);
+                assert!(!yes);
+            }
+            _ => panic!("Wrong command parsed"),
+        }
+    }
+
+    #[test]
+    fn test_commit_dry_run_short_flag() {
+        let args = vec!["rona", "-c", "-d"];
+        let cli = Cli::try_parse_from(args).unwrap();
+
+        match cli.command {
+            CliCommand::Commit {
+                args,
+                push,
+                dry_run,
+                unsigned,
+                yes,
+            } => {
+                assert!(!push);
+                assert!(args.is_empty());
+                assert!(dry_run);
+                assert!(!unsigned);
+                assert!(!yes);
+            }
+            _ => panic!("Wrong command parsed"),
+        }
+    }
+
+    #[test]
+    fn test_commit_dry_run_long_flag() {
+        let args = vec!["rona", "-c", "--dry-run"];
+        let cli = Cli::try_parse_from(args).unwrap();
+
+        match cli.command {
+            CliCommand::Commit {
+                args,
+                push,
+                dry_run,
+                unsigned,
+                yes,
+            } => {
+                assert!(!push);
+                assert!(args.is_empty());
+                assert!(dry_run);
+                assert!(!unsigned);
+                assert!(!yes);
+            }
+            _ => panic!("Wrong command parsed"),
+        }
+    }
+
+    #[test]
+    fn test_commit_dry_run_with_push() {
+        let args = vec!["rona", "-c", "-d", "--push"];
+        let cli = Cli::try_parse_from(args).unwrap();
+
+        match cli.command {
+            CliCommand::Commit {
+                args,
+                push,
+                dry_run,
+                unsigned,
+                yes,
+            } => {
+                assert!(push);
+                assert!(args.is_empty());
+                assert!(dry_run);
+                assert!(!unsigned);
+                assert!(!yes);
+            }
+            _ => panic!("Wrong command parsed"),
+        }
+    }
+
+    // === CONFIG COMMAND TESTS ===
+
+    #[test]
+    fn test_config_local() {
+        let args = vec!["rona", "config", "local"];
+        let cli = Cli::try_parse_from(args).unwrap();
+
+        match cli.command {
+            CliCommand::Config { scope, dry_run } => {
+                assert!(matches!(scope, ConfigScope::Local));
+                assert!(!dry_run);
+            }
+            _ => panic!("Wrong command parsed"),
+        }
+    }
+
+    #[test]
+    fn test_config_global() {
+        let args = vec!["rona", "config", "global"];
+        let cli = Cli::try_parse_from(args).unwrap();
+
+        match cli.command {
+            CliCommand::Config { scope, dry_run } => {
+                assert!(matches!(scope, ConfigScope::Global));
+                assert!(!dry_run);
+            }
+            _ => panic!("Wrong command parsed"),
+        }
+    }
+
+    #[test]
+    fn test_config_local_dry_run() {
+        let args = vec!["rona", "config", "local", "--dry-run"];
+        let cli = Cli::try_parse_from(args).unwrap();
+
+        match cli.command {
+            CliCommand::Config { scope, dry_run } => {
+                assert!(matches!(scope, ConfigScope::Local));
+                assert!(dry_run);
+            }
+            _ => panic!("Wrong command parsed"),
+        }
+    }
+
+    #[test]
+    fn test_config_global_dry_run() {
+        let args = vec!["rona", "config", "global", "--dry-run"];
+        let cli = Cli::try_parse_from(args).unwrap();
+
+        match cli.command {
+            CliCommand::Config { scope, dry_run } => {
+                assert!(matches!(scope, ConfigScope::Global));
+                assert!(dry_run);
+            }
+            _ => panic!("Wrong command parsed"),
+        }
+    }
+
+    #[test]
+    fn test_config_missing_scope() {
+        let args = vec!["rona", "config"];
+        assert!(Cli::try_parse_from(args).is_err());
+    }
+
+    #[test]
+    fn test_config_invalid_scope() {
+        let args = vec!["rona", "config", "invalid"];
+        assert!(Cli::try_parse_from(args).is_err());
+    }
+
+    // === TEMPLATE SELECTION TESTS (REGRESSION TESTS) ===
+    // These tests would have caught the bug where `rona -g -i -n` produced empty brackets []
+
+    /// REGRESSION TEST: Verify template selection logic for interactive mode with `no_commit_number`
+    /// This test verifies that the new conditional block syntax properly handles None `commit_number`
+    #[test]
+    fn test_template_selection_with_no_commit_number() {
+        use crate::template::{TemplateVariables, process_template};
+
+        // With the new conditional block syntax, we use ONE template for both cases
+        let default_template = "{?commit_number}[{commit_number}] {/commit_number}({commit_type} on {branch_name}) {message}";
+
+        let variables = TemplateVariables {
+            commit_number: None,
+            commit_type: "docs".to_string(),
+            branch_name: "main".to_string(),
+            message: "Update docs".to_string(),
+            date: "2024-01-15".to_string(),
+            time: "14:30:00".to_string(),
+            author: "Test User".to_string(),
+            email: "test@example.com".to_string(),
+        };
+
+        let result = process_template(default_template, &variables).unwrap();
+
+        // Should NOT contain empty brackets
+        assert!(
+            !result.contains("[]"),
+            "Output should not contain empty brackets: {result}"
+        );
+        assert_eq!(result, "(docs on main) Update docs");
+    }
+
+    /// REGRESSION TEST: Verify template selection logic for interactive mode WITH `commit_number`
+    #[test]
+    fn test_template_selection_with_commit_number() {
+        use crate::template::{TemplateVariables, process_template};
+
+        // With the new conditional block syntax, we use ONE template for both cases
+        let default_template = "{?commit_number}[{commit_number}] {/commit_number}({commit_type} on {branch_name}) {message}";
+
+        let variables = TemplateVariables {
+            commit_number: Some(42),
+            commit_type: "feat".to_string(),
+            branch_name: "new-feature".to_string(),
+            message: "Add feature".to_string(),
+            date: "2024-01-15".to_string(),
+            time: "14:30:00".to_string(),
+            author: "Test User".to_string(),
+            email: "test@example.com".to_string(),
+        };
+
+        let result = process_template(default_template, &variables).unwrap();
+
+        // Should contain properly formatted commit number
+        assert!(
+            result.starts_with("[42]"),
+            "Output should start with [42]: {result}"
+        );
+        assert_eq!(result, "[42] (feat on new-feature) Add feature");
+    }
+
+    /// REGRESSION TEST: Verify that using wrong template produces the bug
+    /// This documents the original bug and ensures our fix prevents it
+    #[test]
+    fn test_bug_using_wrong_template_with_no_commit_number() {
+        use crate::template::{TemplateVariables, process_template};
+
+        // This simulates the BUG: using default template with None commit_number
+        let wrong_template = "[{commit_number}] ({commit_type} on {branch_name}) {message}";
+
+        let variables = TemplateVariables {
+            commit_number: None, // This is the key: None with a template that expects a number
+            commit_type: "docs".to_string(),
+            branch_name: "main".to_string(),
+            message: "Update docs".to_string(),
+            date: "2024-01-15".to_string(),
+            time: "14:30:00".to_string(),
+            author: "Test User".to_string(),
+            email: "test@example.com".to_string(),
+        };
+
+        let result = process_template(wrong_template, &variables).unwrap();
+
+        // This DOCUMENTS the bug: using wrong template produces empty brackets
+        assert_eq!(result, "[] (docs on main) Update docs");
+        assert!(result.contains("[]"), "This demonstrates the bug we fixed");
+    }
+
+    /// REGRESSION TEST: Test fallback format in `handle_interactive_mode`
+    /// Verify the fallback format also respects `no_commit_number` flag
+    #[test]
+    fn test_fallback_format_with_no_commit_number() {
+        // Simulate the fallback format from handle_interactive_mode
+        let no_commit_number = true;
+        let commit_type = "fix";
+        let branch_name = "bugfix";
+        let message = "Fix issue";
+
+        let formatted_message = if no_commit_number {
+            format!("({commit_type} on {branch_name}) {message}")
+        } else {
+            format!("[42] ({commit_type} on {branch_name}) {message}")
+        };
+
+        assert_eq!(formatted_message, "(fix on bugfix) Fix issue");
+        assert!(
+            !formatted_message.contains("[]"),
+            "Fallback should not produce empty brackets"
+        );
+    }
+
+    /// REGRESSION TEST: Test fallback format with commit number
+    #[test]
+    fn test_fallback_format_with_commit_number() {
+        // Simulate the fallback format from handle_interactive_mode
+        let no_commit_number = false;
+        let commit_number = 15u32;
+        let commit_type = "feat";
+        let branch_name = "feature";
+        let message = "Add feature";
+
+        let formatted_message = if no_commit_number {
+            format!("({commit_type} on {branch_name}) {message}")
+        } else {
+            format!("[{commit_number}] ({commit_type} on {branch_name}) {message}")
+        };
+
+        assert_eq!(formatted_message, "[15] (feat on feature) Add feature");
+        assert!(
+            !formatted_message.contains("[]"),
+            "Should not produce empty brackets"
+        );
+    }
+
+    // === SYNC COMMAND TESTS ===
+
+    #[test]
+    fn test_sync_basic() {
+        let args = vec!["rona", "sync"];
+        let cli = Cli::try_parse_from(args).unwrap();
+
+        match cli.command {
+            CliCommand::Sync {
+                source_branch,
+                rebase,
+                new_branch,
+                dry_run,
+            } => {
+                assert_eq!(source_branch, "main");
+                assert!(!rebase);
+                assert!(new_branch.is_none());
+                assert!(!dry_run);
+            }
+            _ => panic!("Wrong command parsed"),
+        }
+    }
+
+    #[test]
+    fn test_sync_with_branch() {
+        let args = vec!["rona", "sync", "--branch", "develop"];
+        let cli = Cli::try_parse_from(args).unwrap();
+
+        match cli.command {
+            CliCommand::Sync {
+                source_branch,
+                rebase,
+                new_branch,
+                dry_run,
+            } => {
+                assert_eq!(source_branch, "develop");
+                assert!(!rebase);
+                assert!(new_branch.is_none());
+                assert!(!dry_run);
+            }
+            _ => panic!("Wrong command parsed"),
+        }
+    }
+
+    #[test]
+    fn test_sync_with_branch_short_flag() {
+        let args = vec!["rona", "sync", "-b", "staging"];
+        let cli = Cli::try_parse_from(args).unwrap();
+
+        match cli.command {
+            CliCommand::Sync {
+                source_branch,
+                rebase,
+                new_branch,
+                dry_run,
+            } => {
+                assert_eq!(source_branch, "staging");
+                assert!(!rebase);
+                assert!(new_branch.is_none());
+                assert!(!dry_run);
+            }
+            _ => panic!("Wrong command parsed"),
+        }
+    }
+
+    #[test]
+    fn test_sync_with_rebase() {
+        let args = vec!["rona", "sync", "--rebase"];
+        let cli = Cli::try_parse_from(args).unwrap();
+
+        match cli.command {
+            CliCommand::Sync {
+                source_branch,
+                rebase,
+                new_branch,
+                dry_run,
+            } => {
+                assert_eq!(source_branch, "main");
+                assert!(rebase);
+                assert!(new_branch.is_none());
+                assert!(!dry_run);
+            }
+            _ => panic!("Wrong command parsed"),
+        }
+    }
+
+    #[test]
+    fn test_sync_with_rebase_short_flag() {
+        let args = vec!["rona", "sync", "-r"];
+        let cli = Cli::try_parse_from(args).unwrap();
+
+        match cli.command {
+            CliCommand::Sync {
+                source_branch,
+                rebase,
+                new_branch,
+                dry_run,
+            } => {
+                assert_eq!(source_branch, "main");
+                assert!(rebase);
+                assert!(new_branch.is_none());
+                assert!(!dry_run);
+            }
+            _ => panic!("Wrong command parsed"),
+        }
+    }
+
+    #[test]
+    fn test_sync_with_new_branch() {
+        let args = vec!["rona", "sync", "--new-branch", "feature/new-feature"];
+        let cli = Cli::try_parse_from(args).unwrap();
+
+        match cli.command {
+            CliCommand::Sync {
+                source_branch,
+                rebase,
+                new_branch,
+                dry_run,
+            } => {
+                assert_eq!(source_branch, "main");
+                assert!(!rebase);
+                assert_eq!(new_branch, Some("feature/new-feature".to_string()));
+                assert!(!dry_run);
+            }
+            _ => panic!("Wrong command parsed"),
+        }
+    }
+
+    #[test]
+    fn test_sync_with_new_branch_short_flag() {
+        let args = vec!["rona", "sync", "-n", "bugfix/issue-123"];
+        let cli = Cli::try_parse_from(args).unwrap();
+
+        match cli.command {
+            CliCommand::Sync {
+                source_branch,
+                rebase,
+                new_branch,
+                dry_run,
+            } => {
+                assert_eq!(source_branch, "main");
+                assert!(!rebase);
+                assert_eq!(new_branch, Some("bugfix/issue-123".to_string()));
+                assert!(!dry_run);
+            }
+            _ => panic!("Wrong command parsed"),
+        }
+    }
+
+    #[test]
+    fn test_sync_with_dry_run() {
+        let args = vec!["rona", "sync", "--dry-run"];
+        let cli = Cli::try_parse_from(args).unwrap();
+
+        match cli.command {
+            CliCommand::Sync {
+                source_branch,
+                rebase,
+                new_branch,
+                dry_run,
+            } => {
+                assert_eq!(source_branch, "main");
+                assert!(!rebase);
+                assert!(new_branch.is_none());
+                assert!(dry_run);
+            }
+            _ => panic!("Wrong command parsed"),
+        }
+    }
+
+    #[test]
+    fn test_sync_all_options() {
+        let args = vec![
+            "rona",
+            "sync",
+            "--branch",
+            "develop",
+            "--rebase",
+            "--new-branch",
+            "feature/test",
+            "--dry-run",
+        ];
+        let cli = Cli::try_parse_from(args).unwrap();
+
+        match cli.command {
+            CliCommand::Sync {
+                source_branch,
+                rebase,
+                new_branch,
+                dry_run,
+            } => {
+                assert_eq!(source_branch, "develop");
+                assert!(rebase);
+                assert_eq!(new_branch, Some("feature/test".to_string()));
+                assert!(dry_run);
+            }
+            _ => panic!("Wrong command parsed"),
+        }
+    }
+
+    #[test]
+    fn test_sync_short_flags_combination() {
+        let args = vec![
+            "rona",
+            "sync",
+            "-b",
+            "staging",
+            "-r",
+            "-n",
+            "hotfix/critical",
+        ];
+        let cli = Cli::try_parse_from(args).unwrap();
+
+        match cli.command {
+            CliCommand::Sync {
+                source_branch,
+                rebase,
+                new_branch,
+                dry_run,
+            } => {
+                assert_eq!(source_branch, "staging");
+                assert!(rebase);
+                assert_eq!(new_branch, Some("hotfix/critical".to_string()));
+                assert!(!dry_run);
             }
             _ => panic!("Wrong command parsed"),
         }

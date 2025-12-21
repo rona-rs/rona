@@ -3,57 +3,40 @@
 //! Git branch-related functionality including branch information retrieval
 //! and branch name formatting utilities.
 
+use crate::{
+    errors::{GitError, Result, RonaError},
+    git::{commit::get_current_commit_nb, handle_output, repository::open_repo},
+};
 use std::process::Command;
-
-use crate::errors::{GitError, Result, RonaError};
-use crate::git::commit::get_current_commit_nb;
 
 /// Attempts to get the default branch name from git config.
 ///
 /// This helper function tries to retrieve the default branch name using
-/// `git config --get init.defaultBranch`. If successful, it returns the
-/// branch name. If the config command fails, it returns an error with
-/// the specified fallback command name for context.
-///
-/// # Arguments
-///
-/// * `fallback_command` - The command name to use in error messages when
-///   the git config command fails
+/// the git2 config API. If successful, it returns the branch name.
+/// If the config lookup fails, it returns a default of "main".
 ///
 /// # Returns
 ///
-/// * `Ok(String)` - The default branch name if successfully retrieved
-/// * `Err(RonaError)` - Error with the fallback command context if config fails
-fn try_get_default_branch(fallback_command: &str) -> Result<String> {
-    let config_output = Command::new("git")
-        .args(["config", "--get", "init.defaultBranch"])
-        .output()?;
+/// * `Ok(String)` - The default branch name if successfully retrieved, or "main" as fallback
+fn try_get_default_branch() -> Result<String> {
+    let repo = open_repo()?;
+    let config = repo.config()?;
 
-    if config_output.status.success() {
-        let default_branch = String::from_utf8_lossy(&config_output.stdout)
-            .trim()
-            .to_string();
-        Ok(default_branch)
-    } else {
-        // Return error with the provided fallback command context
-        let error_message = String::from_utf8_lossy(&config_output.stderr);
-        Err(RonaError::Git(GitError::CommandFailed {
-            command: fallback_command.to_string(),
-            output: error_message.to_string(),
-        }))
+    match config.get_string("init.defaultBranch") {
+        Ok(branch) => Ok(branch),
+        Err(_) => Ok("main".to_string()), // Default to "main" if not configured
     }
 }
 
 /// Gets the current branch name.
 ///
 /// This function returns the name of the currently checked out branch.
-/// For detached HEAD states, it returns the commit hash.
+/// For detached HEAD states, it returns "HEAD".
 ///
 /// # Errors
 ///
 /// Returns an error if:
 /// - Not currently in a git repository
-/// - The git command fails to execute
 /// - Unable to determine the current branch (e.g., in a corrupted repository)
 ///
 /// # Returns
@@ -75,35 +58,50 @@ fn try_get_default_branch(fallback_command: &str) -> Result<String> {
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 pub fn get_current_branch() -> Result<String> {
-    let output = Command::new("git")
-        .args(["rev-parse", "--abbrev-ref", "HEAD"])
-        .output()?;
+    let repo = open_repo()?;
 
-    if output.status.success() {
-        let branch = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        Ok(branch)
-    } else {
-        // Check if it's a freshly initialized repository (no commits yet)
-        // If get_current_commit_nb() fails, it's likely a fresh repo with no HEAD
-        match get_current_commit_nb() {
-            Ok(0) => {
-                // Fresh repository with no commits
-                // Try to get the default branch name
-                try_get_default_branch("git config --get init.defaultBranch")
-            }
-            Ok(_) => {
-                // Repository has commits, so the original error wasn't due to fresh repo
-                let error_message = String::from_utf8_lossy(&output.stderr);
+    // Try to get the current branch reference
+    let head = repo.head();
 
-                Err(RonaError::Git(GitError::CommandFailed {
-                    command: "git rev-parse --abbrev-ref HEAD".to_string(),
-                    output: error_message.to_string(),
-                }))
+    match head {
+        Ok(reference) => {
+            // Check if HEAD is pointing to a branch
+            if reference.is_branch() {
+                // Get the branch name
+                let branch_name = reference
+                    .shorthand()
+                    .ok_or(RonaError::Git(GitError::CommandFailed {
+                        command: "get current branch".to_string(),
+                        output: "Failed to get branch shorthand name".to_string(),
+                    }))?
+                    .to_string();
+                Ok(branch_name)
+            } else {
+                // Detached HEAD state
+                Ok("HEAD".to_string())
             }
-            Err(_) => {
-                // Can't determine commit count, likely a fresh repo with no HEAD
-                // Try to get the default branch name
-                try_get_default_branch("git rev-parse --abbrev-ref HEAD")
+        }
+        Err(_) => {
+            // HEAD doesn't exist, likely a fresh repository with no commits
+            // Check if there are any commits
+            match get_current_commit_nb() {
+                Ok(0) => {
+                    // Fresh repository with no commits
+                    // Try to get the default branch name
+                    try_get_default_branch()
+                }
+                Ok(_) => {
+                    // Repository has commits, something is wrong
+                    Err(RonaError::Git(GitError::CommandFailed {
+                        command: "get current branch".to_string(),
+                        output: "Failed to get HEAD reference".to_string(),
+                    }))
+                }
+                Err(_) => {
+                    // Can't determine commit count, likely a fresh repo with no HEAD
+                    // Try to get the default branch name
+                    try_get_default_branch()
+                }
             }
         }
     }
@@ -172,4 +170,110 @@ pub fn format_branch_name(commit_types: &[&str; 4], branch: &str) -> String {
     }
 
     formatted_branch
+}
+
+/// Switches to a different branch.
+///
+/// # Arguments
+/// * `branch_name` - The name of the branch to switch to
+/// * `verbose` - Whether to print verbose output during the operation
+///
+/// # Errors
+/// * If the branch doesn't exist
+/// * If there are uncommitted changes that would be lost
+/// * If the git switch command fails
+pub fn git_switch(branch_name: &str, verbose: bool) -> Result<()> {
+    if verbose {
+        println!("\nSwitching to branch: {branch_name}");
+    }
+
+    let output = Command::new("git")
+        .arg("switch")
+        .arg(branch_name)
+        .output()?;
+
+    handle_output("switch", &output, verbose)
+}
+
+/// Creates a new branch.
+///
+/// # Arguments
+/// * `branch_name` - The name of the branch to create
+/// * `verbose` - Whether to print verbose output during the operation
+///
+/// # Errors
+/// * If a branch with that name already exists
+/// * If the git branch command fails
+pub fn git_create_branch(branch_name: &str, verbose: bool) -> Result<()> {
+    if verbose {
+        println!("\nCreating new branch: {branch_name}");
+    }
+
+    let output = Command::new("git")
+        .arg("switch")
+        .arg("-c")
+        .arg(branch_name)
+        .output()?;
+
+    handle_output("create branch", &output, verbose)
+}
+
+/// Pulls changes from the remote repository.
+///
+/// # Arguments
+/// * `verbose` - Whether to print verbose output during the operation
+///
+/// # Errors
+/// * If there's no remote repository configured
+/// * If the git pull command fails
+/// * If there are merge conflicts
+pub fn git_pull(verbose: bool) -> Result<()> {
+    if verbose {
+        println!("\nPulling latest changes...");
+    }
+
+    let output = Command::new("git").arg("pull").output()?;
+
+    handle_output("pull", &output, verbose)
+}
+
+/// Merges a branch into the current branch.
+///
+/// # Arguments
+/// * `branch_name` - The name of the branch to merge
+/// * `verbose` - Whether to print verbose output during the operation
+///
+/// # Errors
+/// * If there are merge conflicts
+/// * If the git merge command fails
+pub fn git_merge(branch_name: &str, verbose: bool) -> Result<()> {
+    if verbose {
+        println!("\nMerging {branch_name} into current branch...");
+    }
+
+    let output = Command::new("git").arg("merge").arg(branch_name).output()?;
+
+    handle_output("merge", &output, verbose)
+}
+
+/// Rebases the current branch onto another branch.
+///
+/// # Arguments
+/// * `branch_name` - The name of the branch to rebase onto
+/// * `verbose` - Whether to print verbose output during the operation
+///
+/// # Errors
+/// * If there are rebase conflicts
+/// * If the git rebase command fails
+pub fn git_rebase(branch_name: &str, verbose: bool) -> Result<()> {
+    if verbose {
+        println!("\nRebasing onto {branch_name}...");
+    }
+
+    let output = Command::new("git")
+        .arg("rebase")
+        .arg(branch_name)
+        .output()?;
+
+    handle_output("rebase", &output, verbose)
 }
