@@ -25,7 +25,7 @@ path = "src/main.rs"
 
 [dependencies]
 clap = { version = "4.5.53", features = ["derive"] }
-clap_complete = "4.5.61"
+clap_complete = "4.5.64"
 inquire = { version = "0.7" }
 glob = "0.3.3"
 regex = "1.12.2"
@@ -40,4 +40,4 @@ git2 = "0.19"
 [dev-dependencies]
 assert_cmd = "2.1.1"
 mockall = "0.13.1"
-tempfile = "3.23.0"
+tempfile = "3.24.0"
