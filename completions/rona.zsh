@@ -49,6 +49,7 @@ _arguments "${_arguments_options[@]}" : \
 '--unsigned[Create unsigned commit (default is to auto-detect GPG availability and sign if possible)]' \
 '-y[Skip confirmation prompt and commit directly]' \
 '--yes[Skip confirmation prompt and commit directly]' \
+'--copy[Copy commit message to clipboard instead of committing]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '*::args -- Additional arguments to pass to the commit command:_default' \
