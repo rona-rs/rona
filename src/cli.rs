@@ -385,15 +385,17 @@ fn handle_generate(interactive: bool, no_commit_number: bool, config: &Config) -
 
     create_needed_files()?;
 
-    let commit_types_vec = config.project_config.commit_types.as_ref().map_or_else(
-        || COMMIT_TYPES.to_vec(),
-        |v| v.iter().map(String::as_str).collect::<Vec<&str>>(),
-    );
+    let commit_type = {
+        let commit_types_vec = config.project_config.commit_types.as_ref().map_or_else(
+            || COMMIT_TYPES.to_vec(),
+            |v| v.iter().map(String::as_str).collect::<Vec<&str>>(),
+        );
 
-    let commit_type = Select::new("Select commit type", commit_types_vec)
-        .with_starting_cursor(0)
-        .prompt()
-        .map_err(|_| RonaError::UserCancelled)?;
+        Select::new("Select commit type", commit_types_vec)
+            .with_starting_cursor(0)
+            .prompt()
+            .map_err(|_| RonaError::UserCancelled)?
+    };
 
     if interactive {
         // In interactive mode, skip generating the template file
@@ -635,15 +637,16 @@ fn handle_sync(
 fn handle_config_command(scope: ConfigScope, config: &Config) -> Result<()> {
     use std::io::Write;
 
-    // Determine the config path based on scope
-    let config_path = match scope {
-        ConfigScope::Local => {
-            let project_root = get_top_level_path()?;
-            project_root.join(".rona.toml")
-        }
-        ConfigScope::Global => {
-            let home = dirs::home_dir().ok_or(crate::errors::ConfigError::ConfigNotFound)?;
-            home.join(".config/rona.toml")
+    let config_path = {
+        match scope {
+            ConfigScope::Local => {
+                let project_root = get_top_level_path()?;
+                project_root.join(".rona.toml")
+            }
+            ConfigScope::Global => {
+                let home = dirs::home_dir().ok_or(crate::errors::ConfigError::ConfigNotFound)?;
+                home.join(".config/rona.toml")
+            }
         }
     };
 
