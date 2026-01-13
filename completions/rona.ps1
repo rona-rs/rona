@@ -56,6 +56,7 @@ Register-ArgumentCompleter -Native -CommandName 'rona' -ScriptBlock {
             [CompletionResult]::new('--unsigned', '--unsigned', [CompletionResultType]::ParameterName, 'Create unsigned commit (default is to auto-detect GPG availability and sign if possible)')
             [CompletionResult]::new('-y', '-y', [CompletionResultType]::ParameterName, 'Skip confirmation prompt and commit directly')
             [CompletionResult]::new('--yes', '--yes', [CompletionResultType]::ParameterName, 'Skip confirmation prompt and commit directly')
+            [CompletionResult]::new('--copy', '--copy', [CompletionResultType]::ParameterName, 'Copy commit message to clipboard instead of committing')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break

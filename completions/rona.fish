@@ -45,6 +45,7 @@ complete -c rona -n "__fish_rona_using_subcommand commit" -s p -l push -d 'Wheth
 complete -c rona -n "__fish_rona_using_subcommand commit" -s d -l dry-run -d 'Show what would be committed without actually committing'
 complete -c rona -n "__fish_rona_using_subcommand commit" -s u -l unsigned -d 'Create unsigned commit (default is to auto-detect GPG availability and sign if possible)'
 complete -c rona -n "__fish_rona_using_subcommand commit" -s y -l yes -d 'Skip confirmation prompt and commit directly'
+complete -c rona -n "__fish_rona_using_subcommand commit" -l copy -d 'Copy commit message to clipboard instead of committing'
 complete -c rona -n "__fish_rona_using_subcommand commit" -s h -l help -d 'Print help'
 complete -c rona -n "__fish_rona_using_subcommand completion" -s h -l help -d 'Print help'
 complete -c rona -n "__fish_rona_using_subcommand config" -l dry-run -d 'Show what would be created without actually creating the config file'

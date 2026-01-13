@@ -87,6 +87,10 @@ pub(crate) enum CliCommand {
         #[arg(short = 'y', long = "yes", default_value_t = false)]
         yes: bool,
 
+        /// Copy commit message to clipboard instead of committing
+        #[arg(long = "copy", default_value_t = false)]
+        copy: bool,
+
         /// Additional arguments to pass to the commit command
         #[arg(allow_hyphen_values = true)]
         args: Vec<String>,
@@ -303,6 +307,7 @@ fn handle_add_with_exclude(exclude: &[String], config: &Config) -> Result<()> {
 /// * `push` - Whether to push changes after committing
 /// * `unsigned` - Whether to create an unsigned commit (skips -S flag)
 /// * `yes` - Whether to skip the confirmation prompt
+/// * `copy` - Whether to copy the commit message to clipboard instead of committing
 /// * `config` - Global configuration including verbose and dry-run settings
 ///
 /// # Errors
@@ -310,11 +315,14 @@ fn handle_add_with_exclude(exclude: &[String], config: &Config) -> Result<()> {
 /// * If push is true and git push operation fails
 /// * If commit message file doesn't exist or cannot be read
 /// * If user cancels the commit confirmation
+/// * If clipboard operation fails
+#[allow(clippy::fn_params_excessive_bools)]
 fn handle_commit(
     args: &[String],
     push: bool,
     unsigned: bool,
     yes: bool,
+    copy: bool,
     config: &Config,
 ) -> Result<()> {
     // Read the commit message file
@@ -328,6 +336,25 @@ fn handle_commit(
     }
 
     let commit_message = read_to_string(&commit_file_path)?;
+
+    // If copy flag is set, copy to clipboard and exit
+    if copy {
+        use arboard::Clipboard;
+        let mut clipboard = Clipboard::new().map_err(|e| {
+            crate::errors::RonaError::Io(std::io::Error::other(format!(
+                "Failed to access clipboard: {e}"
+            )))
+        })?;
+
+        clipboard.set_text(&commit_message).map_err(|e| {
+            crate::errors::RonaError::Io(std::io::Error::other(format!(
+                "Failed to copy to clipboard: {e}"
+            )))
+        })?;
+
+        println!("Commit message copied to clipboard");
+        return Ok(());
+    }
 
     // Show confirmation prompt unless --yes flag is set or in dry-run mode
     if !yes && !config.dry_run {
@@ -728,9 +755,10 @@ pub fn run() -> Result<()> {
             dry_run,
             unsigned,
             yes,
+            copy,
         } => {
             config.set_dry_run(dry_run);
-            handle_commit(&args, push, unsigned, yes, &config)
+            handle_commit(&args, push, unsigned, yes, copy, &config)
         }
 
         CliCommand::Completion { shell } => {
@@ -870,12 +898,14 @@ mod cli_tests {
                 dry_run,
                 unsigned,
                 yes,
+                copy,
             } => {
                 assert!(!push);
                 assert!(args.is_empty());
                 assert!(!dry_run);
                 assert!(!unsigned);
                 assert!(!yes);
+                assert!(!copy);
             }
             _ => panic!("Wrong command parsed"),
         }
@@ -893,12 +923,14 @@ mod cli_tests {
                 dry_run,
                 unsigned,
                 yes,
+                copy,
             } => {
                 assert!(push);
                 assert!(args.is_empty());
                 assert!(!dry_run);
                 assert!(!unsigned);
                 assert!(!yes);
+                assert!(!copy);
             }
             _ => panic!("Wrong command parsed"),
         }
@@ -916,12 +948,14 @@ mod cli_tests {
                 dry_run,
                 unsigned,
                 yes,
+                copy,
             } => {
                 assert!(!push);
                 assert_eq!(args, vec!["Regular commit message"]);
                 assert!(!dry_run);
                 assert!(!unsigned);
                 assert!(!yes);
+                assert!(!copy);
             }
             _ => panic!("Wrong command parsed"),
         }
@@ -939,12 +973,14 @@ mod cli_tests {
                 dry_run,
                 unsigned,
                 yes,
+                copy,
             } => {
                 assert!(!push);
                 assert_eq!(args, vec!["--amend"]);
                 assert!(!dry_run);
                 assert!(!unsigned);
                 assert!(!yes);
+                assert!(!copy);
             }
             _ => panic!("Wrong command parsed"),
         }
@@ -962,12 +998,14 @@ mod cli_tests {
                 dry_run,
                 unsigned,
                 yes,
+                copy,
             } => {
                 assert!(!push);
                 assert_eq!(args, vec!["--amend", "--no-edit"]);
                 assert!(!dry_run);
                 assert!(!unsigned);
                 assert!(!yes);
+                assert!(!copy);
             }
             _ => panic!("Wrong command parsed"),
         }
@@ -985,12 +1023,14 @@ mod cli_tests {
                 dry_run,
                 unsigned,
                 yes,
+                copy,
             } => {
                 assert!(push);
                 assert_eq!(args, vec!["--amend", "--no-edit"]);
                 assert!(!dry_run);
                 assert!(!unsigned);
                 assert!(!yes);
+                assert!(!copy);
             }
             _ => panic!("Wrong command parsed"),
         }
@@ -1008,12 +1048,14 @@ mod cli_tests {
                 dry_run,
                 unsigned,
                 yes,
+                copy,
             } => {
                 assert!(push);
                 assert_eq!(args, vec!["Commit message"]);
                 assert!(!dry_run);
                 assert!(!unsigned);
                 assert!(!yes);
+                assert!(!copy);
             }
             _ => panic!("Wrong command parsed"),
         }
@@ -1331,12 +1373,14 @@ mod cli_tests {
                 dry_run,
                 unsigned,
                 yes,
+                copy,
             } => {
                 assert!(!push); // --push should be treated as git arg
                 assert_eq!(args, vec!["--amend", "--push"]);
                 assert!(!dry_run);
                 assert!(!unsigned);
                 assert!(!yes);
+                assert!(!copy);
             }
             _ => panic!("Wrong command parsed"),
         }
@@ -1354,12 +1398,14 @@ mod cli_tests {
                 dry_run,
                 unsigned,
                 yes,
+                copy,
             } => {
                 assert!(!push);
                 assert_eq!(args, vec!["--push-to-upstream"]);
                 assert!(!dry_run);
                 assert!(!unsigned);
                 assert!(!yes);
+                assert!(!copy);
             }
             _ => panic!("Wrong command parsed"),
         }
@@ -1390,12 +1436,14 @@ mod cli_tests {
                 dry_run,
                 unsigned,
                 yes,
+                copy,
             } => {
                 assert!(push);
                 assert_eq!(args, vec!["--amend", "--no-edit"]);
                 assert!(!dry_run);
                 assert!(!unsigned);
                 assert!(!yes);
+                assert!(!copy);
             }
             _ => panic!("Wrong command parsed"),
         }
@@ -1413,12 +1461,14 @@ mod cli_tests {
                 dry_run,
                 unsigned,
                 yes,
+                copy,
             } => {
                 assert!(!push);
                 assert!(args.is_empty());
                 assert!(!dry_run);
                 assert!(unsigned);
                 assert!(!yes);
+                assert!(!copy);
             }
             _ => panic!("Wrong command parsed"),
         }
@@ -1436,12 +1486,14 @@ mod cli_tests {
                 dry_run,
                 unsigned,
                 yes,
+                copy,
             } => {
                 assert!(!push);
                 assert!(args.is_empty());
                 assert!(!dry_run);
                 assert!(unsigned);
                 assert!(!yes);
+                assert!(!copy);
             }
             _ => panic!("Wrong command parsed"),
         }
@@ -1459,12 +1511,14 @@ mod cli_tests {
                 dry_run,
                 unsigned,
                 yes,
+                copy,
             } => {
                 assert!(push);
                 assert_eq!(args, vec!["--amend"]);
                 assert!(!dry_run);
                 assert!(unsigned);
                 assert!(!yes);
+                assert!(!copy);
             }
             _ => panic!("Wrong command parsed"),
         }
@@ -1482,12 +1536,14 @@ mod cli_tests {
                 dry_run,
                 unsigned,
                 yes,
+                copy,
             } => {
                 assert!(!push);
                 assert!(args.is_empty());
                 assert!(dry_run);
                 assert!(!unsigned);
                 assert!(!yes);
+                assert!(!copy);
             }
             _ => panic!("Wrong command parsed"),
         }
@@ -1505,12 +1561,14 @@ mod cli_tests {
                 dry_run,
                 unsigned,
                 yes,
+                copy,
             } => {
                 assert!(!push);
                 assert!(args.is_empty());
                 assert!(dry_run);
                 assert!(!unsigned);
                 assert!(!yes);
+                assert!(!copy);
             }
             _ => panic!("Wrong command parsed"),
         }
@@ -1528,12 +1586,66 @@ mod cli_tests {
                 dry_run,
                 unsigned,
                 yes,
+                copy,
             } => {
                 assert!(push);
                 assert!(args.is_empty());
                 assert!(dry_run);
                 assert!(!unsigned);
                 assert!(!yes);
+                assert!(!copy);
+            }
+            _ => panic!("Wrong command parsed"),
+        }
+    }
+
+    // === COPY FLAG TESTS ===
+
+    #[test]
+    fn test_commit_with_copy_flag() {
+        let args = vec!["rona", "-c", "--copy"];
+        let cli = Cli::try_parse_from(args).unwrap();
+
+        match cli.command {
+            CliCommand::Commit {
+                args,
+                push,
+                dry_run,
+                unsigned,
+                yes,
+                copy,
+            } => {
+                assert!(!push);
+                assert!(args.is_empty());
+                assert!(!dry_run);
+                assert!(!unsigned);
+                assert!(!yes);
+                assert!(copy);
+            }
+            _ => panic!("Wrong command parsed"),
+        }
+    }
+
+    #[test]
+    fn test_commit_copy_flag_with_other_flags() {
+        let args = vec!["rona", "-c", "--copy", "--dry-run"];
+        let cli = Cli::try_parse_from(args).unwrap();
+
+        match cli.command {
+            CliCommand::Commit {
+                args,
+                push,
+                dry_run,
+                unsigned,
+                yes,
+                copy,
+            } => {
+                assert!(!push);
+                assert!(args.is_empty());
+                assert!(dry_run);
+                assert!(!unsigned);
+                assert!(!yes);
+                assert!(copy);
             }
             _ => panic!("Wrong command parsed"),
         }

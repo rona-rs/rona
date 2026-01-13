@@ -51,6 +51,7 @@ set edit:completion:arg-completer[rona] = {|@words|
             cand --unsigned 'Create unsigned commit (default is to auto-detect GPG availability and sign if possible)'
             cand -y 'Skip confirmation prompt and commit directly'
             cand --yes 'Skip confirmation prompt and commit directly'
+            cand --copy 'Copy commit message to clipboard instead of committing'
             cand -h 'Print help'
             cand --help 'Print help'
         }
