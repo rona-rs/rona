@@ -35,7 +35,15 @@ impl TemplateVariables {
         branch_name: String,
         message: String,
     ) -> Result<Self> {
-        let now = Local::now();
+        let (date, time) = {
+            let now = Local::now();
+
+            (
+                now.format("%Y-%m-%d").to_string(),
+                now.format("%H:%M:%S").to_string(),
+            )
+        };
+
         let (author, email) = get_git_author_info()?;
 
         Ok(Self {
@@ -43,8 +51,8 @@ impl TemplateVariables {
             commit_type,
             branch_name,
             message,
-            date: now.format("%Y-%m-%d").to_string(),
-            time: now.format("%H:%M:%S").to_string(),
+            date,
+            time,
             author,
             email,
         })

@@ -81,28 +81,32 @@ impl ProjectConfig {
             return Ok(Self::default());
         }
 
-        let mut builder = config::Config::builder();
+        let settings = {
+            let mut builder = config::Config::builder();
 
-        // Support both old and new global config paths
-        let home = dirs::home_dir().ok_or(ConfigError::ConfigNotFound)?;
-        let old_global = home.join(".config/rona/config.toml");
-        let new_global = home.join(".config/rona.toml");
+            // Support both old and new global config paths
+            let home = dirs::home_dir().ok_or(ConfigError::ConfigNotFound)?;
+            let old_global = home.join(".config/rona/config.toml");
+            let new_global = home.join(".config/rona.toml");
 
-        if old_global.exists() {
-            builder = builder.add_source(config::File::from(old_global).required(false));
-        }
-        if new_global.exists() {
-            builder = builder.add_source(config::File::from(new_global).required(false));
-        }
+            if old_global.exists() {
+                builder = builder.add_source(config::File::from(old_global).required(false));
+            }
 
-        // Add project config if it exists
-        let project_config_path = env::current_dir()?.join(".rona.toml");
-        if project_config_path.exists() {
-            builder = builder.add_source(config::File::from(project_config_path).required(false));
-        }
+            if new_global.exists() {
+                builder = builder.add_source(config::File::from(new_global).required(false));
+            }
 
-        // Build the config
-        let settings = builder.build().map_err(|_| ConfigError::ConfigNotFound)?;
+            // Add project config if it exists
+            let project_config_path = env::current_dir()?.join(".rona.toml");
+            if project_config_path.exists() {
+                builder =
+                    builder.add_source(config::File::from(project_config_path).required(false));
+            }
+
+            builder.build().map_err(|_| ConfigError::ConfigNotFound)?
+        };
+
         match settings.try_deserialize() {
             Ok(config) => Ok(config),
             Err(e) => {

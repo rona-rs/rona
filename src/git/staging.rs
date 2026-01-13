@@ -81,21 +81,25 @@ pub fn git_add_with_exclude_patterns(
         println!("Adding files...");
     }
 
-    let deleted_files = process_deleted_files_for_staging()?;
-    let deleted_files_count = deleted_files.len();
+    let (deleted_files, files_to_add, staged_files_len) = {
+        let deleted_files = process_deleted_files_for_staging()?;
+        let staged_files = get_status_files()?;
+        let staged_files_len = staged_files.len();
 
-    let staged_files = get_status_files()?;
-    let staged_files_len = staged_files.len();
+        let files_to_add: Vec<String> = staged_files
+            .into_iter()
+            .filter(|file| !exclude_patterns.iter().any(|pattern| pattern.matches(file)))
+            .collect();
 
-    let files_to_add: Vec<String> = staged_files
-        .into_iter()
-        .filter(|file| !exclude_patterns.iter().any(|pattern| pattern.matches(file)))
-        .collect();
+        (deleted_files, files_to_add, staged_files_len)
+    };
 
     if files_to_add.is_empty() && deleted_files.is_empty() {
         println!("No files to add or delete");
         return Ok(());
     }
+
+    let deleted_files_count = deleted_files.len();
 
     if dry_run {
         print_dry_run_summary(&files_to_add, &deleted_files, staged_files_len);
