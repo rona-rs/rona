@@ -1,17 +1,17 @@
 pre-commit:
-    commands:
-        - cargo fmt --all -- --check
-        - cargo clippy --workspace --release --all-targets --all-features -- --deny warnings -D warnings -W clippy::correctness -W clippy::suspicious -W clippy::complexity -W clippy::perf -W clippy::style -W clippy::pedantic
-        - cargo run -- completion bash > completions/rona.bash
-        - cargo run -- completion elvish > completions/rona.elv
-        - cargo run -- completion fish > completions/rona.fish
-        - cargo run -- completion powershell > completions/rona.ps1
-        - cargo run -- completion zsh > completions/rona.zsh
-        - git add completions/rona*
-        - typos
+  commands:
+    - git diff --cached --name-only --diff-filter=ACM | grep '\.rs$' | xargs rustfmt --edition 2024
+    - cargo clippy --workspace --release --all-targets --all-features -- --deny warnings -D warnings -W clippy::correctness -W clippy::suspicious -W clippy::complexity -W clippy::perf -W clippy::style -W clippy::pedantic
+    - cargo run -- completion bash > completions/rona.bash
+    - cargo run -- completion elvish > completions/rona.elv
+    - cargo run -- completion fish > completions/rona.fish
+    - cargo run -- completion powershell > completions/rona.ps1
+    - cargo run -- completion zsh > completions/rona.zsh
+    - git add completions/rona*
+    - typos
 pre-push:
-    commands:
-        - cargo install cargo-audit && cargo audit
-        - cargo install cargo-outdated && cargo outdated
-        - cargo build -q
-        - cargo test -q
+  commands:
+    - cargo install cargo-audit && cargo audit
+    - cargo install cargo-outdated && cargo outdated
+    - cargo build -q
+    - cargo test -q

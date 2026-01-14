@@ -721,7 +721,11 @@ fn handle_which_config(path: Option<&str>, show_effective: bool) -> Result<()> {
 
     for source in &config_info.sources {
         let status = if source.exists { "✓" } else { "○" };
-        let exists_text = if source.exists { "(active)" } else { "(not found)" };
+        let exists_text = if source.exists {
+            "(active)"
+        } else {
+            "(not found)"
+        };
 
         println!(
             "  {} [priority {}] {}",
