@@ -34,7 +34,7 @@ use inquire::{Confirm, Select, Text};
 use std::{fs::read_to_string, io, process::Command};
 
 use crate::{
-    config::Config,
+    config::{Config, find_config_sources},
     errors::{Result, RonaError},
     git::{
         COMMIT_MESSAGE_FILE_PATH, COMMIT_TYPES, create_needed_files, format_branch_name,
@@ -190,6 +190,19 @@ pub(crate) enum CliCommand {
         /// Show what would be done without actually doing it
         #[arg(long, default_value_t = false)]
         dry_run: bool,
+    },
+
+    /// Show which configuration files would be used from a directory.
+    /// Similar to 'git config --show-origin' - displays all config sources and their priority.
+    #[command(short_flag = 'w', name = "which-config", visible_alias = "find-config")]
+    WhichConfig {
+        /// Directory to check from (defaults to current directory)
+        #[arg(value_name = "PATH", value_hint = ValueHint::DirPath)]
+        path: Option<String>,
+
+        /// Show the effective (merged) configuration values
+        #[arg(short = 'e', long = "effective", default_value_t = false)]
+        show_effective: bool,
     },
 }
 
@@ -652,6 +665,103 @@ fn handle_sync(
     Ok(())
 }
 
+/// Handle the `WhichConfig` command which shows which config files would be used.
+///
+/// # Arguments
+/// * `path` - Optional directory to check from (defaults to current directory)
+/// * `show_effective` - Whether to also show the effective merged configuration
+///
+/// # Errors
+/// * If the directory does not exist
+/// * If the home directory cannot be determined
+fn handle_which_config(path: Option<&str>, show_effective: bool) -> Result<()> {
+    use std::path::Path;
+
+    let search_path = match path {
+        Some(p) => {
+            let path = Path::new(p);
+            if !path.exists() {
+                return Err(crate::errors::RonaError::Io(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    format!("Directory not found: {p}"),
+                )));
+            }
+            Some(path)
+        }
+        None => None,
+    };
+
+    let config_info = find_config_sources(search_path)?;
+
+    println!("Searching from: {}", config_info.search_directory.display());
+    println!();
+
+    // Check if any config exists
+    let active_sources: Vec<_> = config_info.sources.iter().filter(|s| s.exists).collect();
+
+    if active_sources.is_empty() {
+        println!("! No configuration files found.");
+        println!();
+        println!("Possible config locations (in loading order):");
+        for source in &config_info.sources {
+            println!(
+                "  ○ [priority {}] {}",
+                source.priority,
+                source.path.display()
+            );
+            println!("    └─ {}", source.description);
+        }
+        println!();
+        println!("Run 'rona init' or 'rona config local/global' to create a config file.");
+        return Ok(());
+    }
+
+    println!("Configuration sources (in loading order, later overrides earlier):");
+    println!();
+
+    for source in &config_info.sources {
+        let status = if source.exists { "✓" } else { "○" };
+        let exists_text = if source.exists { "(active)" } else { "(not found)" };
+
+        println!(
+            "  {} [priority {}] {}",
+            status,
+            source.priority,
+            source.path.display()
+        );
+        println!("    └─ {} {}", source.description, exists_text);
+    }
+
+    // Show which config takes precedence
+    if let Some(highest) = active_sources.iter().max_by_key(|s| s.priority) {
+        println!();
+        println!("Effective config from: {}", highest.path.display());
+    }
+
+    // Show effective configuration values if requested
+    if show_effective {
+        println!();
+        println!("Effective configuration values:");
+        println!();
+
+        if let Some(cfg) = &config_info.effective_config {
+            if let Some(editor) = &cfg.editor {
+                println!("- editor = \"{editor}\"");
+            }
+            if let Some(commit_types) = &cfg.commit_types {
+                println!("- commit_types = {commit_types:?}");
+            }
+            if let Some(template) = &cfg.template {
+                println!("- template = \"{template}\"");
+            }
+        } else {
+            println!("  (using defaults)");
+        }
+    }
+
+    Ok(())
+}
+
 /// Handle the Config command which creates or manages configuration files.
 ///
 /// # Arguments
@@ -806,6 +916,11 @@ pub fn run() -> Result<()> {
             config.set_dry_run(dry_run);
             handle_sync(&source_branch, rebase, new_branch.as_deref(), &config)
         }
+
+        CliCommand::WhichConfig {
+            path,
+            show_effective,
+        } => handle_which_config(path.as_deref(), show_effective),
     }
 }
 

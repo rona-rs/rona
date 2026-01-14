@@ -125,6 +125,24 @@ _arguments "${_arguments_options[@]}" : \
 '--help[Print help]' \
 && ret=0
 ;;
+(which-config)
+_arguments "${_arguments_options[@]}" : \
+'-e[Show the effective (merged) configuration values]' \
+'--effective[Show the effective (merged) configuration values]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'::path -- Directory to check from (defaults to current directory):_files -/' \
+&& ret=0
+;;
+(find-config)
+_arguments "${_arguments_options[@]}" : \
+'-e[Show the effective (merged) configuration values]' \
+'--effective[Show the effective (merged) configuration values]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'::path -- Directory to check from (defaults to current directory):_files -/' \
+&& ret=0
+;;
 (help)
 _arguments "${_arguments_options[@]}" : \
 ":: :_rona__help_commands" \
@@ -177,6 +195,10 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
+(which-config)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
 (help)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
@@ -203,6 +225,8 @@ _rona_commands() {
 'push:Push to a git repository' \
 'set-editor:Set the editor to use for editing the commit message' \
 'sync:Sync current branch with main (or another branch) by pulling and merging/rebasing' \
+'which-config:Show which configuration files would be used from a directory. Similar to '\''git config --show-origin'\'' - displays all config sources and their priority' \
+'find-config:Show which configuration files would be used from a directory. Similar to '\''git config --show-origin'\'' - displays all config sources and their priority' \
 'help:Print this message or the help of the given subcommand(s)' \
     )
     _describe -t commands 'rona commands' commands "$@"
@@ -245,6 +269,7 @@ _rona__help_commands() {
 'push:Push to a git repository' \
 'set-editor:Set the editor to use for editing the commit message' \
 'sync:Sync current branch with main (or another branch) by pulling and merging/rebasing' \
+'which-config:Show which configuration files would be used from a directory. Similar to '\''git config --show-origin'\'' - displays all config sources and their priority' \
 'help:Print this message or the help of the given subcommand(s)' \
     )
     _describe -t commands 'rona help commands' commands "$@"
@@ -304,6 +329,11 @@ _rona__help__sync_commands() {
     local commands; commands=()
     _describe -t commands 'rona help sync commands' commands "$@"
 }
+(( $+functions[_rona__help__which-config_commands] )) ||
+_rona__help__which-config_commands() {
+    local commands; commands=()
+    _describe -t commands 'rona help which-config commands' commands "$@"
+}
 (( $+functions[_rona__init_commands] )) ||
 _rona__init_commands() {
     local commands; commands=()
@@ -328,6 +358,11 @@ _rona__set-editor_commands() {
 _rona__sync_commands() {
     local commands; commands=()
     _describe -t commands 'rona sync commands' commands "$@"
+}
+(( $+functions[_rona__which-config_commands] )) ||
+_rona__which-config_commands() {
+    local commands; commands=()
+    _describe -t commands 'rona which-config commands' commands "$@"
 }
 
 if [ "$funcstack[1]" = "_rona" ]; then

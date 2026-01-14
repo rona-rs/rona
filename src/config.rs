@@ -32,6 +32,30 @@ use crate::{
     utils::print_error,
 };
 
+/// Describes a configuration file source and its status
+#[derive(Debug, Clone)]
+pub struct ConfigSource {
+    /// Path to the configuration file
+    pub path: PathBuf,
+    /// Whether this file exists
+    pub exists: bool,
+    /// Description of this config source (e.g., "Global config", "Project config")
+    pub description: String,
+    /// Priority order (lower = loaded first, higher = overrides lower)
+    pub priority: u8,
+}
+
+/// Information about which configuration files would be used from a given directory
+#[derive(Debug)]
+pub struct ConfigInfo {
+    /// All potential config sources, in loading order
+    pub sources: Vec<ConfigSource>,
+    /// The effective merged configuration (if any configs exist)
+    pub effective_config: Option<ProjectConfig>,
+    /// The directory from which config was searched
+    pub search_directory: PathBuf,
+}
+
 // Define your default commit types
 const DEFAULT_COMMIT_TYPES: &[&str] = &["feat", "fix", "docs", "test", "chore"];
 
@@ -115,6 +139,114 @@ impl ProjectConfig {
             }
         }
     }
+
+    /// Loads the project configuration from a specific directory.
+    ///
+    /// # Arguments
+    /// * `from_dir` - The directory to load the project config from
+    ///
+    /// # Errors
+    /// Returns `ConfigError::ConfigNotFound` if the config files cannot be found or read.
+    /// Returns `ConfigError::InvalidConfig` if deserialization fails.
+    pub fn load_from_dir(from_dir: &std::path::Path) -> Result<Self> {
+        let settings = {
+            let mut builder = config::Config::builder();
+
+            // Support both old and new global config paths
+            let home = dirs::home_dir().ok_or(ConfigError::ConfigNotFound)?;
+            let old_global = home.join(".config/rona/config.toml");
+            let new_global = home.join(".config/rona.toml");
+
+            if old_global.exists() {
+                builder = builder.add_source(config::File::from(old_global).required(false));
+            }
+
+            if new_global.exists() {
+                builder = builder.add_source(config::File::from(new_global).required(false));
+            }
+
+            // Add project config from specified directory if it exists
+            let project_config_path = from_dir.join(".rona.toml");
+            if project_config_path.exists() {
+                builder =
+                    builder.add_source(config::File::from(project_config_path).required(false));
+            }
+
+            builder.build().map_err(|_| ConfigError::ConfigNotFound)?
+        };
+
+        match settings.try_deserialize() {
+            Ok(config) => Ok(config),
+            Err(e) => {
+                eprintln!("Failed to deserialize config: {e}");
+                Err(ConfigError::InvalidConfig.into())
+            }
+        }
+    }
+}
+
+/// Find all configuration sources that would be used from a given directory.
+///
+/// This function discovers all potential configuration files and reports which ones
+/// exist and would be used when running rona from the specified directory.
+///
+/// # Arguments
+/// * `from_dir` - Optional directory to check from. If `None`, uses current directory.
+///
+/// # Errors
+/// Returns an error if the home directory cannot be determined.
+///
+/// # Returns
+/// A `ConfigInfo` struct containing all discovered config sources and the effective configuration.
+pub fn find_config_sources(from_dir: Option<&std::path::Path>) -> Result<ConfigInfo> {
+    let search_dir = match from_dir {
+        Some(dir) => dir.to_path_buf(),
+        None => env::current_dir()?,
+    };
+
+    let home = dirs::home_dir().ok_or(ConfigError::ConfigNotFound)?;
+
+    let mut sources = Vec::new();
+
+    // Old global config (priority 1 - loaded first)
+    let old_global = home.join(".config/rona/config.toml");
+    sources.push(ConfigSource {
+        path: old_global.clone(),
+        exists: old_global.exists(),
+        description: "Legacy global config".to_string(),
+        priority: 1,
+    });
+
+    // New global config (priority 2 - overrides old global)
+    let new_global = home.join(".config/rona.toml");
+    sources.push(ConfigSource {
+        path: new_global.clone(),
+        exists: new_global.exists(),
+        description: "Global config".to_string(),
+        priority: 2,
+    });
+
+    // Project-local config (priority 3 - highest priority, overrides all)
+    let project_config = search_dir.join(".rona.toml");
+    sources.push(ConfigSource {
+        path: project_config.clone(),
+        exists: project_config.exists(),
+        description: "Project config".to_string(),
+        priority: 3,
+    });
+
+    // Try to load the effective configuration
+    let effective_config = if cfg!(test) {
+        Some(ProjectConfig::default())
+    } else {
+        ProjectConfig::load_from_dir(&search_dir).ok()
+    };
+
+    Ok(ConfigInfo {
+        sources,
+        effective_config,
+        search_directory: search_dir,
+    })
 }
 
 /// Main configuration struct that handles all config operations.
