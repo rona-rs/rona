@@ -38,6 +38,8 @@ Register-ArgumentCompleter -Native -CommandName 'rona' -ScriptBlock {
             [CompletionResult]::new('push', 'push', [CompletionResultType]::ParameterValue, 'Push to a git repository')
             [CompletionResult]::new('set-editor', 'set-editor', [CompletionResultType]::ParameterValue, 'Set the editor to use for editing the commit message')
             [CompletionResult]::new('sync', 'sync', [CompletionResultType]::ParameterValue, 'Sync current branch with main (or another branch) by pulling and merging/rebasing')
+            [CompletionResult]::new('which-config', 'which-config', [CompletionResultType]::ParameterValue, 'Show which configuration files would be used from a directory. Similar to ''git config --show-origin'' - displays all config sources and their priority')
+            [CompletionResult]::new('find-config', 'find-config', [CompletionResultType]::ParameterValue, 'Show which configuration files would be used from a directory. Similar to ''git config --show-origin'' - displays all config sources and their priority')
             [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
             break
         }
@@ -117,6 +119,20 @@ Register-ArgumentCompleter -Native -CommandName 'rona' -ScriptBlock {
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
+        'rona;which-config' {
+            [CompletionResult]::new('-e', '-e', [CompletionResultType]::ParameterName, 'Show the effective (merged) configuration values')
+            [CompletionResult]::new('--effective', '--effective', [CompletionResultType]::ParameterName, 'Show the effective (merged) configuration values')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'rona;find-config' {
+            [CompletionResult]::new('-e', '-e', [CompletionResultType]::ParameterName, 'Show the effective (merged) configuration values')
+            [CompletionResult]::new('--effective', '--effective', [CompletionResultType]::ParameterName, 'Show the effective (merged) configuration values')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
         'rona;help' {
             [CompletionResult]::new('add-with-exclude', 'add-with-exclude', [CompletionResultType]::ParameterValue, 'Add all files to the `git add` command and exclude the patterns passed as positional arguments')
             [CompletionResult]::new('commit', 'commit', [CompletionResultType]::ParameterValue, 'Directly commit the file with the text in `commit_message.md`')
@@ -128,6 +144,7 @@ Register-ArgumentCompleter -Native -CommandName 'rona' -ScriptBlock {
             [CompletionResult]::new('push', 'push', [CompletionResultType]::ParameterValue, 'Push to a git repository')
             [CompletionResult]::new('set-editor', 'set-editor', [CompletionResultType]::ParameterValue, 'Set the editor to use for editing the commit message')
             [CompletionResult]::new('sync', 'sync', [CompletionResultType]::ParameterValue, 'Sync current branch with main (or another branch) by pulling and merging/rebasing')
+            [CompletionResult]::new('which-config', 'which-config', [CompletionResultType]::ParameterValue, 'Show which configuration files would be used from a directory. Similar to ''git config --show-origin'' - displays all config sources and their priority')
             [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
             break
         }
@@ -159,6 +176,9 @@ Register-ArgumentCompleter -Native -CommandName 'rona' -ScriptBlock {
             break
         }
         'rona;help;sync' {
+            break
+        }
+        'rona;help;which-config' {
             break
         }
         'rona;help;help' {

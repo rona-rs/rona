@@ -35,6 +35,8 @@ set edit:completion:arg-completer[rona] = {|@words|
             cand push 'Push to a git repository'
             cand set-editor 'Set the editor to use for editing the commit message'
             cand sync 'Sync current branch with main (or another branch) by pulling and merging/rebasing'
+            cand which-config 'Show which configuration files would be used from a directory. Similar to ''git config --show-origin'' - displays all config sources and their priority'
+            cand find-config 'Show which configuration files would be used from a directory. Similar to ''git config --show-origin'' - displays all config sources and their priority'
             cand help 'Print this message or the help of the given subcommand(s)'
         }
         &'rona;add-with-exclude'= {
@@ -103,6 +105,18 @@ set edit:completion:arg-completer[rona] = {|@words|
             cand -h 'Print help'
             cand --help 'Print help'
         }
+        &'rona;which-config'= {
+            cand -e 'Show the effective (merged) configuration values'
+            cand --effective 'Show the effective (merged) configuration values'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'rona;find-config'= {
+            cand -e 'Show the effective (merged) configuration values'
+            cand --effective 'Show the effective (merged) configuration values'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
         &'rona;help'= {
             cand add-with-exclude 'Add all files to the `git add` command and exclude the patterns passed as positional arguments'
             cand commit 'Directly commit the file with the text in `commit_message.md`'
@@ -114,6 +128,7 @@ set edit:completion:arg-completer[rona] = {|@words|
             cand push 'Push to a git repository'
             cand set-editor 'Set the editor to use for editing the commit message'
             cand sync 'Sync current branch with main (or another branch) by pulling and merging/rebasing'
+            cand which-config 'Show which configuration files would be used from a directory. Similar to ''git config --show-origin'' - displays all config sources and their priority'
             cand help 'Print this message or the help of the given subcommand(s)'
         }
         &'rona;help;add-with-exclude'= {
@@ -135,6 +150,8 @@ set edit:completion:arg-completer[rona] = {|@words|
         &'rona;help;set-editor'= {
         }
         &'rona;help;sync'= {
+        }
+        &'rona;help;which-config'= {
         }
         &'rona;help;help'= {
         }
