@@ -4,12 +4,80 @@
 
 use glob::Pattern;
 
-use crate::errors::Result;
+use crate::errors::{Result, RonaError};
 
 use super::{
-    repository::open_repo,
+    repository::{get_top_level_path, open_repo},
     status::{count_renamed_files, get_status_files, process_deleted_files_for_staging},
 };
+
+/// Checks if a pattern matches a file path, considering both absolute (repo-relative)
+/// and current-directory-relative patterns.
+///
+/// This function tries to match the pattern in multiple ways to provide intuitive behavior:
+/// 1. Against the full path from repository root (e.g., "tp08-sujet/RESPONSE.md")
+/// 2. Against the path relative to current directory (e.g., "RESPONSE.md" when in "tp08-sujet/")
+/// 3. Against just the filename (for simple patterns like "RESPONSE.md")
+///
+/// # Arguments
+/// * `pattern` - The glob pattern to match
+/// * `file_path` - The file path relative to repository root
+/// * `current_dir_rel_to_repo` - Current directory path relative to repo root (e.g., "tp08-sujet")
+///
+/// # Returns
+/// `true` if the pattern matches the file in any of the supported ways, `false` otherwise
+///
+/// # Examples
+/// ```
+/// use glob::Pattern;
+///
+/// let pattern = Pattern::new("RESPONSE.md").unwrap();
+/// let file_path = "tp08-sujet/RESPONSE.md";
+/// let current_dir = Some("tp08-sujet");
+///
+/// // Matches because "RESPONSE.md" matches the filename
+/// assert!(pattern_matches_file(&pattern, file_path, current_dir));
+///
+/// // Also matches with full path pattern
+/// let pattern = Pattern::new("tp08-sujet/RESPONSE.md").unwrap();
+/// assert!(pattern_matches_file(&pattern, file_path, None));
+///
+/// // Glob patterns work too
+/// let pattern = Pattern::new("*/RESPONSE.md").unwrap();
+/// assert!(pattern_matches_file(&pattern, file_path, None));
+/// ```
+fn pattern_matches_file(
+    pattern: &Pattern,
+    file_path: &str,
+    current_dir_rel_to_repo: Option<&str>,
+) -> bool {
+    // Try matching against full path (root-relative or glob patterns)
+    if pattern.matches(file_path) {
+        return true;
+    }
+
+    // If we're in a subdirectory, also try matching against path relative to current dir
+    if let Some(current_subdir) = current_dir_rel_to_repo
+        && !current_subdir.is_empty()
+    {
+        // Remove the current directory prefix from the file path
+        if let Some(relative_path) = file_path.strip_prefix(&format!("{current_subdir}/"))
+            && pattern.matches(relative_path)
+        {
+            return true;
+        }
+    }
+
+    // Also try matching just the filename (for simple patterns like "RESPONSE.md")
+    if let Some(filename) = std::path::Path::new(file_path).file_name()
+        && let Some(filename_str) = filename.to_str()
+        && pattern.matches(filename_str)
+    {
+        return true;
+    }
+
+    false
+}
 
 /// Adds files to the git index.
 ///
@@ -81,6 +149,21 @@ pub fn git_add_with_exclude_patterns(
         println!("Adding files...");
     }
 
+    // Get current directory relative to repo root
+    let current_dir_rel_to_repo = {
+        use std::env;
+
+        let repo_root = get_top_level_path()?;
+        let current_dir = env::current_dir().map_err(RonaError::Io)?;
+
+        // Calculate relative path from repo root to current directory
+        current_dir
+            .strip_prefix(&repo_root)
+            .ok()
+            .and_then(|p| p.to_str())
+            .map(String::from)
+    };
+
     let (deleted_files, files_to_add, staged_files_len) = {
         let deleted_files = process_deleted_files_for_staging()?;
         let staged_files = get_status_files()?;
@@ -88,7 +171,11 @@ pub fn git_add_with_exclude_patterns(
 
         let files_to_add: Vec<String> = staged_files
             .into_iter()
-            .filter(|file| !exclude_patterns.iter().any(|pattern| pattern.matches(file)))
+            .filter(|file| {
+                !exclude_patterns.iter().any(|pattern| {
+                    pattern_matches_file(pattern, file, current_dir_rel_to_repo.as_deref())
+                })
+            })
             .collect();
 
         (deleted_files, files_to_add, staged_files_len)
@@ -176,4 +263,102 @@ fn print_dry_run_summary(
 
     let excluded_files_len = staged_files_len - files_to_add.len();
     println!("Would exclude {excluded_files_len} files");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_pattern_matches_file_full_path() {
+        let pattern = Pattern::new("tp08-sujet/RESPONSE.md").unwrap();
+        let file_path = "tp08-sujet/RESPONSE.md";
+
+        // Should match with full path pattern
+        assert!(pattern_matches_file(&pattern, file_path, None));
+    }
+
+    #[test]
+    fn test_pattern_matches_file_relative_to_current_dir() {
+        let pattern = Pattern::new("RESPONSE.md").unwrap();
+        let file_path = "tp08-sujet/RESPONSE.md";
+        let current_dir = Some("tp08-sujet");
+
+        // Should match when pattern is relative to current directory
+        assert!(pattern_matches_file(&pattern, file_path, current_dir));
+    }
+
+    #[test]
+    fn test_pattern_matches_file_filename_only() {
+        let pattern = Pattern::new("RESPONSE.md").unwrap();
+        let file_path = "some/nested/dir/RESPONSE.md";
+
+        // Should match just the filename even without current_dir context
+        assert!(pattern_matches_file(&pattern, file_path, None));
+    }
+
+    #[test]
+    fn test_pattern_matches_file_glob_pattern() {
+        let pattern = Pattern::new("*/RESPONSE.md").unwrap();
+        let file_path = "tp08-sujet/RESPONSE.md";
+
+        // Should match with glob pattern
+        assert!(pattern_matches_file(&pattern, file_path, None));
+    }
+
+    #[test]
+    fn test_pattern_matches_file_double_star_glob() {
+        let pattern = Pattern::new("**/RESPONSE.md").unwrap();
+        let file_path = "some/deep/nested/dir/RESPONSE.md";
+
+        // Should match with double-star glob pattern
+        assert!(pattern_matches_file(&pattern, file_path, None));
+    }
+
+    #[test]
+    fn test_pattern_does_not_match() {
+        let pattern = Pattern::new("README.md").unwrap();
+        let file_path = "tp08-sujet/RESPONSE.md";
+
+        // Should not match different filename
+        assert!(!pattern_matches_file(&pattern, file_path, None));
+    }
+
+    #[test]
+    fn test_pattern_matches_relative_path_in_subdirectory() {
+        let pattern = Pattern::new("src/main.java").unwrap();
+        let file_path = "tp08-sujet/src/main.java";
+        let current_dir = Some("tp08-sujet");
+
+        // Should match relative path from current directory
+        assert!(pattern_matches_file(&pattern, file_path, current_dir));
+    }
+
+    #[test]
+    fn test_pattern_matches_nested_path_from_root() {
+        let pattern = Pattern::new("tp08-sujet/src/main.java").unwrap();
+        let file_path = "tp08-sujet/src/main.java";
+
+        // Should match full path from repository root
+        assert!(pattern_matches_file(&pattern, file_path, None));
+    }
+
+    #[test]
+    fn test_pattern_with_extension_wildcard() {
+        let pattern = Pattern::new("*.md").unwrap();
+        let file_path = "tp08-sujet/RESPONSE.md";
+
+        // Should match with extension wildcard
+        assert!(pattern_matches_file(&pattern, file_path, None));
+    }
+
+    #[test]
+    fn test_pattern_at_repo_root() {
+        let pattern = Pattern::new("README.md").unwrap();
+        let file_path = "README.md";
+        let current_dir = Some(""); // At repository root
+
+        // Should match when at repository root
+        assert!(pattern_matches_file(&pattern, file_path, current_dir));
+    }
 }
