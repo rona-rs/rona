@@ -84,7 +84,7 @@ impl Default for ProjectConfig {
                     .collect(),
             ),
             template: Some(
-                "[{commit_number}] ({commit_type} on {branch_name}) {message}".to_string(),
+                "{?commit_number}[{commit_number}] {/commit_number}({commit_type} on {branch_name}) {message}".to_string(),
             ),
         }
     }

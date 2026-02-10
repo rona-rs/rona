@@ -79,7 +79,7 @@ commit_types = [
 
 # Template for interactive commit message generation
 # Available variables: {commit_number}, {commit_type}, {branch_name}, {message}, {date}, {time}, {author}, {email}
-template = "[{commit_number}] ({commit_type} on {branch_name}) {message}"
+template = "{?commit_number}[{commit_number}] {/commit_number}({commit_type} on {branch_name}) {message}"
 ```
 
 **Note**: When no configuration exists, Rona falls back to: `["chore", "feat", "fix", "test"]`
