@@ -1,5 +1,5 @@
-# 🔌 Rona
-
+# Rona
+Rona
 <h1 align="center">
     A powerful CLI tool to streamline your Git workflow
 </h1>
@@ -19,14 +19,14 @@ Rona is a command-line interface tool designed to enhance your Git workflow with
 
 ## Features
 
-- 🚀 Intelligent file staging with pattern exclusion
-- 📝 Structured commit message generation
-- 🔄 Streamlined push operations
-- 🔀 Branch synchronization with merge/rebase support
-- 🎯 Interactive commit type selection with customizable types
-- 🛠 Multi-shell completion support (Bash, Fish, Zsh, PowerShell)
-- ⚙️ Flexible configuration system (global and project-level)
-- 🎨 Colored interactive prompts powered by Inquire
+- Intelligent file staging with pattern exclusion
+- Structured commit message generation
+- Streamlined push operations
+- Branch synchronization with merge/rebase support
+- Interactive commit type selection with customizable types
+- Multi-shell completion support (Bash, Fish, Zsh, PowerShell)
+- Flexible configuration system (global and project-level)
+- Colored interactive prompts powered by Inquire
 
 ## Installation
 
@@ -646,11 +646,33 @@ The completions include:
 - Git status file completion for `add-with-exclude` command (Fish only)
 - Context-aware suggestions
 
+## Architecture
+
+### Git Operations: git2 vs Command
+
+Rona uses the [git2](https://crates.io/crates/git2) library (libgit2 bindings) for most Git operations, providing better error handling, no dependency on the `git` CLI being installed, and avoidance of path/shell issues.
+
+**Operations using git2 (library):**
+- Repository discovery and path resolution
+- Status and file staging
+- Branch info, switching, and creation
+- Commit creation (both unsigned and GPG-signed)
+- Git config reading (author info, signing keys, default branch)
+- Commit counting and history walking
+
+**Operations using `std::process::Command` (CLI):**
+- **Push** -- git2's push requires complex `RemoteCallbacks` for SSH/HTTP authentication
+- **Pull** -- No direct pull API in git2; would need fetch (with auth callbacks) + merge
+- **Merge / Rebase** -- git2's low-level APIs require manual conflict resolution and commit iteration
+- **GPG signing checks** -- These run the `gpg` binary, not git
+
+For GPG-signed commits, Rona uses a hybrid approach: git2's `commit_create_buffer` generates the commit content, the `gpg` CLI signs it, and git2's `commit_signed` stores the result.
+
 ## Development
 
 ### Requirements
 - Rust 2021 edition or later
-- Git 2.0 or later
+- Git 2.0 or later (only needed for push, pull, merge, rebase operations)
 
 ### Building from Source
 ```bash
