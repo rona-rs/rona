@@ -2,7 +2,7 @@
 
 Thank you for your interest in contributing to Rona! This document provides guidelines and information for contributors.
 
-## 🚀 Getting Started
+## Getting Started
 
 ### Prerequisites
 
@@ -38,7 +38,7 @@ cargo test
 cargo clippy --workspace --release --all-targets --all-features -- --deny warnings -D warnings -W clippy::correctness -W clippy::suspicious -W clippy::complexity -W clippy::perf -W clippy::style -W clippy::pedantic
 ```
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 src/
@@ -60,7 +60,7 @@ src/
     └── repository.rs    # Finding git root and repository paths
 ```
 
-## 🛠 Development Guidelines
+## Development Guidelines
 
 ### Code Style
 
@@ -90,7 +90,7 @@ src/
 - Batch operations when dealing with multiple files
 - Profile performance-critical code paths
 
-## 🔄 Development Workflow
+## Development Workflow
 
 ### Making Changes
 
@@ -155,7 +155,7 @@ Rona uses a structured commit message format with commit numbers and branch cont
 
 You can customize the template in `.rona.toml` or use `--no-commit-number` flag to omit the commit number.
 
-## 🧪 Testing
+## Testing
 
 ### Running Tests
 
@@ -202,7 +202,7 @@ mod tests {
 }
 ```
 
-## 📚 Documentation
+## Documentation
 
 ### Code Documentation
 
@@ -218,7 +218,7 @@ mod tests {
 - Include new examples for significant features
 - Maintain the command reference section
 
-## 🐛 Bug Reports
+## Bug Reports
 
 When reporting bugs, please include:
 
@@ -237,7 +237,7 @@ When reporting bugs, please include:
    - Configuration files
    - Relevant logs
 
-## 💡 Feature Requests
+## Feature Requests
 
 For feature requests, please:
 
@@ -246,24 +246,24 @@ For feature requests, please:
 3. **Propose a solution** if you have ideas
 4. **Consider implementation complexity** and maintenance burden
 
-## 🔒 Security
+## Security
 
 - Report security vulnerabilities privately to the maintainers
 - Run `cargo audit` regularly to check for known vulnerabilities
 - Keep dependencies updated
 - Follow secure coding practices
 
-## 📞 Getting Help
+## Getting Help
 
 - **GitHub Issues**: For bugs and feature requests
 - **GitHub Discussions**: For questions and general discussion
 - **Code Review**: For feedback on implementation approaches
 
-## 🎉 Recognition
+## Recognition
 
 Contributors will be recognized in:
 - The project README
 - Release notes for significant contributions
 - GitHub contributor graphs
 
-Thank you for contributing to Rona! 🚀
+Thank you for contributing to Rona!
