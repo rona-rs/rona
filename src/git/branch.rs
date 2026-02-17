@@ -116,7 +116,7 @@ pub fn get_current_branch() -> Result<String> {
 ///
 /// # Arguments
 ///
-/// * `commit_types` - An array of commit type prefixes to remove (e.g., `["feat", "fix", "chore", "test"]`)
+/// * `commit_types` - A slice of commit type prefixes to remove (e.g., `&["feat", "fix", "chore", "test"]`)
 /// * `branch` - The branch name to format
 ///
 /// # Returns
@@ -151,6 +151,12 @@ pub fn get_current_branch() -> Result<String> {
 ///     format_branch_name(&commit_types, "feat/fix/complex-branch"),
 ///     "fix/complex-branch"  // Only first matching prefix is removed
 /// );
+///
+/// // Works with any number of commit types
+/// assert_eq!(
+///     format_branch_name(&["feat", "fix"], "fix/bug"),
+///     "bug"
+/// );
 /// ```
 ///
 /// # Use Cases
@@ -160,7 +166,7 @@ pub fn get_current_branch() -> Result<String> {
 /// - Creating readable branch displays in UI
 /// - Normalizing branch names for processing
 #[must_use]
-pub fn format_branch_name(commit_types: &[&str; 4], branch: &str) -> String {
+pub fn format_branch_name(commit_types: &[&str], branch: &str) -> String {
     let mut formatted_branch = branch.to_owned();
 
     for commit_type in commit_types {
