@@ -2,7 +2,12 @@
 
 ## Installation
 
-### Via Cargo (recommended)
+### Via Homebrew (macOS) (recommended)
+```bash
+brew tap rona-rs/rona && brew install rona
+```
+
+### Via Cargo
 ```bash
 cargo install rona
 ```
