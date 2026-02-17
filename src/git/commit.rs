@@ -61,11 +61,11 @@ pub fn get_current_commit_nb() -> Result<u32> {
     // Try to get HEAD first
     if let Ok(head) = repo.head() {
         // Get the OID of HEAD
-        let head_oid = head
-            .target()
-            .ok_or_else(|| RonaError::Git(GitError::InvalidStatus {
+        let head_oid = head.target().ok_or_else(|| {
+            RonaError::Git(GitError::InvalidStatus {
                 output: "HEAD does not point to a valid commit".to_string(),
-            }))?;
+            })
+        })?;
 
         // Create a revwalk to count commits
         let mut revwalk = repo.revwalk()?;
