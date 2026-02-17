@@ -3,10 +3,22 @@
 //! This module provides organized Git-related functionality for the Rona CLI tool.
 //! It's organized into focused submodules for better maintainability and clear separation of concerns.
 //!
+//! ## git2 vs Command
+//!
+//! Most operations use the **git2** library directly for better error handling, no dependency
+//! on the git CLI being installed, and avoidance of path/shell issues. This includes:
+//! repository discovery, status, staging, branch info, commit creation, and branch switching.
+//!
+//! A few operations still use **`std::process::Command`** where the git2 API is impractical:
+//! - **push** (`remote.rs`): git2's push requires complex `RemoteCallbacks` for SSH/HTTP auth
+//! - **pull** (`branch.rs`): no direct pull API in git2; would need fetch (with auth) + merge
+//! - **merge / rebase** (`branch.rs`): git2's low-level APIs require manual conflict resolution
+//! - **GPG signing checks** (`commit.rs`): runs the `gpg` CLI, not git
+//!
 //! ## Submodules
 //!
 //! - [`repository`] - Core repository operations (finding git root, top level path)
-//! - [`branch`] - Branch operations (current branch, branch name formatting)
+//! - [`branch`] - Branch operations (current branch, branch name formatting, switch, create)
 //! - [`commit`] - Commit operations (commit counting, committing, commit message generation)
 //! - [`status`] - Git status parsing and processing
 //! - [`staging`] - File staging operations with pattern exclusion
@@ -40,15 +52,18 @@ pub use repository::{find_git_root, get_top_level_path, open_repo};
 pub use staging::git_add_with_exclude_patterns;
 pub use status::get_status_files;
 
-/// Handles the output of git commands, providing consistent error handling and success messaging.
+/// Handles the output of `Command`-based git operations (push, pull, merge, rebase).
 ///
-/// This function processes the output of git commands and:
+/// This function processes the output of git CLI commands and:
 /// - Prints success messages when verbose mode is enabled
 /// - Displays command output if present
 /// - Formats and prints error messages with suggestions when commands fail
 ///
+/// Most git operations now use git2 directly. This helper is only needed for
+/// the remaining operations that still shell out to the git CLI.
+///
 /// # Arguments
-/// * `method_name` - The name of the git command being executed (e.g., "commit", "push")
+/// * `method_name` - The name of the git command being executed (e.g., "push", "pull")
 /// * `output` - The `Output` struct containing the command's stdout, stderr, and status
 /// * `verbose` - Whether to print verbose output during the operation
 ///

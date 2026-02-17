@@ -7,7 +7,6 @@
 use chrono::Local;
 use regex::Regex;
 use std::collections::HashMap;
-use std::process::Command;
 
 use crate::errors::{Result, RonaError};
 
@@ -299,32 +298,15 @@ pub fn validate_template(template: &str) -> Result<()> {
     Ok(())
 }
 
-/// Gets the current git author name and email
+/// Gets the current git author name and email from git config via git2.
 fn get_git_author_info() -> Result<(String, String)> {
-    let name_output = Command::new("git")
-        .args(["config", "user.name"])
-        .output()
-        .map_err(|e| {
-            RonaError::Io(std::io::Error::other(format!(
-                "Failed to get git user name: {e}"
-            )))
-        })?;
+    use crate::git::repository::open_repo;
 
-    let email_output = Command::new("git")
-        .args(["config", "user.email"])
-        .output()
-        .map_err(|e| {
-            RonaError::Io(std::io::Error::other(format!(
-                "Failed to get git user email: {e}"
-            )))
-        })?;
+    let repo = open_repo()?;
+    let config = repo.config()?;
 
-    let name = String::from_utf8_lossy(&name_output.stdout)
-        .trim()
-        .to_string();
-    let email = String::from_utf8_lossy(&email_output.stdout)
-        .trim()
-        .to_string();
+    let name = config.get_string("user.name").unwrap_or_default();
+    let email = config.get_string("user.email").unwrap_or_default();
 
     Ok((name, email))
 }

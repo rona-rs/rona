@@ -179,7 +179,10 @@ pub fn format_branch_name(commit_types: &[&str], branch: &str) -> String {
     formatted_branch
 }
 
-/// Switches to a different branch.
+/// Switches to a different branch using git2's checkout API.
+///
+/// Uses safe checkout mode, which refuses to overwrite uncommitted changes
+/// that would be lost during the switch (matching `git switch` behavior).
 ///
 /// # Arguments
 /// * `branch_name` - The name of the branch to switch to
@@ -188,21 +191,42 @@ pub fn format_branch_name(commit_types: &[&str], branch: &str) -> String {
 /// # Errors
 /// * If the branch doesn't exist
 /// * If there are uncommitted changes that would be lost
-/// * If the git switch command fails
+/// * If the checkout operation fails
 pub fn git_switch(branch_name: &str, verbose: bool) -> Result<()> {
     if verbose {
         println!("\nSwitching to branch: {branch_name}");
     }
 
-    let output = Command::new("git")
-        .arg("switch")
-        .arg(branch_name)
-        .output()?;
+    let repo = open_repo()?;
 
-    handle_output("switch", &output, verbose)
+    // Resolve the branch name to a tree-ish object and its reference
+    let (object, reference) = repo.revparse_ext(branch_name).map_err(|_| {
+        RonaError::Git(GitError::CommandFailed {
+            command: "switch".to_string(),
+            output: format!("Branch '{branch_name}' not found"),
+        })
+    })?;
+
+    // Update working directory (safe mode won't overwrite dirty files)
+    repo.checkout_tree(&object, Some(git2::build::CheckoutBuilder::new().safe()))?;
+
+    // Update HEAD to point to the branch
+    let ref_name = reference
+        .and_then(|r| r.name().map(String::from))
+        .unwrap_or_else(|| format!("refs/heads/{branch_name}"));
+    repo.set_head(&ref_name)?;
+
+    if verbose {
+        println!("switch successful!");
+    }
+
+    Ok(())
 }
 
-/// Creates a new branch.
+/// Creates a new branch and switches to it using git2.
+///
+/// This is equivalent to `git switch -c <branch_name>`. It creates a new branch
+/// at the current HEAD commit and checks it out.
 ///
 /// # Arguments
 /// * `branch_name` - The name of the branch to create
@@ -210,19 +234,47 @@ pub fn git_switch(branch_name: &str, verbose: bool) -> Result<()> {
 ///
 /// # Errors
 /// * If a branch with that name already exists
-/// * If the git branch command fails
+/// * If there is no HEAD commit (empty repository)
+/// * If the checkout operation fails
 pub fn git_create_branch(branch_name: &str, verbose: bool) -> Result<()> {
     if verbose {
         println!("\nCreating new branch: {branch_name}");
     }
 
-    let output = Command::new("git")
-        .arg("switch")
-        .arg("-c")
-        .arg(branch_name)
-        .output()?;
+    let repo = open_repo()?;
 
-    handle_output("create branch", &output, verbose)
+    // Get the current HEAD commit to create the branch from
+    let head_commit = repo.head()?.peel_to_commit().map_err(|_| {
+        RonaError::Git(GitError::CommandFailed {
+            command: "create branch".to_string(),
+            output: "Cannot create branch: no commits in repository".to_string(),
+        })
+    })?;
+
+    // Create the new branch pointing at HEAD (false = don't force-overwrite)
+    let branch = repo.branch(branch_name, &head_commit, false)?;
+
+    // Point HEAD to the new branch
+    let ref_name = branch
+        .into_reference()
+        .name()
+        .ok_or_else(|| {
+            RonaError::Git(GitError::CommandFailed {
+                command: "create branch".to_string(),
+                output: "Branch reference has no name".to_string(),
+            })
+        })?
+        .to_string();
+    repo.set_head(&ref_name)?;
+
+    // Update working directory to match
+    repo.checkout_head(Some(git2::build::CheckoutBuilder::new().safe()))?;
+
+    if verbose {
+        println!("create branch successful!");
+    }
+
+    Ok(())
 }
 
 /// Pulls changes from the remote repository.
