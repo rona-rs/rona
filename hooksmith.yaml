@@ -1,7 +1,8 @@
 pre-commit:
   commands:
     - git diff --cached --name-only --diff-filter=ACM | grep '\.rs$' | xargs rustfmt --edition 2024
-    - cargo clippy --workspace --release --all-targets --all-features -- --deny warnings -D warnings -W clippy::correctness -W clippy::suspicious -W clippy::complexity -W clippy::perf -W clippy::style -W clippy::pedantic
+    - git diff --cached --name-only --diff-filter=ACM | grep '\.rs$' | xargs git add
+    - cargo clippy --workspace --release --all-targets --all-features -- --deny warnings -D warnings -W clippy::correctness -W clippy::suspicious -W clippy::complexity -W clippy::perf -W clippy::style -W clippy::pedantic -D clippy::nursery
     - cargo run -- completion bash > completions/rona.bash
     - cargo run -- completion elvish > completions/rona.elv
     - cargo run -- completion fish > completions/rona.fish

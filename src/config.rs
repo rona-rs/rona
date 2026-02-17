@@ -274,9 +274,9 @@ impl Config {
     /// # Returns
     /// * `Result<Config>` - A new Config instance with default settings
     pub fn new() -> Result<Self> {
-        let root = Config::get_config_root()?;
+        let root = Self::get_config_root()?;
         let project_config = ProjectConfig::load().unwrap_or_default();
-        let config = Config {
+        let config = Self {
             root,
             verbose: false,
             dry_run: false,
@@ -297,7 +297,7 @@ impl Config {
         let root = root.into();
         let project_config = ProjectConfig::load().unwrap_or_default();
 
-        Config {
+        Self {
             root,
             verbose: false,
             dry_run: false,
@@ -309,7 +309,7 @@ impl Config {
     ///
     /// # Arguments
     /// * `verbose` - Whether to enable verbose output
-    pub fn set_verbose(&mut self, verbose: bool) {
+    pub const fn set_verbose(&mut self, verbose: bool) {
         self.verbose = verbose;
     }
 
@@ -318,7 +318,7 @@ impl Config {
     ///
     /// # Arguments
     /// * `dry_run` - Whether to enable dry run mode
-    pub fn set_dry_run(&mut self, dry_run: bool) {
+    pub const fn set_dry_run(&mut self, dry_run: bool) {
         self.dry_run = dry_run;
     }
 
@@ -355,7 +355,7 @@ impl Config {
         self.project_config
             .editor
             .clone()
-            .ok_or(ConfigError::InvalidConfig.into())
+            .ok_or_else(|| ConfigError::InvalidConfig.into())
     }
 
     /// Sets the editor in the configuration file.

@@ -306,8 +306,11 @@ fn print_fish_custom_completions() {
 fn handle_add_with_exclude(exclude: &[String], config: &Config) -> Result<()> {
     let patterns: Vec<Pattern> = exclude
         .iter()
-        .map(|p| Pattern::new(p).expect("Invalid glob pattern"))
-        .collect();
+        .map(|p| {
+            Pattern::new(p)
+                .map_err(|e| RonaError::InvalidInput(format!("Invalid glob pattern '{p}': {e}")))
+        })
+        .collect::<Result<Vec<Pattern>>>()?;
 
     git_add_with_exclude_patterns(&patterns, config.verbose, config.dry_run)?;
     Ok(())
@@ -532,12 +535,16 @@ fn handle_editor_mode(config: &Config) -> Result<()> {
     let project_root = get_top_level_path()?;
     let commit_file_path = project_root.join(COMMIT_MESSAGE_FILE_PATH);
 
-    Command::new(editor)
+    Command::new(&editor)
         .arg(&commit_file_path)
         .spawn()
-        .expect("Failed to spawn editor")
+        .map_err(|e| RonaError::CommandFailed {
+            command: format!("Failed to spawn editor '{editor}': {e}"),
+        })?
         .wait()
-        .expect("Failed to wait for editor");
+        .map_err(|e| RonaError::CommandFailed {
+            command: format!("Failed to wait for editor '{editor}': {e}"),
+        })?;
     Ok(())
 }
 

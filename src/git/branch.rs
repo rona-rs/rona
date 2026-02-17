@@ -22,10 +22,9 @@ fn try_get_default_branch() -> Result<String> {
     let repo = open_repo()?;
     let config = repo.config()?;
 
-    match config.get_string("init.defaultBranch") {
-        Ok(branch) => Ok(branch),
-        Err(_) => Ok("main".to_string()), // Default to "main" if not configured
-    }
+    config
+        .get_string("init.defaultBranch")
+        .map_or_else(|_| Ok("main".to_string()), Ok)
 }
 
 /// Gets the current branch name.
@@ -70,10 +69,12 @@ pub fn get_current_branch() -> Result<String> {
                 // Get the branch name
                 let branch_name = reference
                     .shorthand()
-                    .ok_or(RonaError::Git(GitError::CommandFailed {
-                        command: "get current branch".to_string(),
-                        output: "Failed to get branch shorthand name".to_string(),
-                    }))?
+                    .ok_or_else(|| {
+                        RonaError::Git(GitError::CommandFailed {
+                            command: "get current branch".to_string(),
+                            output: "Failed to get branch shorthand name".to_string(),
+                        })
+                    })?
                     .to_string();
                 Ok(branch_name)
             } else {
