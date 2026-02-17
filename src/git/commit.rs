@@ -63,7 +63,7 @@ pub fn get_current_commit_nb() -> Result<u32> {
         // Get the OID of HEAD
         let head_oid = head
             .target()
-            .ok_or(RonaError::Git(GitError::InvalidStatus {
+            .ok_or_else(|| RonaError::Git(GitError::InvalidStatus {
                 output: "HEAD does not point to a valid commit".to_string(),
             }))?;
 

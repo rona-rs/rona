@@ -90,7 +90,7 @@ pub type Result<T> = std::result::Result<T, RonaError>;
 // Manual From implementation for git2::Error
 impl From<git2::Error> for RonaError {
     fn from(err: git2::Error) -> Self {
-        RonaError::Git(GitError::Git2Error(err))
+        Self::Git(GitError::Git2Error(err))
     }
 }
 

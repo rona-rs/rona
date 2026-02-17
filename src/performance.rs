@@ -49,7 +49,7 @@ impl StringBuilder {
     /// let builder = StringBuilder::with_capacity(100);
     /// ```
     #[must_use]
-    pub fn with_capacity(estimated_size: usize) -> Self {
+    pub const fn with_capacity(estimated_size: usize) -> Self {
         Self {
             parts: Vec::new(),
             estimated_size,
