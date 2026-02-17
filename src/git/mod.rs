@@ -74,9 +74,10 @@ pub fn handle_output(method_name: &str, output: &Output, verbose: bool) -> Resul
         println!("\n🚨 Git {method_name} failed:");
         pretty_print_error(&error_message);
 
-        Err(RonaError::Io(std::io::Error::other(format!(
-            "Git {method_name} failed"
-        ))))
+        Err(RonaError::Git(GitError::CommandFailed {
+            command: method_name.to_string(),
+            output: error_message.trim().to_string(),
+        }))
     }
 }
 

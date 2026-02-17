@@ -4,6 +4,8 @@ commit_types = [
     "chore",
     "fix",
     "docs",
+    "refactor",
+    "test",
 ]
 
 # Template for interactive commit message generation

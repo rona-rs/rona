@@ -346,9 +346,9 @@ fn handle_commit(
     let commit_file_path = project_root.join(COMMIT_MESSAGE_FILE_PATH);
 
     if !commit_file_path.exists() {
-        return Err(crate::errors::RonaError::Io(std::io::Error::other(
-            "Commit message file not found. Run 'rona -g' to generate one.",
-        )));
+        return Err(crate::errors::RonaError::Git(
+            crate::errors::GitError::CommitMessageNotFound,
+        ));
     }
 
     let commit_message = read_to_string(&commit_file_path)?;
