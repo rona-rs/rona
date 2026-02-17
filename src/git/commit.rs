@@ -270,9 +270,7 @@ pub fn git_commit(args: &[String], unsigned: bool, verbose: bool, dry_run: bool)
     let commit_file_path = project_root.join(COMMIT_MESSAGE_FILE_PATH);
 
     if !commit_file_path.exists() {
-        return Err(RonaError::Io(std::io::Error::other(
-            "Commit message file not found",
-        )));
+        return Err(RonaError::Git(GitError::CommitMessageNotFound));
     }
 
     let file_content = read_to_string(commit_file_path)?;
