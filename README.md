@@ -1,8 +1,12 @@
-# Rona
-Rona
-<h1 align="center">
-    A powerful CLI tool to streamline your Git workflow
-</h1>
+<pre>
+██▄████   ▄████▄   ██▄████▄   ▄█████▄ 
+██▀      ██▀  ▀██  ██▀   ██   ▀ ▄▄▄██ 
+██       ██    ██  ██    ██  ▄██▀▀▀██ 
+██       ▀██▄▄██▀  ██    ██  ██▄▄▄███ 
+▀▀         ▀▀▀▀    ▀▀    ▀▀   ▀▀▀▀ ▀▀ 
+</pre>
+
+> A powerful CLI tool to streamline your Git workflow
 
 <p align="center">
   <a href="https://crates.io/crates/rona"><img src="https://img.shields.io/crates/v/rona.svg" alt="Crates.io Version"></a>
