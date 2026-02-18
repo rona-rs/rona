@@ -54,8 +54,8 @@ jobs:
           VERSION=${VERSION#v}
           mkdir -p rona/${VERSION}/bin
           cp target/release/rona rona/${VERSION}/bin/
-          tar -czf rona--${VERSION}.x86_64_linux.bottle.tar.gz rona/
-          SHA256=$(shasum -a 256 rona--${VERSION}.x86_64_linux.bottle.tar.gz | cut -d ' ' -f 1)
+          tar -czf rona-${VERSION}.x86_64_linux.bottle.tar.gz rona/
+          SHA256=$(shasum -a 256 rona-${VERSION}.x86_64_linux.bottle.tar.gz | cut -d ' ' -f 1)
           echo "sha256=${SHA256}" >> "$GITHUB_OUTPUT"
 
       - name: Generate Release Body
@@ -69,7 +69,7 @@ jobs:
         uses: ncipollo/release-action@v1
         with:
           tag: ${{ needs.extract-version.outputs.version }}
-          artifacts: "release/rona-*-linux-x86_64.tar.gz,rona--*.x86_64_linux.bottle.tar.gz"
+          artifacts: "release/rona-*-linux-x86_64.tar.gz,rona-*.x86_64_linux.bottle.tar.gz"
           bodyFile: release_body.md
           generateReleaseNotes: true
           allowUpdates: true
@@ -110,15 +110,15 @@ jobs:
           VERSION=${VERSION#v}
           mkdir -p rona/${VERSION}/bin
           cp target/x86_64-apple-darwin/release/rona rona/${VERSION}/bin/
-          tar -czf rona--${VERSION}.sequoia.bottle.tar.gz rona/
-          SHA256=$(shasum -a 256 rona--${VERSION}.sequoia.bottle.tar.gz | cut -d ' ' -f 1)
+          tar -czf rona-${VERSION}.sequoia.bottle.tar.gz rona/
+          SHA256=$(shasum -a 256 rona-${VERSION}.sequoia.bottle.tar.gz | cut -d ' ' -f 1)
           echo "sha256=${SHA256}" >> "$GITHUB_OUTPUT"
 
       - name: Release
         uses: ncipollo/release-action@v1
         with:
           tag: ${{ needs.extract-version.outputs.version }}
-          artifacts: "release/rona-*-macos-x86_64.tar.gz,rona--*.sequoia.bottle.tar.gz"
+          artifacts: "release/rona-*-macos-x86_64.tar.gz,rona-*.sequoia.bottle.tar.gz"
           allowUpdates: true
           updateOnlyUnreleased: false
 
@@ -157,15 +157,15 @@ jobs:
           VERSION=${VERSION#v}
           mkdir -p rona/${VERSION}/bin
           cp target/aarch64-apple-darwin/release/rona rona/${VERSION}/bin/
-          tar -czf rona--${VERSION}.arm64_sequoia.bottle.tar.gz rona/
-          SHA256=$(shasum -a 256 rona--${VERSION}.arm64_sequoia.bottle.tar.gz | cut -d ' ' -f 1)
+          tar -czf rona-${VERSION}.arm64_sequoia.bottle.tar.gz rona/
+          SHA256=$(shasum -a 256 rona-${VERSION}.arm64_sequoia.bottle.tar.gz | cut -d ' ' -f 1)
           echo "sha256=${SHA256}" >> "$GITHUB_OUTPUT"
 
       - name: Release
         uses: ncipollo/release-action@v1
         with:
           tag: ${{ needs.extract-version.outputs.version }}
-          artifacts: "release/rona-*-macos-arm64.tar.gz,rona--*.arm64_sequoia.bottle.tar.gz"
+          artifacts: "release/rona-*-macos-arm64.tar.gz,rona-*.arm64_sequoia.bottle.tar.gz"
           allowUpdates: true
           updateOnlyUnreleased: false
 
