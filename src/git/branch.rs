@@ -7,7 +7,10 @@ use crate::{
     errors::{GitError, Result, RonaError},
     git::{commit::get_current_commit_nb, handle_output, repository::open_repo},
 };
+use indicatif::{ProgressBar, ProgressDrawTarget};
+use std::io::IsTerminal;
 use std::process::Command;
+use std::time::Duration;
 
 /// Attempts to get the default branch name from git config.
 ///
@@ -286,12 +289,27 @@ pub fn git_create_branch(branch_name: &str, verbose: bool) -> Result<()> {
 /// * If there's no remote repository configured
 /// * If the git pull command fails
 /// * If there are merge conflicts
+///
+/// # Panics
+/// * If the internal git pull thread panics (should not happen in normal use)
 pub fn git_pull(verbose: bool) -> Result<()> {
     if verbose {
         println!("\nPulling latest changes...");
     }
 
-    let output = Command::new("git").arg("pull").output()?;
+    let show_spinner = !verbose && std::io::stderr().is_terminal();
+    let output = if show_spinner {
+        let pb = ProgressBar::new_spinner();
+        pb.set_draw_target(ProgressDrawTarget::stderr());
+        pb.set_message("Pulling...");
+        pb.enable_steady_tick(Duration::from_millis(80));
+        let handle = std::thread::spawn(|| Command::new("git").arg("pull").output());
+        let result = handle.join().expect("git pull thread panicked");
+        pb.finish_and_clear();
+        result?
+    } else {
+        Command::new("git").arg("pull").output()?
+    };
 
     handle_output("pull", &output, verbose)
 }
@@ -305,12 +323,30 @@ pub fn git_pull(verbose: bool) -> Result<()> {
 /// # Errors
 /// * If there are merge conflicts
 /// * If the git merge command fails
+///
+/// # Panics
+/// * If the internal git merge thread panics (should not happen in normal use)
 pub fn git_merge(branch_name: &str, verbose: bool) -> Result<()> {
     if verbose {
         println!("\nMerging {branch_name} into current branch...");
     }
 
-    let output = Command::new("git").arg("merge").arg(branch_name).output()?;
+    let show_spinner = !verbose && std::io::stderr().is_terminal();
+    let branch_owned = branch_name.to_string();
+    let output = if show_spinner {
+        let pb = ProgressBar::new_spinner();
+        pb.set_draw_target(ProgressDrawTarget::stderr());
+        pb.set_message(format!("Merging {branch_name}..."));
+        pb.enable_steady_tick(Duration::from_millis(80));
+        let handle = std::thread::spawn(move || {
+            Command::new("git").arg("merge").arg(&branch_owned).output()
+        });
+        let result = handle.join().expect("git merge thread panicked");
+        pb.finish_and_clear();
+        result?
+    } else {
+        Command::new("git").arg("merge").arg(branch_name).output()?
+    };
 
     handle_output("merge", &output, verbose)
 }
@@ -324,15 +360,36 @@ pub fn git_merge(branch_name: &str, verbose: bool) -> Result<()> {
 /// # Errors
 /// * If there are rebase conflicts
 /// * If the git rebase command fails
+///
+/// # Panics
+/// * If the internal git rebase thread panics (should not happen in normal use)
 pub fn git_rebase(branch_name: &str, verbose: bool) -> Result<()> {
     if verbose {
         println!("\nRebasing onto {branch_name}...");
     }
 
-    let output = Command::new("git")
-        .arg("rebase")
-        .arg(branch_name)
-        .output()?;
+    let show_spinner = !verbose && std::io::stderr().is_terminal();
+    let branch_owned = branch_name.to_string();
+    let output = if show_spinner {
+        let pb = ProgressBar::new_spinner();
+        pb.set_draw_target(ProgressDrawTarget::stderr());
+        pb.set_message(format!("Rebasing onto {branch_name}..."));
+        pb.enable_steady_tick(Duration::from_millis(80));
+        let handle = std::thread::spawn(move || {
+            Command::new("git")
+                .arg("rebase")
+                .arg(&branch_owned)
+                .output()
+        });
+        let result = handle.join().expect("git rebase thread panicked");
+        pb.finish_and_clear();
+        result?
+    } else {
+        Command::new("git")
+            .arg("rebase")
+            .arg(branch_name)
+            .output()?
+    };
 
     handle_output("rebase", &output, verbose)
 }

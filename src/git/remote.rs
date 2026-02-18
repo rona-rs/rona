@@ -2,7 +2,12 @@
 //!
 //! Remote repository operations including push functionality with dry-run support.
 
+use std::io::IsTerminal;
 use std::process::Command;
+use std::time::Duration;
+
+use indicatif::ProgressBar;
+use indicatif::ProgressDrawTarget;
 
 use crate::errors::Result;
 
@@ -24,6 +29,9 @@ use crate::errors::Result;
 /// * If not in a git repository
 /// * If no remote repository is configured
 /// * If authentication fails
+///
+/// # Panics
+/// * If the internal git push thread panics (should not happen in normal use)
 ///
 /// # Examples
 ///
@@ -56,9 +64,23 @@ pub fn git_push(args: &[String], verbose: bool, dry_run: bool) -> Result<()> {
         return Ok(());
     }
 
-    // Use the git command for push to properly handle authentication
-    // git2's push API requires complex callback setup for SSH keys, credentials, etc.
-    let output = Command::new("git").arg("push").args(args).output()?;
+    let show_spinner = !verbose && std::io::stderr().is_terminal();
+    let args_vec: Vec<String> = args.to_vec();
+
+    let output = if show_spinner {
+        let pb = ProgressBar::new_spinner();
+        pb.set_draw_target(ProgressDrawTarget::stderr());
+        pb.set_message("Pushing...");
+        pb.enable_steady_tick(Duration::from_millis(80));
+
+        let handle =
+            std::thread::spawn(move || Command::new("git").arg("push").args(&args_vec).output());
+        let result = handle.join().expect("git push thread panicked");
+        pb.finish_and_clear();
+        result?
+    } else {
+        Command::new("git").arg("push").args(args).output()?
+    };
 
     handle_output("push", &output, verbose)
 }

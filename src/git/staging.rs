@@ -2,7 +2,10 @@
 //!
 //! File staging functionality with pattern exclusion and dry-run capabilities.
 
+use std::io::IsTerminal;
+
 use glob::Pattern;
+use indicatif::{ProgressBar, ProgressDrawTarget};
 
 use crate::errors::{Result, RonaError};
 
@@ -193,17 +196,39 @@ pub fn git_add_with_exclude_patterns(
         return Ok(());
     }
 
+    let total_ops = files_to_add.len() + deleted_files.len();
+    let show_progress = total_ops > 15 && std::io::stderr().is_terminal() && !verbose;
+
+    let pb = if show_progress {
+        let bar = ProgressBar::new(total_ops as u64);
+        bar.set_draw_target(ProgressDrawTarget::stderr());
+        bar.set_message("Staging files...");
+        Some(bar)
+    } else {
+        None
+    };
+
     let repo = open_repo()?;
     let mut index = repo.index()?;
 
     // Add files to the index
     for file in &files_to_add {
         index.add_path(std::path::Path::new(file))?;
+        if let Some(ref bar) = pb {
+            bar.inc(1);
+        }
     }
 
     // Add deleted files to the index (this stages the deletion)
     for file in &deleted_files {
         index.remove_path(std::path::Path::new(file))?;
+        if let Some(ref bar) = pb {
+            bar.inc(1);
+        }
+    }
+
+    if let Some(bar) = pb {
+        bar.finish_and_clear();
     }
 
     // Write the index
