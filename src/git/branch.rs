@@ -189,16 +189,14 @@ pub fn format_branch_name(commit_types: &[&str], branch: &str) -> String {
 ///
 /// # Arguments
 /// * `branch_name` - The name of the branch to switch to
-/// * `verbose` - Whether to print verbose output during the operation
 ///
 /// # Errors
 /// * If the branch doesn't exist
 /// * If there are uncommitted changes that would be lost
 /// * If the checkout operation fails
-pub fn git_switch(branch_name: &str, verbose: bool) -> Result<()> {
-    if verbose {
-        println!("\nSwitching to branch: {branch_name}");
-    }
+#[tracing::instrument]
+pub fn git_switch(branch_name: &str) -> Result<()> {
+    tracing::debug!("Switching to branch: {branch_name}");
 
     let repo = open_repo()?;
 
@@ -219,9 +217,7 @@ pub fn git_switch(branch_name: &str, verbose: bool) -> Result<()> {
         .unwrap_or_else(|| format!("refs/heads/{branch_name}"));
     repo.set_head(&ref_name)?;
 
-    if verbose {
-        println!("switch successful!");
-    }
+    tracing::debug!("switch successful!");
 
     Ok(())
 }
@@ -233,16 +229,14 @@ pub fn git_switch(branch_name: &str, verbose: bool) -> Result<()> {
 ///
 /// # Arguments
 /// * `branch_name` - The name of the branch to create
-/// * `verbose` - Whether to print verbose output during the operation
 ///
 /// # Errors
 /// * If a branch with that name already exists
 /// * If there is no HEAD commit (empty repository)
 /// * If the checkout operation fails
-pub fn git_create_branch(branch_name: &str, verbose: bool) -> Result<()> {
-    if verbose {
-        println!("\nCreating new branch: {branch_name}");
-    }
+#[tracing::instrument]
+pub fn git_create_branch(branch_name: &str) -> Result<()> {
+    tracing::debug!("Creating new branch: {branch_name}");
 
     let repo = open_repo()?;
 
@@ -273,9 +267,7 @@ pub fn git_create_branch(branch_name: &str, verbose: bool) -> Result<()> {
     // Update working directory to match
     repo.checkout_head(Some(git2::build::CheckoutBuilder::new().safe()))?;
 
-    if verbose {
-        println!("create branch successful!");
-    }
+    tracing::debug!("create branch successful!");
 
     Ok(())
 }
@@ -293,9 +285,7 @@ pub fn git_create_branch(branch_name: &str, verbose: bool) -> Result<()> {
 /// # Panics
 /// * If the internal git pull thread panics (should not happen in normal use)
 pub fn git_pull(verbose: bool) -> Result<()> {
-    if verbose {
-        println!("\nPulling latest changes...");
-    }
+    tracing::debug!("Pulling latest changes...");
 
     let show_spinner = !verbose && std::io::stderr().is_terminal();
     let output = if show_spinner {
@@ -311,7 +301,7 @@ pub fn git_pull(verbose: bool) -> Result<()> {
         Command::new("git").arg("pull").output()?
     };
 
-    handle_output("pull", &output, verbose)
+    handle_output("pull", &output)
 }
 
 /// Merges a branch into the current branch.
@@ -327,9 +317,7 @@ pub fn git_pull(verbose: bool) -> Result<()> {
 /// # Panics
 /// * If the internal git merge thread panics (should not happen in normal use)
 pub fn git_merge(branch_name: &str, verbose: bool) -> Result<()> {
-    if verbose {
-        println!("\nMerging {branch_name} into current branch...");
-    }
+    tracing::debug!("Merging {branch_name} into current branch...");
 
     let show_spinner = !verbose && std::io::stderr().is_terminal();
     let branch_owned = branch_name.to_string();
@@ -348,7 +336,7 @@ pub fn git_merge(branch_name: &str, verbose: bool) -> Result<()> {
         Command::new("git").arg("merge").arg(branch_name).output()?
     };
 
-    handle_output("merge", &output, verbose)
+    handle_output("merge", &output)
 }
 
 /// Rebases the current branch onto another branch.
@@ -364,9 +352,7 @@ pub fn git_merge(branch_name: &str, verbose: bool) -> Result<()> {
 /// # Panics
 /// * If the internal git rebase thread panics (should not happen in normal use)
 pub fn git_rebase(branch_name: &str, verbose: bool) -> Result<()> {
-    if verbose {
-        println!("\nRebasing onto {branch_name}...");
-    }
+    tracing::debug!("Rebasing onto {branch_name}...");
 
     let show_spinner = !verbose && std::io::stderr().is_terminal();
     let branch_owned = branch_name.to_string();
@@ -391,5 +377,5 @@ pub fn git_rebase(branch_name: &str, verbose: bool) -> Result<()> {
             .output()?
     };
 
-    handle_output("rebase", &output, verbose)
+    handle_output("rebase", &output)
 }

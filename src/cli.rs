@@ -387,7 +387,7 @@ fn handle_commit(
         }
     }
 
-    git_commit(args, unsigned, config.verbose, config.dry_run)?;
+    git_commit(args, unsigned, config.dry_run)?;
 
     if push {
         git_push(args, config.verbose, config.dry_run)?;
@@ -446,7 +446,7 @@ fn handle_generate(interactive: bool, no_commit_number: bool, config: &Config) -
         handle_interactive_mode(commit_type, no_commit_number, config)?;
     } else {
         // In editor mode, generate the template file first, then open editor
-        generate_commit_message(commit_type, config.verbose, no_commit_number)?;
+        generate_commit_message(commit_type, no_commit_number)?;
         handle_editor_mode(config)?;
     }
     Ok(())
@@ -648,18 +648,18 @@ fn handle_sync(
 
     // Create new branch if specified
     if let Some(branch_name) = new_branch {
-        git_create_branch(branch_name, config.verbose)?;
-        git_switch(branch_name, config.verbose)?;
+        git_create_branch(branch_name)?;
+        git_switch(branch_name)?;
     }
 
     let target_branch = new_branch.unwrap_or(&original_branch);
 
     // Switch to source branch and pull
-    git_switch(source_branch, config.verbose)?;
+    git_switch(source_branch)?;
     git_pull(config.verbose)?;
 
     // Switch back to target branch
-    git_switch(target_branch, config.verbose)?;
+    git_switch(target_branch)?;
 
     // Merge or rebase
     if rebase {
@@ -856,6 +856,19 @@ pub fn run() -> Result<()> {
     inquire::set_global_render_config(get_render_config());
 
     let cli = Cli::parse();
+
+    // Initialize structured logging. Respects RUST_LOG env var; falls back to
+    // "debug" when --verbose is set, "warn" otherwise.
+    let log_level = if cli.verbose { "debug" } else { "warn" };
+    let filter = tracing_subscriber::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new(log_level));
+    tracing_subscriber::fmt()
+        .with_env_filter(filter)
+        .with_target(false)
+        .compact()
+        .try_init()
+        .ok();
+
     let mut config = Config::new()?;
 
     // Set the global flags in the config

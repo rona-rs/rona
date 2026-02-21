@@ -212,11 +212,10 @@ fn handle_dry_run_output(
 ///
 /// # Arguments
 /// * `unsigned` - Whether signing should be disabled
-/// * `verbose` - Whether to show verbose output
 ///
 /// # Returns
 /// * `bool` - Whether the commit should be signed
-fn should_sign_commit(unsigned: bool, verbose: bool) -> bool {
+fn should_sign_commit(unsigned: bool) -> bool {
     let gpg_available = is_gpg_signing_available();
     let should_sign = !unsigned && gpg_available;
 
@@ -225,8 +224,8 @@ fn should_sign_commit(unsigned: bool, verbose: bool) -> bool {
             "⚠️  Warning: GPG signing not available or not configured. Creating unsigned commit."
         );
         println!("   To suppress this warning, use the --unsigned (-u) flag.");
-    } else if verbose && should_sign {
-        println!("Commit will be signed with GPG");
+    } else {
+        tracing::debug!(should_sign, "GPG signing decision");
     }
 
     should_sign
@@ -363,12 +362,11 @@ fn update_head_to_commit(repo: &git2::Repository, oid: git2::Oid, message: &str)
 /// git_commit(&[], false, false, true)?;
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
-pub fn git_commit(args: &[String], unsigned: bool, verbose: bool, dry_run: bool) -> Result<()> {
+#[tracing::instrument(skip_all)]
+pub fn git_commit(args: &[String], unsigned: bool, dry_run: bool) -> Result<()> {
     use super::repository::open_repo;
 
-    if verbose {
-        println!("Committing files...");
-    }
+    tracing::debug!(unsigned, dry_run, "Committing files...");
 
     let project_root = get_top_level_path()?;
     let commit_file_path = project_root.join(COMMIT_MESSAGE_FILE_PATH);
@@ -392,7 +390,7 @@ pub fn git_commit(args: &[String], unsigned: bool, verbose: bool, dry_run: bool)
         return Ok(());
     }
 
-    let should_sign = should_sign_commit(unsigned, verbose);
+    let should_sign = should_sign_commit(unsigned);
 
     let repo = open_repo()?;
     let sig = repo.signature()?;
@@ -448,9 +446,7 @@ pub fn git_commit(args: &[String], unsigned: bool, verbose: bool, dry_run: bool)
         repo.commit(Some("HEAD"), &sig, &sig, &file_content, &tree, &parent_refs)?;
     }
 
-    if verbose {
-        println!("commit successful!");
-    }
+    tracing::debug!("commit successful!");
 
     Ok(())
 }
@@ -467,13 +463,9 @@ pub fn git_commit(args: &[String], unsigned: bool, verbose: bool, dry_run: bool)
 ///
 /// # Arguments
 /// * `commit_type` - `&str` - The commit type
-/// * `verbose` - `bool` - Verbose the operation
 /// * `no_commit_number` - `bool` - Whether to include the commit number in the header
-pub fn generate_commit_message(
-    commit_type: &str,
-    verbose: bool,
-    no_commit_number: bool,
-) -> Result<()> {
+#[tracing::instrument(skip_all)]
+pub fn generate_commit_message(commit_type: &str, no_commit_number: bool) -> Result<()> {
     let project_root = get_top_level_path()?;
     let commit_message_path = project_root.join(COMMIT_MESSAGE_FILE_PATH);
 
@@ -513,9 +505,7 @@ pub fn generate_commit_message(
     // Close the file
     commit_file.flush()?;
 
-    if verbose {
-        println!("{} created ✅ ", commit_message_path.display());
-    }
+    tracing::debug!("{} created", commit_message_path.display());
 
     Ok(())
 }
@@ -618,7 +608,7 @@ mod tests {
         std::env::set_current_dir(temp_path).unwrap();
 
         // Test dry run with unsigned flag - should not show warning
-        let result = git_commit(&[], true, false, true);
+        let result = git_commit(&[], true, true);
 
         // Restore original directory
         std::env::set_current_dir(original_dir).unwrap();

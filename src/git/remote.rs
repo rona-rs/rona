@@ -51,10 +51,9 @@ use crate::errors::Result;
 /// git_push(&vec![], false, true)?;
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
+#[tracing::instrument(skip(args))]
 pub fn git_push(args: &[String], verbose: bool, dry_run: bool) -> Result<()> {
-    if verbose {
-        println!("\nPushing...");
-    }
+    tracing::debug!(args = ?args, dry_run, "Running git push");
 
     if dry_run {
         println!("Would push to remote repository");
@@ -82,7 +81,7 @@ pub fn git_push(args: &[String], verbose: bool, dry_run: bool) -> Result<()> {
         Command::new("git").arg("push").args(args).output()?
     };
 
-    handle_output("push", &output, verbose)
+    handle_output("push", &output)
 }
 
 /// Handles the output of git commands, providing consistent error handling and success messaging.
