@@ -143,14 +143,13 @@ fn pattern_matches_file(
 /// * `exclude_patterns` - List of patterns to exclude
 /// * `verbose` - Whether to print verbose output
 /// * `dry_run` - If true, only show what would be added without actually staging files
+#[tracing::instrument(skip(exclude_patterns))]
 pub fn git_add_with_exclude_patterns(
     exclude_patterns: &[Pattern],
     verbose: bool,
     dry_run: bool,
 ) -> Result<()> {
-    if verbose {
-        println!("Adding files...");
-    }
+    tracing::debug!("Adding files...");
 
     // Get current directory relative to repo root
     let current_dir_rel_to_repo = {

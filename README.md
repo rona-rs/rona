@@ -31,6 +31,7 @@ Rona is a command-line interface tool designed to enhance your Git workflow with
 - Multi-shell completion support (Bash, Fish, Zsh, PowerShell)
 - Flexible configuration system (global and project-level)
 - Colored interactive prompts powered by Inquire
+- Structured logging via `tracing` with `RUST_LOG` support
 
 ## Installation
 
@@ -649,6 +650,83 @@ The completions include:
 - All command and flag completions
 - Git status file completion for `add-with-exclude` command (Fish only)
 - Context-aware suggestions
+
+## Debugging and Logging
+
+Rona uses the [`tracing`](https://crates.io/crates/tracing) ecosystem for structured, filterable log output. All internal debug information (git command decisions, signing checks, file staging counts, etc.) is emitted as `debug`-level trace events rather than unconditional `println!` calls.
+
+### Enabling Debug Output
+
+**Via the `--verbose` flag:**
+
+The `-v` / `--verbose` flag sets the minimum log level to `debug`, which reveals all internal operations:
+
+```bash
+rona -v -c           # Show debug traces while committing
+rona -v -c -p        # Show debug traces for commit + push
+rona -v sync         # Show debug traces for branch sync
+```
+
+Example output with `--verbose`:
+
+```
+2024-01-15T14:30:00.123Z DEBUG Committing files... unsigned=false dry_run=false
+2024-01-15T14:30:00.124Z DEBUG GPG signing decision should_sign=true
+2024-01-15T14:30:00.250Z DEBUG commit successful!
+2024-01-15T14:30:00.251Z DEBUG Running git push args=[] dry_run=false
+2024-01-15T14:30:01.100Z DEBUG push successful!
+```
+
+**Via the `RUST_LOG` environment variable:**
+
+`RUST_LOG` takes precedence over `--verbose` and provides fine-grained module-level filtering using the standard [`EnvFilter`](https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html) syntax.
+
+```bash
+# Show all debug output (equivalent to --verbose)
+RUST_LOG=debug rona -c
+
+# Show debug output only for the remote module (push/pull)
+RUST_LOG=rona::git::remote=debug rona -c -p
+
+# Show debug output only for staging
+RUST_LOG=rona::git::staging=debug rona -a "*.rs"
+
+# Show debug output for commit operations
+RUST_LOG=rona::git::commit=debug rona -c
+
+# Show debug output for branch operations
+RUST_LOG=rona::git::branch=debug rona sync
+
+# Combine multiple filters
+RUST_LOG=rona::git::commit=debug,rona::git::remote=debug rona -c -p
+
+# Show trace-level output (most verbose, includes span entry/exit)
+RUST_LOG=trace rona -c
+```
+
+### Log Levels
+
+| Level   | When emitted                                              |
+|---------|-----------------------------------------------------------|
+| `warn`  | Always (default). GPG warnings, missing config, etc.     |
+| `debug` | With `--verbose` or `RUST_LOG=debug`. Internal decisions. |
+| `trace` | Only with `RUST_LOG=trace`. Span entry and exit events.   |
+
+### Available Modules for Filtering
+
+| Module                  | Content                                          |
+|-------------------------|--------------------------------------------------|
+| `rona::git::branch`     | Switch, create branch, pull, merge, rebase       |
+| `rona::git::commit`     | Commit creation, GPG signing detection           |
+| `rona::git::remote`     | Push operations                                  |
+| `rona::git::staging`    | File staging with pattern exclusion              |
+| `rona::git`             | Cross-module git output (handle_output)          |
+
+### How It Works
+
+Rona initializes a `tracing-subscriber` once at startup in `cli::run()`, immediately after parsing CLI arguments. The subscriber respects `RUST_LOG` first; if that variable is absent, it falls back to `"debug"` when `--verbose` is set and `"warn"` otherwise.
+
+Functions that perform meaningful git work are annotated with `#[tracing::instrument]`, so enabling `trace`-level output also records span entry and exit with the relevant parameters automatically.
 
 ## Architecture
 

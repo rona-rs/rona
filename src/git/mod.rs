@@ -55,7 +55,7 @@ pub use status::get_status_files;
 /// Handles the output of `Command`-based git operations (push, pull, merge, rebase).
 ///
 /// This function processes the output of git CLI commands and:
-/// - Prints success messages when verbose mode is enabled
+/// - Emits a debug trace on success
 /// - Displays command output if present
 /// - Formats and prints error messages with suggestions when commands fail
 ///
@@ -65,18 +65,16 @@ pub use status::get_status_files;
 /// # Arguments
 /// * `method_name` - The name of the git command being executed (e.g., "push", "pull")
 /// * `output` - The `Output` struct containing the command's stdout, stderr, and status
-/// * `verbose` - Whether to print verbose output during the operation
 ///
 /// # Returns
 /// * `Result<()>` - `Ok(())` if the command succeeded, `Err(RonaError)` if it failed
 #[doc(hidden)]
-pub fn handle_output(method_name: &str, output: &Output, verbose: bool) -> Result<()> {
+#[tracing::instrument(skip(output))]
+pub fn handle_output(method_name: &str, output: &Output) -> Result<()> {
     use crate::errors::pretty_print_error;
 
     if output.status.success() {
-        if verbose {
-            println!("{method_name} successful!");
-        }
+        tracing::debug!("{method_name} successful!");
 
         if !output.stdout.is_empty() {
             println!("{}", String::from_utf8_lossy(&output.stdout).trim());
