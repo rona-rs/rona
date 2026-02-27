@@ -7,7 +7,7 @@ Thank you for your interest in contributing to Rona! This document provides guid
 ### Prerequisites
 
 - Rust 1.70 or later
-- Git 2.0 or later
+- Git 2.28 or later (`git switch` requires 2.23; `--porcelain=v1` requires 2.11)
 - A text editor or IDE with Rust support
 
 ### Development Setup
@@ -35,7 +35,7 @@ hooksmith install
 ```bash
 cargo build
 cargo test
-cargo clippy --workspace --release --all-targets --all-features -- --deny warnings -D warnings -W clippy::correctness -W clippy::suspicious -W clippy::complexity -W clippy::perf -W clippy::style -W clippy::pedantic
+cargo clippy --workspace --release --all-targets --all-features -- --deny warnings -D warnings -W clippy::correctness -W clippy::suspicious -W clippy::complexity -W clippy::perf -W clippy::style -W clippy::pedantic -D clippy::nursery
 ```
 
 ## Project Structure
@@ -53,7 +53,7 @@ src/
     ├── mod.rs           # Git module exports and shared utilities
     ├── branch.rs        # Branch operations and name formatting
     ├── commit.rs        # Commit counting, committing, and GPG signing
-    ├── status.rs        # Parsing git status output with regex
+    ├── status.rs        # Parsing git status --porcelain=v1 output
     ├── staging.rs       # File staging with glob pattern exclusion
     ├── files.rs         # File creation and .gitignore management
     ├── remote.rs        # Push operations

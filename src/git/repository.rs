@@ -1,31 +1,13 @@
 //! Repository Operations
 //!
-//! Core repository-level operations for Git repositories including repository detection,
-//! path resolution, and basic repository information.
+//! Core repository-level operations for Git repositories including repository detection
+//! and path resolution using the git CLI.
 
-use std::path::PathBuf;
+use std::{path::PathBuf, process::Command};
 
 use crate::errors::{GitError, Result, RonaError};
 
-/// Opens the git repository from the current directory or any parent directory.
-///
-/// This function discovers the git repository by searching upward from the current
-/// working directory. It's a helper function used internally by other repository operations.
-///
-/// # Errors
-///
-/// Returns an error if:
-/// - Not currently in a git repository
-/// - Unable to open the repository
-///
-/// # Returns
-///
-/// A `git2::Repository` object for the discovered repository
-pub fn open_repo() -> Result<git2::Repository> {
-    git2::Repository::discover(".").map_err(|_| RonaError::Git(GitError::RepositoryNotFound))
-}
-
-/// Finds the root directory of the git repository.
+/// Finds the root directory of the git repository (the `.git` directory).
 ///
 /// This function locates the `.git` directory of the current repository.
 /// It works from any subdirectory within a git repository.
@@ -52,10 +34,17 @@ pub fn open_repo() -> Result<git2::Repository> {
 /// }
 /// ```
 pub fn find_git_root() -> Result<PathBuf> {
-    let repo = open_repo()?;
+    let output = Command::new("git")
+        .args(["rev-parse", "--git-dir"])
+        .output()
+        .map_err(RonaError::Io)?;
 
-    repo.path()
-        .to_path_buf()
+    if !output.status.success() {
+        return Err(RonaError::Git(GitError::RepositoryNotFound));
+    }
+
+    let path_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    PathBuf::from(&path_str)
         .canonicalize()
         .map_err(RonaError::Io)
 }
@@ -88,9 +77,15 @@ pub fn find_git_root() -> Result<PathBuf> {
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 pub fn get_top_level_path() -> Result<PathBuf> {
-    let repo = open_repo()?;
+    let output = Command::new("git")
+        .args(["rev-parse", "--show-toplevel"])
+        .output()
+        .map_err(RonaError::Io)?;
 
-    repo.workdir()
-        .ok_or(RonaError::Git(GitError::RepositoryNotFound))
-        .map(std::path::Path::to_path_buf)
+    if !output.status.success() {
+        return Err(RonaError::Git(GitError::RepositoryNotFound));
+    }
+
+    let path_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    Ok(PathBuf::from(path_str))
 }

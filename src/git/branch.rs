@@ -4,8 +4,8 @@
 //! and branch name formatting utilities.
 
 use crate::{
-    errors::{GitError, Result, RonaError},
-    git::{commit::get_current_commit_nb, handle_output, repository::open_repo},
+    errors::{Result, RonaError},
+    git::handle_output,
 };
 use indicatif::{ProgressBar, ProgressDrawTarget};
 use std::io::IsTerminal;
@@ -15,25 +15,33 @@ use std::time::Duration;
 /// Attempts to get the default branch name from git config.
 ///
 /// This helper function tries to retrieve the default branch name using
-/// the git2 config API. If successful, it returns the branch name.
+/// `git config --get init.defaultBranch`. If successful, it returns the branch name.
 /// If the config lookup fails, it returns a default of "main".
 ///
 /// # Returns
 ///
 /// * `Ok(String)` - The default branch name if successfully retrieved, or "main" as fallback
 fn try_get_default_branch() -> Result<String> {
-    let repo = open_repo()?;
-    let config = repo.config()?;
+    let output = Command::new("git")
+        .args(["config", "--get", "init.defaultBranch"])
+        .output()
+        .map_err(RonaError::Io)?;
 
-    config
-        .get_string("init.defaultBranch")
-        .map_or_else(|_| Ok("main".to_string()), Ok)
+    if output.status.success() {
+        let branch = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if !branch.is_empty() {
+            return Ok(branch);
+        }
+    }
+
+    Ok("main".to_string())
 }
 
 /// Gets the current branch name.
 ///
 /// This function returns the name of the currently checked out branch.
 /// For detached HEAD states, it returns "HEAD".
+/// For fresh repositories with no commits, it returns the configured default branch.
 ///
 /// # Errors
 ///
@@ -60,55 +68,37 @@ fn try_get_default_branch() -> Result<String> {
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 pub fn get_current_branch() -> Result<String> {
-    let repo = open_repo()?;
+    // Primary: git symbolic-ref --short HEAD
+    // Works for normal branches and fresh repositories (returns default branch name).
+    // Fails with non-zero exit code for detached HEAD state.
+    let output = Command::new("git")
+        .args(["symbolic-ref", "--short", "HEAD"])
+        .output()
+        .map_err(RonaError::Io)?;
 
-    // Try to get the current branch reference
-    let head = repo.head();
-
-    match head {
-        Ok(reference) => {
-            // Check if HEAD is pointing to a branch
-            if reference.is_branch() {
-                // Get the branch name
-                let branch_name = reference
-                    .shorthand()
-                    .ok_or_else(|| {
-                        RonaError::Git(GitError::CommandFailed {
-                            command: "get current branch".to_string(),
-                            output: "Failed to get branch shorthand name".to_string(),
-                        })
-                    })?
-                    .to_string();
-                Ok(branch_name)
-            } else {
-                // Detached HEAD state
-                Ok("HEAD".to_string())
-            }
-        }
-        Err(_) => {
-            // HEAD doesn't exist, likely a fresh repository with no commits
-            // Check if there are any commits
-            match get_current_commit_nb() {
-                Ok(0) => {
-                    // Fresh repository with no commits
-                    // Try to get the default branch name
-                    try_get_default_branch()
-                }
-                Ok(_) => {
-                    // Repository has commits, something is wrong
-                    Err(RonaError::Git(GitError::CommandFailed {
-                        command: "get current branch".to_string(),
-                        output: "Failed to get HEAD reference".to_string(),
-                    }))
-                }
-                Err(_) => {
-                    // Can't determine commit count, likely a fresh repo with no HEAD
-                    // Try to get the default branch name
-                    try_get_default_branch()
-                }
-            }
+    if output.status.success() {
+        let branch = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if !branch.is_empty() {
+            return Ok(branch);
         }
     }
+
+    // Fallback: git rev-parse --abbrev-ref HEAD
+    // Returns "HEAD" for detached HEAD state.
+    let output = Command::new("git")
+        .args(["rev-parse", "--abbrev-ref", "HEAD"])
+        .output()
+        .map_err(RonaError::Io)?;
+
+    if output.status.success() {
+        let branch = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if !branch.is_empty() {
+            return Ok(branch);
+        }
+    }
+
+    // Last resort: look up the configured default branch name
+    try_get_default_branch()
 }
 
 /// Formats a branch name by removing commit type prefixes.
@@ -182,10 +172,7 @@ pub fn format_branch_name(commit_types: &[&str], branch: &str) -> String {
     formatted_branch
 }
 
-/// Switches to a different branch using git2's checkout API.
-///
-/// Uses safe checkout mode, which refuses to overwrite uncommitted changes
-/// that would be lost during the switch (matching `git switch` behavior).
+/// Switches to a different branch using `git switch`.
 ///
 /// # Arguments
 /// * `branch_name` - The name of the branch to switch to
@@ -193,36 +180,20 @@ pub fn format_branch_name(commit_types: &[&str], branch: &str) -> String {
 /// # Errors
 /// * If the branch doesn't exist
 /// * If there are uncommitted changes that would be lost
-/// * If the checkout operation fails
+/// * If the switch operation fails
 #[tracing::instrument]
 pub fn git_switch(branch_name: &str) -> Result<()> {
     tracing::debug!("Switching to branch: {branch_name}");
 
-    let repo = open_repo()?;
+    let output = Command::new("git")
+        .args(["switch", branch_name])
+        .output()
+        .map_err(RonaError::Io)?;
 
-    // Resolve the branch name to a tree-ish object and its reference
-    let (object, reference) = repo.revparse_ext(branch_name).map_err(|_| {
-        RonaError::Git(GitError::CommandFailed {
-            command: "switch".to_string(),
-            output: format!("Branch '{branch_name}' not found"),
-        })
-    })?;
-
-    // Update working directory (safe mode won't overwrite dirty files)
-    repo.checkout_tree(&object, Some(git2::build::CheckoutBuilder::new().safe()))?;
-
-    // Update HEAD to point to the branch
-    let ref_name = reference
-        .and_then(|r| r.name().map(String::from))
-        .unwrap_or_else(|| format!("refs/heads/{branch_name}"));
-    repo.set_head(&ref_name)?;
-
-    tracing::debug!("switch successful!");
-
-    Ok(())
+    handle_output("switch", &output)
 }
 
-/// Creates a new branch and switches to it using git2.
+/// Creates a new branch and switches to it using `git switch -c`.
 ///
 /// This is equivalent to `git switch -c <branch_name>`. It creates a new branch
 /// at the current HEAD commit and checks it out.
@@ -233,43 +204,17 @@ pub fn git_switch(branch_name: &str) -> Result<()> {
 /// # Errors
 /// * If a branch with that name already exists
 /// * If there is no HEAD commit (empty repository)
-/// * If the checkout operation fails
+/// * If the operation fails
 #[tracing::instrument]
 pub fn git_create_branch(branch_name: &str) -> Result<()> {
     tracing::debug!("Creating new branch: {branch_name}");
 
-    let repo = open_repo()?;
+    let output = Command::new("git")
+        .args(["switch", "-c", branch_name])
+        .output()
+        .map_err(RonaError::Io)?;
 
-    // Get the current HEAD commit to create the branch from
-    let head_commit = repo.head()?.peel_to_commit().map_err(|_| {
-        RonaError::Git(GitError::CommandFailed {
-            command: "create branch".to_string(),
-            output: "Cannot create branch: no commits in repository".to_string(),
-        })
-    })?;
-
-    // Create the new branch pointing at HEAD (false = don't force-overwrite)
-    let branch = repo.branch(branch_name, &head_commit, false)?;
-
-    // Point HEAD to the new branch
-    let ref_name = branch
-        .into_reference()
-        .name()
-        .ok_or_else(|| {
-            RonaError::Git(GitError::CommandFailed {
-                command: "create branch".to_string(),
-                output: "Branch reference has no name".to_string(),
-            })
-        })?
-        .to_string();
-    repo.set_head(&ref_name)?;
-
-    // Update working directory to match
-    repo.checkout_head(Some(git2::build::CheckoutBuilder::new().safe()))?;
-
-    tracing::debug!("create branch successful!");
-
-    Ok(())
+    handle_output("create branch", &output)
 }
 
 /// Pulls changes from the remote repository.

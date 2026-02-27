@@ -671,7 +671,6 @@ Example output with `--verbose`:
 
 ```
 2024-01-15T14:30:00.123Z DEBUG Committing files... unsigned=false dry_run=false
-2024-01-15T14:30:00.124Z DEBUG GPG signing decision should_sign=true
 2024-01-15T14:30:00.250Z DEBUG commit successful!
 2024-01-15T14:30:00.251Z DEBUG Running git push args=[] dry_run=false
 2024-01-15T14:30:01.100Z DEBUG push successful!
@@ -730,31 +729,39 @@ Functions that perform meaningful git work are annotated with `#[tracing::instru
 
 ## Architecture
 
-### Git Operations: git2 vs Command
+### Git Operations
 
-Rona uses the [git2](https://crates.io/crates/git2) library (libgit2 bindings) for most Git operations, providing better error handling, no dependency on the `git` CLI being installed, and avoidance of path/shell issues.
+All git operations in Rona delegate to the `git` CLI binary via `std::process::Command`. This means:
 
-**Operations using git2 (library):**
-- Repository discovery and path resolution
-- Status and file staging
-- Branch info, switching, and creation
-- Commit creation (both unsigned and GPG-signed)
-- Git config reading (author info, signing keys, default branch)
-- Commit counting and history walking
+- All git hooks (`pre-commit`, `commit-msg`, `post-commit`, `pre-push`, etc.) are triggered naturally on every relevant operation.
+- Tools like [hooksmith](https://github.com/rona-rs/hooksmith) work out of the box with `rona -c`.
+- GPG signing is handled by git's own configuration (`commit.gpgsign`, `user.signingkey`). Rona passes `--no-gpg-sign` when `--unsigned` is requested and warns when no signing key is configured.
 
-**Operations using `std::process::Command` (CLI):**
-- **Push** -- git2's push requires complex `RemoteCallbacks` for SSH/HTTP authentication
-- **Pull** -- No direct pull API in git2; would need fetch (with auth callbacks) + merge
-- **Merge / Rebase** -- git2's low-level APIs require manual conflict resolution and commit iteration
-- **GPG signing checks** -- These run the `gpg` binary, not git
+**Operations and their corresponding git commands:**
 
-For GPG-signed commits, Rona uses a hybrid approach: git2's `commit_create_buffer` generates the commit content, the `gpg` CLI signs it, and git2's `commit_signed` stores the result.
+| Rona operation | git command |
+|---|---|
+| Repository detection | `git rev-parse --git-dir` |
+| Repo root path | `git rev-parse --show-toplevel` |
+| Current branch | `git symbolic-ref --short HEAD` |
+| File status | `git status --porcelain=v1` |
+| Stage files | `git add -- <files>` |
+| Unstage deletions | `git rm --cached -- <files>` |
+| Commit | `git commit -F commit_message.md` |
+| Amend | `git commit --amend -F commit_message.md` |
+| Commit count | `git rev-list --count HEAD` |
+| Push | `git push` |
+| Pull | `git pull` |
+| Merge | `git merge <branch>` |
+| Rebase | `git rebase <branch>` |
+| Switch branch | `git switch <branch>` |
+| Create branch | `git switch -c <branch>` |
 
 ## Development
 
 ### Requirements
 - Rust 2021 edition or later
-- Git 2.0 or later (only needed for push, pull, merge, rebase operations)
+- Git 2.28 or later (`git switch` was added in 2.23; `--porcelain=v1` in 2.11)
 
 ### Building from Source
 ```bash

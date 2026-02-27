@@ -2,15 +2,15 @@
 //!
 //! File staging functionality with pattern exclusion and dry-run capabilities.
 
-use std::io::IsTerminal;
+use std::{io::IsTerminal, process::Command, time::Duration};
 
 use glob::Pattern;
 use indicatif::{ProgressBar, ProgressDrawTarget};
 
-use crate::errors::{Result, RonaError};
+use crate::errors::{GitError, Result, RonaError};
 
 use super::{
-    repository::{get_top_level_path, open_repo},
+    repository::get_top_level_path,
     status::{count_renamed_files, get_status_files, process_deleted_files_for_staging},
 };
 
@@ -199,39 +199,61 @@ pub fn git_add_with_exclude_patterns(
     let show_progress = total_ops > 15 && std::io::stderr().is_terminal() && !verbose;
 
     let pb = if show_progress {
-        let bar = ProgressBar::new(total_ops as u64);
+        let bar = ProgressBar::new_spinner();
         bar.set_draw_target(ProgressDrawTarget::stderr());
         bar.set_message("Staging files...");
+        bar.enable_steady_tick(Duration::from_millis(80));
         Some(bar)
     } else {
         None
     };
 
-    let repo = open_repo()?;
-    let mut index = repo.index()?;
+    // Stage files to add as a single batched call
+    if !files_to_add.is_empty() {
+        let output = Command::new("git")
+            .arg("add")
+            .arg("--")
+            .args(&files_to_add)
+            .output()
+            .map_err(RonaError::Io)?;
 
-    // Add files to the index
-    for file in &files_to_add {
-        index.add_path(std::path::Path::new(file))?;
-        if let Some(ref bar) = pb {
-            bar.inc(1);
+        if !output.status.success() {
+            if let Some(bar) = pb {
+                bar.finish_and_clear();
+            }
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(RonaError::Git(GitError::CommandFailed {
+                command: "git add".to_string(),
+                output: stderr.trim().to_string(),
+            }));
         }
     }
 
-    // Add deleted files to the index (this stages the deletion)
-    for file in &deleted_files {
-        index.remove_path(std::path::Path::new(file))?;
-        if let Some(ref bar) = pb {
-            bar.inc(1);
+    // Stage deleted files as a single batched call
+    if !deleted_files.is_empty() {
+        let output = Command::new("git")
+            .arg("rm")
+            .arg("--cached")
+            .arg("--")
+            .args(&deleted_files)
+            .output()
+            .map_err(RonaError::Io)?;
+
+        if !output.status.success() {
+            if let Some(bar) = pb {
+                bar.finish_and_clear();
+            }
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(RonaError::Git(GitError::CommandFailed {
+                command: "git rm".to_string(),
+                output: stderr.trim().to_string(),
+            }));
         }
     }
 
     if let Some(bar) = pb {
         bar.finish_and_clear();
     }
-
-    // Write the index
-    index.write()?;
 
     // Get the new git status after staging to count renamed files
     let renamed_count = count_renamed_files()?;

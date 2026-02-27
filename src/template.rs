@@ -298,15 +298,33 @@ pub fn validate_template(template: &str) -> Result<()> {
     Ok(())
 }
 
-/// Gets the current git author name and email from git config via git2.
+/// Gets the current git author name and email from git config.
 fn get_git_author_info() -> Result<(String, String)> {
-    use crate::git::repository::open_repo;
+    use std::process::Command;
 
-    let repo = open_repo()?;
-    let config = repo.config()?;
+    let name_output = Command::new("git")
+        .args(["config", "--get", "user.name"])
+        .output()
+        .map_err(RonaError::Io)?;
+    let name = if name_output.status.success() {
+        String::from_utf8_lossy(&name_output.stdout)
+            .trim()
+            .to_string()
+    } else {
+        String::new()
+    };
 
-    let name = config.get_string("user.name").unwrap_or_default();
-    let email = config.get_string("user.email").unwrap_or_default();
+    let email_output = Command::new("git")
+        .args(["config", "--get", "user.email"])
+        .output()
+        .map_err(RonaError::Io)?;
+    let email = if email_output.status.success() {
+        String::from_utf8_lossy(&email_output.stdout)
+            .trim()
+            .to_string()
+    } else {
+        String::new()
+    };
 
     Ok((name, email))
 }
