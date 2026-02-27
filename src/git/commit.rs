@@ -386,6 +386,7 @@ mod tests {
     static DIR_MUTEX: Mutex<()> = Mutex::new(());
 
     /// Initializes a minimal git repo in `path` suitable for making real commits.
+    #[cfg(unix)]
     fn init_git_repo(path: &std::path::Path) {
         for args in [
             vec!["init"],
