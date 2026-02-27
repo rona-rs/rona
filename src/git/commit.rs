@@ -7,7 +7,7 @@ use std::{
     fs::{File, OpenOptions, read_to_string, write},
     io::Write,
     path::Path,
-    process::{Command, Stdio},
+    process::Command,
 };
 
 use crate::{
@@ -26,15 +26,14 @@ pub const COMMIT_TYPES: [&str; 4] = ["chore", "feat", "fix", "test"];
 
 /// Gets the total number of commits in the current branch.
 ///
-/// This function counts all commits reachable from the current HEAD,
-/// which represents the total commit count for the current branch.
-/// This is useful for generating commit numbers or tracking repository activity.
+/// This function counts all commits reachable from the current HEAD.
+/// Returns 0 for a fresh repository with no commits.
 ///
 /// # Errors
 ///
 /// Returns an error if:
 /// - Not currently in a git repository
-/// - Unable to walk the commit history
+/// - The commit count output cannot be parsed
 ///
 /// # Returns
 ///
@@ -54,58 +53,33 @@ pub const COMMIT_TYPES: [&str; 4] = ["chore", "feat", "fix", "test"];
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 pub fn get_current_commit_nb() -> Result<u32> {
-    use super::repository::open_repo;
+    let output = Command::new("git")
+        .args(["rev-list", "--count", "HEAD"])
+        .output()
+        .map_err(RonaError::Io)?;
 
-    let repo = open_repo()?;
-
-    // Try to get HEAD first
-    if let Ok(head) = repo.head() {
-        // Get the OID of HEAD
-        let head_oid = head.target().ok_or_else(|| {
-            RonaError::Git(GitError::InvalidStatus {
-                output: "HEAD does not point to a valid commit".to_string(),
-            })
-        })?;
-
-        // Create a revwalk to count commits
-        let mut revwalk = repo.revwalk()?;
-        revwalk.push(head_oid)?;
-
-        // Count the commits
-        let count = revwalk.count();
-        u32::try_from(count).map_err(|_| {
-            RonaError::Git(GitError::InvalidStatus {
-                output: format!("Commit count too large: {count}"),
-            })
-        })
-    } else {
-        // HEAD doesn't exist, likely a fresh repository with no commits
-        // Try counting all commits across all branches
-        let mut revwalk = repo.revwalk()?;
-        revwalk.push_glob("refs/*")?;
-
-        let count = revwalk.count();
-        u32::try_from(count).map_err(|_| {
-            RonaError::Git(GitError::InvalidStatus {
-                output: format!("Commit count too large: {count}"),
-            })
-        })
+    if !output.status.success() {
+        // Likely a fresh repository with no commits
+        return Ok(0);
     }
+
+    let count_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
+
+    count_str.parse::<u32>().map_err(|_| {
+        RonaError::Git(GitError::InvalidStatus {
+            output: format!("Failed to parse commit count: {count_str}"),
+        })
+    })
 }
 
-/// Detects if GPG signing is available and properly configured.
+/// Detects if GPG signing is configured in git.
 ///
-/// This function checks multiple conditions to determine if GPG signing can be used:
-/// 1. Whether a GPG signing key is configured in git
-/// 2. Whether GPG is available on the system
-/// 3. Whether the configured key (if any) exists in the GPG keyring
+/// Checks whether a signing key is configured via `git config --get user.signingkey`.
+/// When this returns `true`, git will attempt to sign commits automatically.
 ///
 /// # Returns
-/// * `true` if GPG signing is available and configured properly
-/// * `false` if GPG signing is not available or not configured
-///
-/// # Panics
-/// This function does not panic. All command executions are handled with proper error checking.
+/// * `true` if a signing key is configured
+/// * `false` if no signing key is configured
 ///
 /// # Examples
 ///
@@ -113,56 +87,20 @@ pub fn get_current_commit_nb() -> Result<u32> {
 /// use rona::git::commit::is_gpg_signing_available;
 ///
 /// if is_gpg_signing_available() {
-///     println!("GPG signing is available");
+///     println!("GPG signing is configured");
 /// } else {
-///     println!("GPG signing is not available, will create unsigned commit");
+///     println!("GPG signing is not configured, will create unsigned commit");
 /// }
 /// ```
 #[must_use]
 pub fn is_gpg_signing_available() -> bool {
-    use super::repository::open_repo;
-
-    // Try to open repository and get config
-    let Ok(repo) = open_repo() else {
-        return false;
-    };
-
-    let Ok(config) = repo.config() else {
-        return false;
-    };
-
-    // Check if git has a signing key configured
-    let signing_key = match config.get_string("user.signingkey") {
-        Ok(key) if !key.is_empty() => key,
-        _ => return false, // No signing key configured
-    };
-
-    // Check if GPG is available and the key exists
-    let gpg_check = Command::new("gpg")
-        .args(["--list-secret-keys", &signing_key])
+    let output = Command::new("git")
+        .args(["config", "--get", "user.signingkey"])
         .output();
 
-    if let Ok(gpg_output) = gpg_check
-        && gpg_output.status.success()
-    {
-        return true;
-    }
-
-    // As a fallback, check if gpg.program is configured and accessible
-    if let Ok(gpg_program) = config.get_string("gpg.program")
-        && !gpg_program.is_empty()
-    {
-        // Test if the configured GPG program is available
-        if let Ok(test_gpg) = Command::new(gpg_program).arg("--version").output() {
-            return test_gpg.status.success();
-        }
-    }
-
-    // Final fallback: check if default 'gpg' command is available
-    if let Ok(default_gpg) = Command::new("gpg").arg("--version").output() {
-        default_gpg.status.success()
-    } else {
-        false
+    match output {
+        Ok(out) => out.status.success() && !String::from_utf8_lossy(&out.stdout).trim().is_empty(),
+        Err(_) => false,
     }
 }
 
@@ -208,140 +146,25 @@ fn handle_dry_run_output(
     }
 }
 
-/// Determines whether GPG signing should be used and displays appropriate warnings.
-///
-/// # Arguments
-/// * `unsigned` - Whether signing should be disabled
-///
-/// # Returns
-/// * `bool` - Whether the commit should be signed
-fn should_sign_commit(unsigned: bool) -> bool {
-    let gpg_available = is_gpg_signing_available();
-    let should_sign = !unsigned && gpg_available;
-
-    if !unsigned && !gpg_available {
-        println!(
-            "⚠️  Warning: GPG signing not available or not configured. Creating unsigned commit."
-        );
-        println!("   To suppress this warning, use the --unsigned (-u) flag.");
-    } else {
-        tracing::debug!(should_sign, "GPG signing decision");
-    }
-
-    should_sign
-}
-
-/// Signs content using GPG and returns the ASCII-armored signature.
-///
-/// Uses the GPG CLI directly since GPG operations are not git operations.
-///
-/// # Arguments
-/// * `content` - The commit content to sign
-/// * `signing_key` - The GPG key ID to sign with
-/// * `gpg_program` - The GPG program to use (e.g., "gpg" or "gpg2")
-///
-/// # Errors
-/// * If the GPG process fails to start or the signing operation fails
-fn sign_with_gpg(content: &str, signing_key: &str, gpg_program: &str) -> Result<String> {
-    let mut child = Command::new(gpg_program)
-        .args(["--status-fd=2", "-bsau", signing_key])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|e| {
-            RonaError::Git(GitError::CommandFailed {
-                command: "gpg sign".to_string(),
-                output: format!("Failed to spawn GPG process: {e}"),
-            })
-        })?;
-
-    if let Some(ref mut stdin) = child.stdin {
-        stdin.write_all(content.as_bytes()).map_err(|e| {
-            RonaError::Git(GitError::CommandFailed {
-                command: "gpg sign".to_string(),
-                output: format!("Failed to write to GPG stdin: {e}"),
-            })
-        })?;
-    }
-
-    // Close stdin so GPG knows input is complete
-    drop(child.stdin.take());
-
-    let output = child.wait_with_output()?;
-
-    if output.status.success() {
-        Ok(String::from_utf8_lossy(&output.stdout).into_owned())
-    } else {
-        Err(RonaError::Git(GitError::CommandFailed {
-            command: "gpg sign".to_string(),
-            output: String::from_utf8_lossy(&output.stderr).trim().to_string(),
-        }))
-    }
-}
-
-/// Updates HEAD to point to a new commit OID.
-///
-/// Handles both normal branches (where HEAD is a symbolic ref) and the initial
-/// commit case (where the target branch ref doesn't exist yet).
-///
-/// # Arguments
-/// * `repo` - The git repository
-/// * `oid` - The OID of the new commit
-/// * `message` - The commit message (used for the reflog entry)
-///
-/// # Errors
-/// * If updating the HEAD reference fails
-fn update_head_to_commit(repo: &git2::Repository, oid: git2::Oid, message: &str) -> Result<()> {
-    let reflog_msg = format!(
-        "commit: {}",
-        message.lines().next().unwrap_or("(no message)")
-    );
-
-    if let Ok(head) = repo.head() {
-        // HEAD points to a valid reference, update it
-        let ref_name = head.name().ok_or_else(|| {
-            RonaError::Git(GitError::CommandFailed {
-                command: "commit".to_string(),
-                output: "HEAD reference has no name".to_string(),
-            })
-        })?;
-        repo.reference(ref_name, oid, true, &reflog_msg)?;
-    } else {
-        // HEAD is unborn (initial commit) -- find the symbolic target to create the branch ref
-        let head_ref = repo.find_reference("HEAD").map_err(|e| {
-            RonaError::Git(GitError::CommandFailed {
-                command: "commit".to_string(),
-                output: format!("Failed to find HEAD reference: {e}"),
-            })
-        })?;
-
-        if let Some(target_name) = head_ref.symbolic_target() {
-            repo.reference(target_name, oid, true, &reflog_msg)?;
-        } else {
-            repo.reference("HEAD", oid, true, &reflog_msg)?;
-        }
-    }
-
-    Ok(())
-}
-
-/// Commits files to the git repository using git2's commit API.
+/// Commits files to the git repository using `git commit -F`.
 ///
 /// This function reads the commit message from `commit_message.md` and creates
-/// a git commit with that message. Supports GPG signing via `commit_create_buffer`
-/// and `commit_signed` when signing is available and not disabled.
+/// a git commit with that message. By using the git CLI directly, all git hooks
+/// (pre-commit, commit-msg, post-commit, etc.) are triggered naturally.
+///
+/// GPG signing is handled by git's own configuration (`commit.gpgsign`,
+/// `user.signingkey`). Pass `unsigned = true` to disable signing via
+/// `--no-gpg-sign`.
 ///
 /// # Arguments
 /// * `args` - Additional arguments (supports `--amend` to amend the previous commit)
-/// * `unsigned` - If true, creates an unsigned commit (skips GPG signing)
-/// * `verbose` - Whether to print verbose output during the operation
+/// * `unsigned` - If true, creates an unsigned commit (passes `--no-gpg-sign`)
 /// * `dry_run` - If true, only show what would be committed without actually committing
 ///
 /// # Errors
 /// * If the commit message file doesn't exist
 /// * If reading the commit message file fails
-/// * If the git2 commit operation fails
+/// * If the git commit command fails
 /// * If not in a git repository
 ///
 /// # Examples
@@ -350,22 +173,20 @@ fn update_head_to_commit(repo: &git2::Repository, oid: git2::Oid, message: &str)
 /// use rona::git::commit::git_commit;
 ///
 /// // Commit with automatic GPG detection (default)
-/// git_commit(&[], false, false, false)?;
+/// git_commit(&[], false, false)?;
 ///
 /// // Unsigned commit
-/// git_commit(&[], true, false, false)?;
+/// git_commit(&[], true, false)?;
 ///
 /// // Amend the previous commit
-/// git_commit(&["--amend".to_string()], false, true, false)?;
+/// git_commit(&["--amend".to_string()], false, false)?;
 ///
 /// // Dry run to preview the commit
-/// git_commit(&[], false, false, true)?;
+/// git_commit(&[], false, true)?;
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 #[tracing::instrument(skip_all)]
 pub fn git_commit(args: &[String], unsigned: bool, dry_run: bool) -> Result<()> {
-    use super::repository::open_repo;
-
     tracing::debug!(unsigned, dry_run, "Committing files...");
 
     let project_root = get_top_level_path()?;
@@ -375,9 +196,9 @@ pub fn git_commit(args: &[String], unsigned: bool, dry_run: bool) -> Result<()> 
         return Err(RonaError::Git(GitError::CommitMessageNotFound));
     }
 
-    let file_content = read_to_string(commit_file_path)?;
+    let file_content = read_to_string(&commit_file_path)?;
 
-    // Detect --amend and filter out flags that don't apply to git2's commit API
+    // Detect --amend and filter out flags that don't apply to git commit -F
     let is_amend = args.iter().any(|arg| arg == "--amend");
     let filtered_args: Vec<String> = args
         .iter()
@@ -390,60 +211,43 @@ pub fn git_commit(args: &[String], unsigned: bool, dry_run: bool) -> Result<()> 
         return Ok(());
     }
 
-    let should_sign = should_sign_commit(unsigned);
+    // Warn if user expects signing but no key is configured
+    if !unsigned && !is_gpg_signing_available() {
+        println!(
+            "⚠️  Warning: GPG signing not available or not configured. Creating unsigned commit."
+        );
+        println!("   To suppress this warning, use the --unsigned (-u) flag.");
+    }
 
-    let repo = open_repo()?;
-    let sig = repo.signature()?;
-    let mut index = repo.index()?;
-    let tree_oid = index.write_tree()?;
-    let tree = repo.find_tree(tree_oid)?;
+    let commit_file_str = commit_file_path.to_str().ok_or_else(|| {
+        RonaError::Git(GitError::CommandFailed {
+            command: "commit".to_string(),
+            output: "Invalid path to commit message file".to_string(),
+        })
+    })?;
 
-    // Determine parent commits
-    let parents = if is_amend {
-        // For amend, use the parents of the current HEAD commit
-        let head_commit = repo.head()?.peel_to_commit()?;
-        (0..head_commit.parent_count())
-            .map(|i| head_commit.parent(i))
-            .collect::<std::result::Result<Vec<_>, _>>()?
-    } else {
-        // For normal commit, HEAD is the parent (if it exists)
-        match repo.head() {
-            Ok(head) => vec![head.peel_to_commit()?],
-            Err(_) => vec![], // Initial commit -- no parents
-        }
-    };
-    let parent_refs: Vec<&git2::Commit<'_>> = parents.iter().collect();
+    let mut cmd = Command::new("git");
+    cmd.arg("commit");
 
-    if should_sign {
-        // Signed commit: create buffer, sign externally with GPG, then store signed commit
-        let config = repo.config()?;
-        let signing_key = config.get_string("user.signingkey").map_err(|_| {
-            RonaError::Git(GitError::CommandFailed {
-                command: "commit".to_string(),
-                output: "No signing key configured in git config (user.signingkey)".to_string(),
-            })
-        })?;
-        let gpg_program = config
-            .get_string("gpg.program")
-            .unwrap_or_else(|_| "gpg".to_string());
+    if is_amend {
+        cmd.arg("--amend");
+    }
 
-        let commit_buf =
-            repo.commit_create_buffer(&sig, &sig, &file_content, &tree, &parent_refs)?;
-        let commit_str = std::str::from_utf8(&commit_buf).map_err(|e| {
-            RonaError::Git(GitError::CommandFailed {
-                command: "commit".to_string(),
-                output: format!("Invalid UTF-8 in commit buffer: {e}"),
-            })
-        })?;
+    if unsigned {
+        cmd.arg("--no-gpg-sign");
+    }
 
-        let gpg_signature = sign_with_gpg(commit_str, &signing_key, &gpg_program)?;
-        let commit_oid = repo.commit_signed(commit_str, &gpg_signature, Some("gpgsig"))?;
+    cmd.args(["-F", commit_file_str]);
 
-        // commit_signed doesn't update refs, so we must update HEAD manually
-        update_head_to_commit(&repo, commit_oid, &file_content)?;
-    } else {
-        // Unsigned commit: git2 updates HEAD automatically via the update_ref parameter
-        repo.commit(Some("HEAD"), &sig, &sig, &file_content, &tree, &parent_refs)?;
+    // Use .status() so git inherits stdin/stdout/stderr.
+    // This allows hooks to run and interactive GPG prompts to work.
+    let status = cmd.status().map_err(RonaError::Io)?;
+
+    if !status.success() {
+        return Err(RonaError::Git(GitError::CommandFailed {
+            command: "commit".to_string(),
+            output: "git commit failed".to_string(),
+        }));
     }
 
     tracing::debug!("commit successful!");
@@ -575,45 +379,159 @@ fn should_ignore_file(file: &str, ignore_patterns: &[String]) -> Result<bool> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+    use tempfile::TempDir;
+
+    // Tests that call set_current_dir must serialize — it is process-global state.
+    static DIR_MUTEX: Mutex<()> = Mutex::new(());
+
+    /// Initializes a minimal git repo in `path` suitable for making real commits.
+    fn init_git_repo(path: &std::path::Path) {
+        for args in [
+            vec!["init"],
+            vec!["config", "user.email", "test@example.com"],
+            vec!["config", "user.name", "Test"],
+        ] {
+            Command::new("git")
+                .current_dir(path)
+                .args(&args)
+                .output()
+                .unwrap();
+        }
+    }
 
     #[test]
     fn test_gpg_signing_available() {
-        // This test verifies that the GPG detection function doesn't panic
-        // The actual result depends on the system's GPG configuration
+        // Verifies the function does not panic; result depends on system config.
         let _result = is_gpg_signing_available();
-        // We don't assert on the result since it depends on system configuration
-        // but we verify the function executes without errors
     }
 
     #[test]
     fn test_git_commit_dry_run_with_unsigned() {
-        use tempfile::TempDir;
+        let _guard = DIR_MUTEX.lock().unwrap();
 
         let temp_dir = TempDir::new().unwrap();
         let temp_path = temp_dir.path();
 
-        // Initialize git repository
         Command::new("git")
             .current_dir(temp_path)
             .arg("init")
             .output()
             .unwrap();
 
-        // Create commit message file
         let commit_msg = "[1] (test on main)\n\n- `test.txt`:\n\n\t\n";
         write(temp_path.join("commit_message.md"), commit_msg).unwrap();
 
-        // Change to temp directory
         let original_dir = std::env::current_dir().unwrap();
         std::env::set_current_dir(temp_path).unwrap();
 
-        // Test dry run with unsigned flag - should not show warning
         let result = git_commit(&[], true, true);
 
-        // Restore original directory
         std::env::set_current_dir(original_dir).unwrap();
 
-        // Should succeed without errors
         assert!(result.is_ok());
+    }
+
+    /// Verifies that a `pre-commit` hook is triggered when `git_commit` runs.
+    ///
+    /// The hook writes a marker file. If it fires, the file exists after the commit.
+    /// This test would have been impossible with git2 (which bypasses all hooks).
+    #[test]
+    #[cfg(unix)]
+    fn test_pre_commit_hook_fires() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let _guard = DIR_MUTEX.lock().unwrap();
+
+        let temp_dir = TempDir::new().unwrap();
+        let temp_path = temp_dir.path();
+
+        init_git_repo(temp_path);
+
+        // Stage a file so the commit has something to record.
+        write(temp_path.join("test.txt"), "hello").unwrap();
+        Command::new("git")
+            .current_dir(temp_path)
+            .args(["add", "test.txt"])
+            .output()
+            .unwrap();
+
+        // Install a pre-commit hook that writes a marker file.
+        let hooks_dir = temp_path.join(".git/hooks");
+        std::fs::create_dir_all(&hooks_dir).unwrap();
+        let hook_path = hooks_dir.join("pre-commit");
+        write(&hook_path, "#!/bin/sh\ntouch HOOK_FIRED\n").unwrap();
+        let mut perms = std::fs::metadata(&hook_path).unwrap().permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(&hook_path, perms).unwrap();
+
+        write(
+            temp_path.join("commit_message.md"),
+            "(test on main)\n\n- `test.txt`:\n\n\t\n",
+        )
+        .unwrap();
+
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(temp_path).unwrap();
+
+        let result = git_commit(&[], true, false);
+
+        std::env::set_current_dir(&original_dir).unwrap();
+
+        assert!(result.is_ok(), "commit failed: {result:?}");
+        assert!(
+            temp_path.join("HOOK_FIRED").exists(),
+            "pre-commit hook did not fire"
+        );
+    }
+
+    /// Verifies that a failing `pre-commit` hook prevents the commit.
+    ///
+    /// A hook that exits non-zero must cause `git_commit` to return an error.
+    #[test]
+    #[cfg(unix)]
+    fn test_pre_commit_hook_blocks_commit() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let _guard = DIR_MUTEX.lock().unwrap();
+
+        let temp_dir = TempDir::new().unwrap();
+        let temp_path = temp_dir.path();
+
+        init_git_repo(temp_path);
+
+        write(temp_path.join("test.txt"), "hello").unwrap();
+        Command::new("git")
+            .current_dir(temp_path)
+            .args(["add", "test.txt"])
+            .output()
+            .unwrap();
+
+        // Install a pre-commit hook that always rejects the commit.
+        let hooks_dir = temp_path.join(".git/hooks");
+        std::fs::create_dir_all(&hooks_dir).unwrap();
+        let hook_path = hooks_dir.join("pre-commit");
+        write(&hook_path, "#!/bin/sh\nexit 1\n").unwrap();
+        let mut perms = std::fs::metadata(&hook_path).unwrap().permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(&hook_path, perms).unwrap();
+
+        write(
+            temp_path.join("commit_message.md"),
+            "(test on main)\n\n- `test.txt`:\n\n\t\n",
+        )
+        .unwrap();
+
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(temp_path).unwrap();
+
+        let result = git_commit(&[], true, false);
+
+        std::env::set_current_dir(&original_dir).unwrap();
+
+        assert!(
+            result.is_err(),
+            "commit should have been blocked by the pre-commit hook"
+        );
     }
 }

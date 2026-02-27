@@ -3,17 +3,12 @@
 //! This module provides organized Git-related functionality for the Rona CLI tool.
 //! It's organized into focused submodules for better maintainability and clear separation of concerns.
 //!
-//! ## git2 vs Command
+//! ## All operations use the git CLI
 //!
-//! Most operations use the **git2** library directly for better error handling, no dependency
-//! on the git CLI being installed, and avoidance of path/shell issues. This includes:
-//! repository discovery, status, staging, branch info, commit creation, and branch switching.
-//!
-//! A few operations still use **`std::process::Command`** where the git2 API is impractical:
-//! - **push** (`remote.rs`): git2's push requires complex `RemoteCallbacks` for SSH/HTTP auth
-//! - **pull** (`branch.rs`): no direct pull API in git2; would need fetch (with auth) + merge
-//! - **merge / rebase** (`branch.rs`): git2's low-level APIs require manual conflict resolution
-//! - **GPG signing checks** (`commit.rs`): runs the `gpg` CLI, not git
+//! All git operations delegate to the `git` CLI binary via `std::process::Command`.
+//! This ensures that all git hooks (pre-commit, commit-msg, post-commit, pre-push, etc.)
+//! are triggered naturally, giving tools like hooksmith full visibility into every
+//! git operation performed by rona.
 //!
 //! ## Submodules
 //!
@@ -48,7 +43,7 @@ pub use commit::{
 };
 pub use files::create_needed_files;
 pub use remote::git_push;
-pub use repository::{find_git_root, get_top_level_path, open_repo};
+pub use repository::{find_git_root, get_top_level_path};
 pub use staging::git_add_with_exclude_patterns;
 pub use status::get_status_files;
 
@@ -58,9 +53,6 @@ pub use status::get_status_files;
 /// - Emits a debug trace on success
 /// - Displays command output if present
 /// - Formats and prints error messages with suggestions when commands fail
-///
-/// Most git operations now use git2 directly. This helper is only needed for
-/// the remaining operations that still shell out to the git CLI.
 ///
 /// # Arguments
 /// * `method_name` - The name of the git command being executed (e.g., "push", "pull")
