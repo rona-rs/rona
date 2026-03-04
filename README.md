@@ -23,7 +23,7 @@ Rona is a command-line interface tool designed to enhance your Git workflow with
 
 ## Features
 
-- Intelligent file staging with pattern exclusion
+- Intelligent file staging with pattern exclusion, working correctly from any subdirectory of the repository
 - Structured commit message generation
 - Streamlined push operations
 - Branch synchronization with merge/rebase support
@@ -348,7 +348,7 @@ rona -c -p
 ## Command Reference
 
 ### `add-with-exclude` (`-a`)
-Add files to Git staging while excluding specified patterns.
+Add files to Git staging while excluding specified patterns. Paths are always resolved relative to the repository root, so the command works correctly regardless of which subdirectory you run it from.
 
 ```bash
 rona add-with-exclude <pattern(s)>
@@ -359,6 +359,10 @@ rona -a <pattern(s)>
 **Example:**
 ```bash
 rona -a "*.rs" "*.tmp"  # Exclude Rust and temporary files
+
+# Works from any subdirectory — no path-doubling issues
+cd packages/preview/my-pkg/1.0
+rona -a  # Correctly stages files relative to the repo root
 ```
 
 ### `commit` (`-c`)

@@ -95,6 +95,147 @@ fn test_add_command() {
         .stdout(predicate::str::contains(r"?? test3.md")); // .md file excluded
 }
 
+/// Tests that `rona -a` correctly stages files when run from a subdirectory.
+///
+/// Regression test for the doubled-path bug: `git status --porcelain=v1` returns
+/// paths relative to the repo root, but if `git add` is invoked without
+/// `.current_dir(repo_root)` it inherits the CWD, causing git to interpret those
+/// paths as relative to the subdirectory and producing a doubled path such as
+/// `packages/preview/pkg/1.0/packages/preview/pkg/1.0/file.png`.
+///
+/// Verifies that:
+/// - Files in a deeply nested subdirectory are staged correctly
+/// - Paths are not doubled in the git index
+/// - `git add` succeeds when the user's CWD is not the repo root
+#[test]
+fn test_add_from_subdirectory() {
+    let temp_dir = TempDir::new().unwrap();
+    let temp_path = temp_dir.path();
+
+    // Initialize git repository at the root
+    Command::new("git")
+        .current_dir(temp_path)
+        .arg("init")
+        .assert()
+        .success();
+
+    // Create a deep nested directory structure (mirrors the reported scenario)
+    let subdir = temp_path.join("packages/preview/clean-cnam-template/1.6.4");
+    fs::create_dir_all(&subdir).unwrap();
+
+    // Create files inside the nested directory
+    fs::write(subdir.join("thumbnail.png"), "fake png").unwrap();
+    fs::write(subdir.join("README.md"), "# readme").unwrap();
+
+    // Run `rona -a` from the subdirectory, not from the repo root
+    let mut cmd = cargo_bin_cmd!("rona");
+    cmd.current_dir(&subdir).arg("-a");
+    cmd.assert().success();
+
+    // Verify files are staged with correct (non-doubled) paths
+    let git_status = Command::new("git")
+        .current_dir(temp_path)
+        .args(["status", "--porcelain"])
+        .output()
+        .unwrap();
+
+    let status_output = String::from_utf8_lossy(&git_status.stdout);
+
+    // Both files must appear as staged (index 'A') with their repo-root-relative paths
+    assert!(
+        status_output.contains("A  packages/preview/clean-cnam-template/1.6.4/thumbnail.png"),
+        "thumbnail.png should be staged with correct path, got:\n{status_output}"
+    );
+    assert!(
+        status_output.contains("A  packages/preview/clean-cnam-template/1.6.4/README.md"),
+        "README.md should be staged with correct path, got:\n{status_output}"
+    );
+
+    // Ensure no doubled path appears in output
+    assert!(
+        !status_output.contains("packages/preview/clean-cnam-template/1.6.4/packages"),
+        "Paths must not be doubled, got:\n{status_output}"
+    );
+}
+
+/// Tests that `rona -a` correctly handles deleted files when run from a subdirectory.
+///
+/// Extends the subdirectory regression test to also cover the `git rm --cached`
+/// path, ensuring deleted files are also resolved relative to the repo root.
+///
+/// Verifies that:
+/// - A file deleted in a subdirectory is staged for deletion correctly
+/// - The deletion is reflected in `git status` without path doubling
+#[test]
+fn test_add_deleted_file_from_subdirectory() {
+    let temp_dir = TempDir::new().unwrap();
+    let temp_path = temp_dir.path();
+
+    // Initialize git repository
+    Command::new("git")
+        .current_dir(temp_path)
+        .arg("init")
+        .assert()
+        .success();
+
+    // Configure git user so we can commit
+    for (key, val) in [
+        ("user.name", "Test"),
+        ("user.email", "t@t.com"),
+        ("commit.gpgsign", "false"),
+    ] {
+        Command::new("git")
+            .current_dir(temp_path)
+            .args(["config", "--local", key, val])
+            .assert()
+            .success();
+    }
+
+    // Create the nested directory and a file, then commit it
+    let subdir = temp_path.join("packages/preview/mypkg/1.0");
+    fs::create_dir_all(&subdir).unwrap();
+    fs::write(subdir.join("asset.png"), "data").unwrap();
+
+    Command::new("git")
+        .current_dir(temp_path)
+        .args(["add", "--all"])
+        .assert()
+        .success();
+
+    Command::new("git")
+        .current_dir(temp_path)
+        .args(["commit", "-m", "initial"])
+        .assert()
+        .success();
+
+    // Delete the file
+    fs::remove_file(subdir.join("asset.png")).unwrap();
+
+    // Run `rona -a` from the subdirectory
+    let mut cmd = cargo_bin_cmd!("rona");
+    cmd.current_dir(&subdir).arg("-a");
+    cmd.assert().success();
+
+    // Deleted file must be staged (index 'D') with correct non-doubled path
+    let git_status = Command::new("git")
+        .current_dir(temp_path)
+        .args(["status", "--porcelain"])
+        .output()
+        .unwrap();
+
+    let status_output = String::from_utf8_lossy(&git_status.stdout);
+
+    assert!(
+        status_output.contains("D  packages/preview/mypkg/1.0/asset.png"),
+        "Deleted file should be staged with correct path, got:\n{status_output}"
+    );
+
+    assert!(
+        !status_output.contains("packages/preview/mypkg/1.0/packages"),
+        "Paths must not be doubled for deleted files, got:\n{status_output}"
+    );
+}
+
 /// Tests the commit functionality.
 ///
 /// Verifies that:
