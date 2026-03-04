@@ -152,10 +152,10 @@ pub fn git_add_with_exclude_patterns(
     tracing::debug!("Adding files...");
 
     // Get current directory relative to repo root
+    let repo_root = get_top_level_path()?;
     let current_dir_rel_to_repo = {
         use std::env;
 
-        let repo_root = get_top_level_path()?;
         let current_dir = env::current_dir().map_err(RonaError::Io)?;
 
         // Calculate relative path from repo root to current directory
@@ -211,6 +211,7 @@ pub fn git_add_with_exclude_patterns(
     // Stage files to add as a single batched call
     if !files_to_add.is_empty() {
         let output = Command::new("git")
+            .current_dir(&repo_root)
             .arg("add")
             .arg("--")
             .args(&files_to_add)
@@ -232,6 +233,7 @@ pub fn git_add_with_exclude_patterns(
     // Stage deleted files as a single batched call
     if !deleted_files.is_empty() {
         let output = Command::new("git")
+            .current_dir(&repo_root)
             .arg("rm")
             .arg("--cached")
             .arg("--")
