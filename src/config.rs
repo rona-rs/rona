@@ -27,7 +27,7 @@ use serde::{Deserialize, Serialize};
 use std::{env, io::Write, path::PathBuf};
 
 use crate::{
-    errors::{ConfigError, GitError, Result},
+    errors::{ConfigError, GitError, Result, RonaError},
     git::get_top_level_path,
     utils::print_error,
 };
@@ -257,6 +257,7 @@ pub fn find_config_sources(from_dir: Option<&std::path::Path>) -> Result<ConfigI
 /// * `root` - The root path for configuration files
 /// * `verbose` - Whether to show detailed output
 /// * `dry_run` - Whether to simulate operations without making changes
+#[derive(Debug)]
 pub struct Config {
     root: PathBuf,
     pub(crate) verbose: bool,
@@ -521,13 +522,11 @@ impl Config {
         if env::var("RONA_TEST_DIR").is_ok() || cfg!(test) {
             Ok(PathBuf::from(CONFIG_FOLDER_NAME))
         } else {
-            let root = env::var("HOME").or_else(|_| env::var("USERPROFILE"));
+            let root = env::var("HOME")
+                .or_else(|_| env::var("USERPROFILE"))
+                .map_err(|_| RonaError::from(GitError::RepositoryNotFound))?;
 
-            if root.is_err() {
-                return Err(GitError::RepositoryNotFound.into());
-            }
-
-            Ok(PathBuf::from(root.unwrap()))
+            Ok(PathBuf::from(root))
         }
     }
 }
@@ -543,62 +542,66 @@ mod tests {
     use tempfile::TempDir;
 
     #[test]
-    fn test_create_config_file() {
-        let temp_dir = TempDir::new().unwrap();
+    fn test_create_config_file() -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let temp_dir = TempDir::new()?;
         let config = Config::with_root(temp_dir.path().to_path_buf());
         let editor = "test_editor";
 
         // Create a new config file with the temp directory as root
-        assert!(config.create_config_file(editor).is_ok());
+        config.create_config_file(editor)?;
 
         // Check the file exists and has the correct content
-        let config_file = config.get_config_file_path().unwrap();
+        let config_file = config.get_config_file_path()?;
         assert!(config_file.exists());
 
-        let content = std::fs::read_to_string(&config_file).unwrap();
+        let content = std::fs::read_to_string(&config_file)?;
         assert_eq!(content, format!("editor = \"{editor}\""));
 
         // Test error when a file already exists
         assert!(config.create_config_file(editor).is_err());
+
+        Ok(())
     }
 
     #[test]
-    fn test_get_editor() {
-        let temp_dir = TempDir::new().unwrap();
+    fn test_get_editor() -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let temp_dir = TempDir::new()?;
         let config = Config::with_root(temp_dir.path().to_path_buf());
         let editor = "nano";
 
         // Create a config file
-        config.create_config_file(editor).unwrap();
+        config.create_config_file(editor)?;
 
         // Test getting the editor
-        let result = config.get_editor();
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap(), editor);
+        let val = config.get_editor()?;
+        assert_eq!(val, editor);
+
+        Ok(())
     }
 
     #[test]
-    fn test_set_editor() {
-        let temp_dir = TempDir::new().unwrap();
+    fn test_set_editor() -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let temp_dir = TempDir::new()?;
         let config = Config::with_root(temp_dir.path().to_path_buf());
         let initial_editor = "vim";
 
         // Create a config file
-        config.create_config_file(initial_editor).unwrap();
+        config.create_config_file(initial_editor)?;
 
         // Test setting a new editor
         let new_editor = "emacs";
-        assert!(config.set_editor(new_editor).is_ok());
+        config.set_editor(new_editor)?;
 
         // Verify the editor was updated
-        let result = config.get_editor();
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap(), new_editor);
+        let val = config.get_editor()?;
+        assert_eq!(val, new_editor);
+
+        Ok(())
     }
 
     #[test]
-    fn test_get_editor_error_no_config() {
-        let temp_dir = TempDir::new().unwrap();
+    fn test_get_editor_error_no_config() -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let temp_dir = TempDir::new()?;
         let config = Config::with_root(temp_dir.path().to_path_buf());
 
         // Don't create a config file, verify we get an error
@@ -606,11 +609,13 @@ mod tests {
             config.get_editor(),
             Err(RonaError::Config(ConfigError::InvalidConfig))
         ));
+
+        Ok(())
     }
 
     #[test]
-    fn test_set_editor_error_no_config() {
-        let temp_dir = TempDir::new().unwrap();
+    fn test_set_editor_error_no_config() -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let temp_dir = TempDir::new()?;
         let config = Config::with_root(temp_dir.path().to_path_buf());
 
         // Don't create a config file, verify we get an error
@@ -618,25 +623,29 @@ mod tests {
             config.set_editor("vim"),
             Err(RonaError::Config(ConfigError::ConfigNotFound))
         ));
+
+        Ok(())
     }
 
     #[test]
-    fn test_malformed_config() {
-        let temp_dir = TempDir::new().unwrap();
+    fn test_malformed_config() -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let temp_dir = TempDir::new()?;
         let config = Config::with_root(temp_dir.path().to_path_buf());
 
         // Create a config directory
-        let config_folder = config.get_config_folder_path().unwrap();
-        std::fs::create_dir_all(&config_folder).unwrap();
+        let config_folder = config.get_config_folder_path()?;
+        std::fs::create_dir_all(&config_folder)?;
 
         // Create a malformed config file
-        let config_file = config.get_config_file_path().unwrap();
-        std::fs::write(&config_file, "editor = missing_quotes").unwrap();
+        let config_file = config.get_config_file_path()?;
+        std::fs::write(&config_file, "editor = missing_quotes")?;
 
         // Test that get_editor returns an error
         assert!(matches!(
             config.get_editor(),
             Err(RonaError::Config(ConfigError::InvalidConfig))
         ));
+
+        Ok(())
     }
 }

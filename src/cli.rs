@@ -498,7 +498,7 @@ fn handle_interactive_mode(
         } else {
             format!(
                 "[{}] ({} on {}) {}",
-                commit_number.unwrap(),
+                commit_number.unwrap_or(0),
                 commit_type,
                 branch_name,
                 message.trim()
@@ -953,601 +953,596 @@ mod cli_tests {
     use super::*;
     use clap::Parser;
 
+    type TestResult = std::result::Result<(), Box<dyn std::error::Error>>;
+
     // === ADD COMMAND TESTS ===
 
     #[test]
-    fn test_add_basic() {
+    fn test_add_basic() -> TestResult {
         let args = vec!["rona", "-a"];
-        let cli = Cli::try_parse_from(args).unwrap();
+        let cli = Cli::try_parse_from(args)?;
 
-        match cli.command {
-            CliCommand::AddWithExclude {
-                to_exclude: exclude,
-                dry_run,
-            } => {
-                assert!(exclude.is_empty());
-                assert!(!dry_run);
-            }
-            _ => panic!("Wrong command parsed"),
-        }
+        let CliCommand::AddWithExclude {
+            to_exclude: exclude,
+            dry_run,
+        } = cli.command
+        else {
+            return Err("Wrong command parsed".into());
+        };
+        assert!(exclude.is_empty());
+        assert!(!dry_run);
+        Ok(())
     }
 
     #[test]
-    fn test_add_single_pattern() {
+    fn test_add_single_pattern() -> TestResult {
         let args = vec!["rona", "-a", "*.txt"];
-        let cli = Cli::try_parse_from(args).unwrap();
+        let cli = Cli::try_parse_from(args)?;
 
-        match cli.command {
-            CliCommand::AddWithExclude {
-                to_exclude: exclude,
-                dry_run,
-            } => {
-                assert_eq!(exclude, vec!["*.txt"]);
-                assert!(!dry_run);
-            }
-            _ => panic!("Wrong command parsed"),
-        }
+        let CliCommand::AddWithExclude {
+            to_exclude: exclude,
+            dry_run,
+        } = cli.command
+        else {
+            return Err("Wrong command parsed".into());
+        };
+        assert_eq!(exclude, vec!["*.txt"]);
+        assert!(!dry_run);
+        Ok(())
     }
 
     #[test]
-    fn test_add_multiple_patterns() {
+    fn test_add_multiple_patterns() -> TestResult {
         let args = vec!["rona", "-a", "*.txt", "*.log", "target/*"];
-        let cli = Cli::try_parse_from(args).unwrap();
+        let cli = Cli::try_parse_from(args)?;
 
-        match cli.command {
-            CliCommand::AddWithExclude {
-                to_exclude: exclude,
-                dry_run,
-            } => {
-                assert_eq!(exclude, vec!["*.txt", "*.log", "target/*"]);
-                assert!(!dry_run);
-            }
-            _ => panic!("Wrong command parsed"),
-        }
+        let CliCommand::AddWithExclude {
+            to_exclude: exclude,
+            dry_run,
+        } = cli.command
+        else {
+            return Err("Wrong command parsed".into());
+        };
+        assert_eq!(exclude, vec!["*.txt", "*.log", "target/*"]);
+        assert!(!dry_run);
+        Ok(())
     }
 
     #[test]
-    fn test_add_with_long_name() {
+    fn test_add_with_long_name() -> TestResult {
         let args = vec!["rona", "add-with-exclude", "*.txt"];
-        let cli = Cli::try_parse_from(args).unwrap();
+        let cli = Cli::try_parse_from(args)?;
 
-        match cli.command {
-            CliCommand::AddWithExclude {
-                to_exclude: exclude,
-                dry_run,
-            } => {
-                assert_eq!(exclude, vec!["*.txt"]);
-                assert!(!dry_run);
-            }
-            _ => panic!("Wrong command parsed"),
-        }
+        let CliCommand::AddWithExclude {
+            to_exclude: exclude,
+            dry_run,
+        } = cli.command
+        else {
+            return Err("Wrong command parsed".into());
+        };
+        assert_eq!(exclude, vec!["*.txt"]);
+        assert!(!dry_run);
+        Ok(())
     }
 
     // === COMMIT COMMAND TESTS ===
 
     #[test]
-    fn test_commit_basic() {
+    fn test_commit_basic() -> TestResult {
         let args = vec!["rona", "-c"];
-        let cli = Cli::try_parse_from(args).unwrap();
+        let cli = Cli::try_parse_from(args)?;
 
-        match cli.command {
-            CliCommand::Commit {
-                args,
-                push,
-                dry_run,
-                unsigned,
-                yes,
-                copy,
-            } => {
-                assert!(!push);
-                assert!(args.is_empty());
-                assert!(!dry_run);
-                assert!(!unsigned);
-                assert!(!yes);
-                assert!(!copy);
-            }
-            _ => panic!("Wrong command parsed"),
-        }
+        let CliCommand::Commit {
+            args,
+            push,
+            dry_run,
+            unsigned,
+            yes,
+            copy,
+        } = cli.command
+        else {
+            return Err("Wrong command parsed".into());
+        };
+        assert!(!push);
+        assert!(args.is_empty());
+        assert!(!dry_run);
+        assert!(!unsigned);
+        assert!(!yes);
+        assert!(!copy);
+        Ok(())
     }
 
     #[test]
-    fn test_commit_with_push_flag() {
+    fn test_commit_with_push_flag() -> TestResult {
         let args = vec!["rona", "-c", "--push"];
-        let cli = Cli::try_parse_from(args).unwrap();
+        let cli = Cli::try_parse_from(args)?;
 
-        match cli.command {
-            CliCommand::Commit {
-                args,
-                push,
-                dry_run,
-                unsigned,
-                yes,
-                copy,
-            } => {
-                assert!(push);
-                assert!(args.is_empty());
-                assert!(!dry_run);
-                assert!(!unsigned);
-                assert!(!yes);
-                assert!(!copy);
-            }
-            _ => panic!("Wrong command parsed"),
-        }
+        let CliCommand::Commit {
+            args,
+            push,
+            dry_run,
+            unsigned,
+            yes,
+            copy,
+        } = cli.command
+        else {
+            return Err("Wrong command parsed".into());
+        };
+        assert!(push);
+        assert!(args.is_empty());
+        assert!(!dry_run);
+        assert!(!unsigned);
+        assert!(!yes);
+        assert!(!copy);
+        Ok(())
     }
 
     #[test]
-    fn test_commit_with_message() {
+    fn test_commit_with_message() -> TestResult {
         let args = vec!["rona", "-c", "Regular commit message"];
-        let cli = Cli::try_parse_from(args).unwrap();
+        let cli = Cli::try_parse_from(args)?;
 
-        match cli.command {
-            CliCommand::Commit {
-                args,
-                push,
-                dry_run,
-                unsigned,
-                yes,
-                copy,
-            } => {
-                assert!(!push);
-                assert_eq!(args, vec!["Regular commit message"]);
-                assert!(!dry_run);
-                assert!(!unsigned);
-                assert!(!yes);
-                assert!(!copy);
-            }
-            _ => panic!("Wrong command parsed"),
-        }
+        let CliCommand::Commit {
+            args,
+            push,
+            dry_run,
+            unsigned,
+            yes,
+            copy,
+        } = cli.command
+        else {
+            return Err("Wrong command parsed".into());
+        };
+        assert!(!push);
+        assert_eq!(args, vec!["Regular commit message"]);
+        assert!(!dry_run);
+        assert!(!unsigned);
+        assert!(!yes);
+        assert!(!copy);
+        Ok(())
     }
 
     #[test]
-    fn test_commit_with_git_flag() {
+    fn test_commit_with_git_flag() -> TestResult {
         let args = vec!["rona", "-c", "--amend"];
-        let cli = Cli::try_parse_from(args).unwrap();
+        let cli = Cli::try_parse_from(args)?;
 
-        match cli.command {
-            CliCommand::Commit {
-                args,
-                push,
-                dry_run,
-                unsigned,
-                yes,
-                copy,
-            } => {
-                assert!(!push);
-                assert_eq!(args, vec!["--amend"]);
-                assert!(!dry_run);
-                assert!(!unsigned);
-                assert!(!yes);
-                assert!(!copy);
-            }
-            _ => panic!("Wrong command parsed"),
-        }
+        let CliCommand::Commit {
+            args,
+            push,
+            dry_run,
+            unsigned,
+            yes,
+            copy,
+        } = cli.command
+        else {
+            return Err("Wrong command parsed".into());
+        };
+        assert!(!push);
+        assert_eq!(args, vec!["--amend"]);
+        assert!(!dry_run);
+        assert!(!unsigned);
+        assert!(!yes);
+        assert!(!copy);
+        Ok(())
     }
 
     #[test]
-    fn test_commit_with_multiple_git_flags() {
+    fn test_commit_with_multiple_git_flags() -> TestResult {
         let args = vec!["rona", "-c", "--amend", "--no-edit"];
-        let cli = Cli::try_parse_from(args).unwrap();
+        let cli = Cli::try_parse_from(args)?;
 
-        match cli.command {
-            CliCommand::Commit {
-                args,
-                push,
-                dry_run,
-                unsigned,
-                yes,
-                copy,
-            } => {
-                assert!(!push);
-                assert_eq!(args, vec!["--amend", "--no-edit"]);
-                assert!(!dry_run);
-                assert!(!unsigned);
-                assert!(!yes);
-                assert!(!copy);
-            }
-            _ => panic!("Wrong command parsed"),
-        }
+        let CliCommand::Commit {
+            args,
+            push,
+            dry_run,
+            unsigned,
+            yes,
+            copy,
+        } = cli.command
+        else {
+            return Err("Wrong command parsed".into());
+        };
+        assert!(!push);
+        assert_eq!(args, vec!["--amend", "--no-edit"]);
+        assert!(!dry_run);
+        assert!(!unsigned);
+        assert!(!yes);
+        assert!(!copy);
+        Ok(())
     }
 
     #[test]
-    fn test_commit_with_push_and_git_flags() {
+    fn test_commit_with_push_and_git_flags() -> TestResult {
         let args = vec!["rona", "-c", "--push", "--amend", "--no-edit"];
-        let cli = Cli::try_parse_from(args).unwrap();
+        let cli = Cli::try_parse_from(args)?;
 
-        match cli.command {
-            CliCommand::Commit {
-                args,
-                push,
-                dry_run,
-                unsigned,
-                yes,
-                copy,
-            } => {
-                assert!(push);
-                assert_eq!(args, vec!["--amend", "--no-edit"]);
-                assert!(!dry_run);
-                assert!(!unsigned);
-                assert!(!yes);
-                assert!(!copy);
-            }
-            _ => panic!("Wrong command parsed"),
-        }
+        let CliCommand::Commit {
+            args,
+            push,
+            dry_run,
+            unsigned,
+            yes,
+            copy,
+        } = cli.command
+        else {
+            return Err("Wrong command parsed".into());
+        };
+        assert!(push);
+        assert_eq!(args, vec!["--amend", "--no-edit"]);
+        assert!(!dry_run);
+        assert!(!unsigned);
+        assert!(!yes);
+        assert!(!copy);
+        Ok(())
     }
 
     #[test]
-    fn test_commit_with_message_and_push() {
+    fn test_commit_with_message_and_push() -> TestResult {
         let args = vec!["rona", "-c", "--push", "Commit message"];
-        let cli = Cli::try_parse_from(args).unwrap();
+        let cli = Cli::try_parse_from(args)?;
 
-        match cli.command {
-            CliCommand::Commit {
-                args,
-                push,
-                dry_run,
-                unsigned,
-                yes,
-                copy,
-            } => {
-                assert!(push);
-                assert_eq!(args, vec!["Commit message"]);
-                assert!(!dry_run);
-                assert!(!unsigned);
-                assert!(!yes);
-                assert!(!copy);
-            }
-            _ => panic!("Wrong command parsed"),
-        }
+        let CliCommand::Commit {
+            args,
+            push,
+            dry_run,
+            unsigned,
+            yes,
+            copy,
+        } = cli.command
+        else {
+            return Err("Wrong command parsed".into());
+        };
+        assert!(push);
+        assert_eq!(args, vec!["Commit message"]);
+        assert!(!dry_run);
+        assert!(!unsigned);
+        assert!(!yes);
+        assert!(!copy);
+        Ok(())
     }
 
     // === PUSH COMMAND TESTS ===
 
     #[test]
-    fn test_push_basic() {
+    fn test_push_basic() -> TestResult {
         let args = vec!["rona", "-p"];
-        let cli = Cli::try_parse_from(args).unwrap();
+        let cli = Cli::try_parse_from(args)?;
 
-        match cli.command {
-            CliCommand::Push { args, dry_run } => {
-                assert!(args.is_empty());
-                assert!(!dry_run);
-            }
-            _ => panic!("Wrong command parsed"),
-        }
+        let CliCommand::Push { args, dry_run } = cli.command else {
+            return Err("Wrong command parsed".into());
+        };
+        assert!(args.is_empty());
+        assert!(!dry_run);
+        Ok(())
     }
 
     #[test]
-    fn test_push_with_force() {
+    fn test_push_with_force() -> TestResult {
         let args = vec!["rona", "-p", "--force"];
-        let cli = Cli::try_parse_from(args).unwrap();
+        let cli = Cli::try_parse_from(args)?;
 
-        match cli.command {
-            CliCommand::Push { args, dry_run } => {
-                assert_eq!(args, vec!["--force"]);
-                assert!(!dry_run);
-            }
-            _ => panic!("Wrong command parsed"),
-        }
+        let CliCommand::Push { args, dry_run } = cli.command else {
+            return Err("Wrong command parsed".into());
+        };
+        assert_eq!(args, vec!["--force"]);
+        assert!(!dry_run);
+        Ok(())
     }
 
     #[test]
-    fn test_push_with_multiple_args() {
+    fn test_push_with_multiple_args() -> TestResult {
         let args = vec!["rona", "-p", "--force", "--set-upstream", "origin", "main"];
-        let cli = Cli::try_parse_from(args).unwrap();
+        let cli = Cli::try_parse_from(args)?;
 
-        match cli.command {
-            CliCommand::Push { args, dry_run } => {
-                assert_eq!(args, vec!["--force", "--set-upstream", "origin", "main"]);
-                assert!(!dry_run);
-            }
-            _ => panic!("Wrong command parsed"),
-        }
+        let CliCommand::Push { args, dry_run } = cli.command else {
+            return Err("Wrong command parsed".into());
+        };
+        assert_eq!(args, vec!["--force", "--set-upstream", "origin", "main"]);
+        assert!(!dry_run);
+        Ok(())
     }
 
     #[test]
-    fn test_push_with_remote_and_branch() {
+    fn test_push_with_remote_and_branch() -> TestResult {
         let args = vec!["rona", "-p", "origin", "feature/branch"];
-        let cli = Cli::try_parse_from(args).unwrap();
+        let cli = Cli::try_parse_from(args)?;
 
-        match cli.command {
-            CliCommand::Push { args, dry_run } => {
-                assert_eq!(args, vec!["origin", "feature/branch"]);
-                assert!(!dry_run);
-            }
-            _ => panic!("Wrong command parsed"),
-        }
+        let CliCommand::Push { args, dry_run } = cli.command else {
+            return Err("Wrong command parsed".into());
+        };
+        assert_eq!(args, vec!["origin", "feature/branch"]);
+        assert!(!dry_run);
+        Ok(())
     }
 
     #[test]
-    fn test_push_with_upstream_tracking() {
+    fn test_push_with_upstream_tracking() -> TestResult {
         let args = vec!["rona", "-p", "-u", "origin", "main"];
-        let cli = Cli::try_parse_from(args).unwrap();
+        let cli = Cli::try_parse_from(args)?;
 
-        match cli.command {
-            CliCommand::Push { args, dry_run } => {
-                assert_eq!(args, vec!["-u", "origin", "main"]);
-                assert!(!dry_run);
-            }
-            _ => panic!("Wrong command parsed"),
-        }
+        let CliCommand::Push { args, dry_run } = cli.command else {
+            return Err("Wrong command parsed".into());
+        };
+        assert_eq!(args, vec!["-u", "origin", "main"]);
+        assert!(!dry_run);
+        Ok(())
     }
 
     // === GENERATE COMMAND TESTS ===
 
     #[test]
-    fn test_generate_command() {
+    fn test_generate_command() -> TestResult {
         let args = vec!["rona", "-g"];
-        let cli = Cli::try_parse_from(args).unwrap();
+        let cli = Cli::try_parse_from(args)?;
 
-        match cli.command {
-            CliCommand::Generate {
-                dry_run,
-                interactive,
-                no_commit_number,
-            } => {
-                assert!(!dry_run);
-                assert!(!interactive);
-                assert!(!no_commit_number);
-            }
-            _ => panic!("Wrong command parsed"),
-        }
+        let CliCommand::Generate {
+            dry_run,
+            interactive,
+            no_commit_number,
+        } = cli.command
+        else {
+            return Err("Wrong command parsed".into());
+        };
+        assert!(!dry_run);
+        assert!(!interactive);
+        assert!(!no_commit_number);
+        Ok(())
     }
 
     #[test]
-    fn test_generate_interactive_command() {
+    fn test_generate_interactive_command() -> TestResult {
         let args = vec!["rona", "-g", "-i"];
-        let cli = Cli::try_parse_from(args).unwrap();
+        let cli = Cli::try_parse_from(args)?;
 
-        match cli.command {
-            CliCommand::Generate {
-                dry_run,
-                interactive,
-                no_commit_number,
-            } => {
-                assert!(!dry_run);
-                assert!(interactive);
-                assert!(!no_commit_number);
-            }
-            _ => panic!("Wrong command parsed"),
-        }
+        let CliCommand::Generate {
+            dry_run,
+            interactive,
+            no_commit_number,
+        } = cli.command
+        else {
+            return Err("Wrong command parsed".into());
+        };
+        assert!(!dry_run);
+        assert!(interactive);
+        assert!(!no_commit_number);
+        Ok(())
     }
 
     #[test]
-    fn test_generate_interactive_long_form() {
+    fn test_generate_interactive_long_form() -> TestResult {
         let args = vec!["rona", "-g", "--interactive"];
-        let cli = Cli::try_parse_from(args).unwrap();
+        let cli = Cli::try_parse_from(args)?;
 
-        match cli.command {
-            CliCommand::Generate {
-                dry_run,
-                interactive,
-                no_commit_number,
-            } => {
-                assert!(!dry_run);
-                assert!(interactive);
-                assert!(!no_commit_number);
-            }
-            _ => panic!("Wrong command parsed"),
-        }
+        let CliCommand::Generate {
+            dry_run,
+            interactive,
+            no_commit_number,
+        } = cli.command
+        else {
+            return Err("Wrong command parsed".into());
+        };
+        assert!(!dry_run);
+        assert!(interactive);
+        assert!(!no_commit_number);
+        Ok(())
     }
 
     #[test]
-    fn test_generate_no_commit_number() {
+    fn test_generate_no_commit_number() -> TestResult {
         let args = vec!["rona", "-g", "-n"];
-        let cli = Cli::try_parse_from(args).unwrap();
+        let cli = Cli::try_parse_from(args)?;
 
-        match cli.command {
-            CliCommand::Generate {
-                dry_run,
-                interactive,
-                no_commit_number,
-            } => {
-                assert!(!dry_run);
-                assert!(!interactive);
-                assert!(no_commit_number);
-            }
-            _ => panic!("Wrong command parsed"),
-        }
+        let CliCommand::Generate {
+            dry_run,
+            interactive,
+            no_commit_number,
+        } = cli.command
+        else {
+            return Err("Wrong command parsed".into());
+        };
+        assert!(!dry_run);
+        assert!(!interactive);
+        assert!(no_commit_number);
+        Ok(())
     }
 
     #[test]
-    fn test_generate_no_commit_number_long_form() {
+    fn test_generate_no_commit_number_long_form() -> TestResult {
         let args = vec!["rona", "-g", "--no-commit-number"];
-        let cli = Cli::try_parse_from(args).unwrap();
+        let cli = Cli::try_parse_from(args)?;
 
-        match cli.command {
-            CliCommand::Generate {
-                dry_run,
-                interactive,
-                no_commit_number,
-            } => {
-                assert!(!dry_run);
-                assert!(!interactive);
-                assert!(no_commit_number);
-            }
-            _ => panic!("Wrong command parsed"),
-        }
+        let CliCommand::Generate {
+            dry_run,
+            interactive,
+            no_commit_number,
+        } = cli.command
+        else {
+            return Err("Wrong command parsed".into());
+        };
+        assert!(!dry_run);
+        assert!(!interactive);
+        assert!(no_commit_number);
+        Ok(())
     }
 
     #[test]
-    fn test_generate_interactive_no_commit_number() {
+    fn test_generate_interactive_no_commit_number() -> TestResult {
         let args = vec!["rona", "-g", "-i", "-n"];
-        let cli = Cli::try_parse_from(args).unwrap();
+        let cli = Cli::try_parse_from(args)?;
 
-        match cli.command {
-            CliCommand::Generate {
-                dry_run,
-                interactive,
-                no_commit_number,
-            } => {
-                assert!(!dry_run);
-                assert!(interactive);
-                assert!(no_commit_number);
-            }
-            _ => panic!("Wrong command parsed"),
-        }
+        let CliCommand::Generate {
+            dry_run,
+            interactive,
+            no_commit_number,
+        } = cli.command
+        else {
+            return Err("Wrong command parsed".into());
+        };
+        assert!(!dry_run);
+        assert!(interactive);
+        assert!(no_commit_number);
+        Ok(())
     }
 
     // === LIST STATUS COMMAND TESTS ===
 
     #[test]
-    fn test_list_status_command() {
+    fn test_list_status_command() -> TestResult {
         let args = vec!["rona", "-l"];
-        let cli = Cli::try_parse_from(args).unwrap();
+        let cli = Cli::try_parse_from(args)?;
 
-        match cli.command {
-            CliCommand::ListStatus => (),
-            _ => panic!("Wrong command parsed"),
-        }
+        let CliCommand::ListStatus = cli.command else {
+            return Err("Wrong command parsed".into());
+        };
+        Ok(())
     }
 
     // === INITIALIZE COMMAND TESTS ===
 
     #[test]
-    fn test_init_default_editor() {
+    fn test_init_default_editor() -> TestResult {
         let args = vec!["rona", "-i"];
-        let cli = Cli::try_parse_from(args).unwrap();
+        let cli = Cli::try_parse_from(args)?;
 
-        match cli.command {
-            CliCommand::Initialize { editor, dry_run } => {
-                assert_eq!(editor, "nano");
-                assert!(!dry_run);
-            }
-            _ => panic!("Wrong command parsed"),
-        }
+        let CliCommand::Initialize { editor, dry_run } = cli.command else {
+            return Err("Wrong command parsed".into());
+        };
+        assert_eq!(editor, "nano");
+        assert!(!dry_run);
+        Ok(())
     }
 
     #[test]
-    fn test_init_custom_editor() {
+    fn test_init_custom_editor() -> TestResult {
         let args = vec!["rona", "-i", "zed"];
-        let cli = Cli::try_parse_from(args).unwrap();
+        let cli = Cli::try_parse_from(args)?;
 
-        match cli.command {
-            CliCommand::Initialize { editor, dry_run } => {
-                assert_eq!(editor, "zed");
-                assert!(!dry_run);
-            }
-            _ => panic!("Wrong command parsed"),
-        }
+        let CliCommand::Initialize { editor, dry_run } = cli.command else {
+            return Err("Wrong command parsed".into());
+        };
+        assert_eq!(editor, "zed");
+        assert!(!dry_run);
+        Ok(())
     }
 
     // === SET EDITOR COMMAND TESTS ===
 
     #[test]
-    fn test_set_editor() {
+    fn test_set_editor() -> TestResult {
         let args = vec!["rona", "-s", "vim"];
-        let cli = Cli::try_parse_from(args).unwrap();
+        let cli = Cli::try_parse_from(args)?;
 
-        match cli.command {
-            CliCommand::Set { editor, dry_run } => {
-                assert_eq!(editor, "vim");
-                assert!(!dry_run);
-            }
-            _ => panic!("Wrong command parsed"),
-        }
+        let CliCommand::Set { editor, dry_run } = cli.command else {
+            return Err("Wrong command parsed".into());
+        };
+        assert_eq!(editor, "vim");
+        assert!(!dry_run);
+        Ok(())
     }
 
     #[test]
-    fn test_set_editor_with_spaces() {
+    fn test_set_editor_with_spaces() -> TestResult {
         let args = vec!["rona", "-s", "\"Visual Studio Code\""];
-        let cli = Cli::try_parse_from(args).unwrap();
+        let cli = Cli::try_parse_from(args)?;
 
-        match cli.command {
-            CliCommand::Set { editor, dry_run } => {
-                assert_eq!(editor, "\"Visual Studio Code\"");
-                assert!(!dry_run);
-            }
-            _ => panic!("Wrong command parsed"),
-        }
+        let CliCommand::Set { editor, dry_run } = cli.command else {
+            return Err("Wrong command parsed".into());
+        };
+        assert_eq!(editor, "\"Visual Studio Code\"");
+        assert!(!dry_run);
+        Ok(())
     }
 
     #[test]
-    fn test_set_editor_with_path() {
+    fn test_set_editor_with_path() -> TestResult {
         let args = vec!["rona", "-s", "/usr/bin/vim"];
-        let cli = Cli::try_parse_from(args).unwrap();
+        let cli = Cli::try_parse_from(args)?;
 
-        match cli.command {
-            CliCommand::Set { editor, dry_run } => {
-                assert_eq!(editor, "/usr/bin/vim");
-                assert!(!dry_run);
-            }
-            _ => panic!("Wrong command parsed"),
-        }
+        let CliCommand::Set { editor, dry_run } = cli.command else {
+            return Err("Wrong command parsed".into());
+        };
+        assert_eq!(editor, "/usr/bin/vim");
+        assert!(!dry_run);
+        Ok(())
     }
 
     // === VERBOSE FLAG TESTS ===
 
     #[test]
-    fn test_verbose_with_commit() {
+    fn test_verbose_with_commit() -> TestResult {
         let args = vec!["rona", "-v", "-c"];
-        let cli = Cli::try_parse_from(args).unwrap();
+        let cli = Cli::try_parse_from(args)?;
         assert!(cli.verbose);
+        Ok(())
     }
 
     #[test]
-    fn test_verbose_with_push() {
+    fn test_verbose_with_push() -> TestResult {
         let args = vec!["rona", "-v", "-p"];
-        let cli = Cli::try_parse_from(args).unwrap();
+        let cli = Cli::try_parse_from(args)?;
         assert!(cli.verbose);
+        Ok(())
     }
 
     #[test]
-    fn test_verbose_long_form() {
+    fn test_verbose_long_form() -> TestResult {
         let args = vec!["rona", "--verbose", "-c"];
-        let cli = Cli::try_parse_from(args).unwrap();
+        let cli = Cli::try_parse_from(args)?;
         assert!(cli.verbose);
+        Ok(())
     }
 
     // === EDGE CASES AND ERROR TESTS ===
 
     #[test]
-    fn test_commit_flag_order_sensitivity() {
+    fn test_commit_flag_order_sensitivity() -> TestResult {
         let args = vec!["rona", "-c", "--amend", "--push"];
-        let cli = Cli::try_parse_from(args).unwrap();
+        let cli = Cli::try_parse_from(args)?;
 
-        match cli.command {
-            CliCommand::Commit {
-                args,
-                push,
-                dry_run,
-                unsigned,
-                yes,
-                copy,
-            } => {
-                assert!(!push); // --push should be treated as git arg
-                assert_eq!(args, vec!["--amend", "--push"]);
-                assert!(!dry_run);
-                assert!(!unsigned);
-                assert!(!yes);
-                assert!(!copy);
-            }
-            _ => panic!("Wrong command parsed"),
-        }
+        let CliCommand::Commit {
+            args,
+            push,
+            dry_run,
+            unsigned,
+            yes,
+            copy,
+        } = cli.command
+        else {
+            return Err("Wrong command parsed".into());
+        };
+        assert!(!push); // --push should be treated as git arg
+        assert_eq!(args, vec!["--amend", "--push"]);
+        assert!(!dry_run);
+        assert!(!unsigned);
+        assert!(!yes);
+        assert!(!copy);
+        Ok(())
     }
 
     #[test]
-    fn test_commit_with_similar_looking_args() {
+    fn test_commit_with_similar_looking_args() -> TestResult {
         let args = vec!["rona", "-c", "--push-to-upstream"];
-        let cli = Cli::try_parse_from(args).unwrap();
+        let cli = Cli::try_parse_from(args)?;
 
-        match cli.command {
-            CliCommand::Commit {
-                args,
-                push,
-                dry_run,
-                unsigned,
-                yes,
-                copy,
-            } => {
-                assert!(!push);
-                assert_eq!(args, vec!["--push-to-upstream"]);
-                assert!(!dry_run);
-                assert!(!unsigned);
-                assert!(!yes);
-                assert!(!copy);
-            }
-            _ => panic!("Wrong command parsed"),
-        }
+        let CliCommand::Commit {
+            args,
+            push,
+            dry_run,
+            unsigned,
+            yes,
+            copy,
+        } = cli.command
+        else {
+            return Err("Wrong command parsed".into());
+        };
+        assert!(!push);
+        assert_eq!(args, vec!["--push-to-upstream"]);
+        assert!(!dry_run);
+        assert!(!unsigned);
+        assert!(!yes);
+        assert!(!copy);
+        Ok(())
     }
 
     #[test]
@@ -1563,289 +1558,285 @@ mod cli_tests {
     }
 
     #[test]
-    fn test_complex_command_combination() {
+    fn test_complex_command_combination() -> TestResult {
         let args = vec!["rona", "-v", "-c", "--push", "--amend", "--no-edit"];
-        let cli = Cli::try_parse_from(args).unwrap();
+        let cli = Cli::try_parse_from(args)?;
 
         assert!(cli.verbose);
-        match cli.command {
-            CliCommand::Commit {
-                args,
-                push,
-                dry_run,
-                unsigned,
-                yes,
-                copy,
-            } => {
-                assert!(push);
-                assert_eq!(args, vec!["--amend", "--no-edit"]);
-                assert!(!dry_run);
-                assert!(!unsigned);
-                assert!(!yes);
-                assert!(!copy);
-            }
-            _ => panic!("Wrong command parsed"),
-        }
+        let CliCommand::Commit {
+            args,
+            push,
+            dry_run,
+            unsigned,
+            yes,
+            copy,
+        } = cli.command
+        else {
+            return Err("Wrong command parsed".into());
+        };
+        assert!(push);
+        assert_eq!(args, vec!["--amend", "--no-edit"]);
+        assert!(!dry_run);
+        assert!(!unsigned);
+        assert!(!yes);
+        assert!(!copy);
+        Ok(())
     }
 
     #[test]
-    fn test_commit_unsigned_short_flag() {
+    fn test_commit_unsigned_short_flag() -> TestResult {
         let args = vec!["rona", "-c", "-u"];
-        let cli = Cli::try_parse_from(args).unwrap();
+        let cli = Cli::try_parse_from(args)?;
 
-        match cli.command {
-            CliCommand::Commit {
-                args,
-                push,
-                dry_run,
-                unsigned,
-                yes,
-                copy,
-            } => {
-                assert!(!push);
-                assert!(args.is_empty());
-                assert!(!dry_run);
-                assert!(unsigned);
-                assert!(!yes);
-                assert!(!copy);
-            }
-            _ => panic!("Wrong command parsed"),
-        }
+        let CliCommand::Commit {
+            args,
+            push,
+            dry_run,
+            unsigned,
+            yes,
+            copy,
+        } = cli.command
+        else {
+            return Err("Wrong command parsed".into());
+        };
+        assert!(!push);
+        assert!(args.is_empty());
+        assert!(!dry_run);
+        assert!(unsigned);
+        assert!(!yes);
+        assert!(!copy);
+        Ok(())
     }
 
     #[test]
-    fn test_commit_unsigned_long_flag() {
+    fn test_commit_unsigned_long_flag() -> TestResult {
         let args = vec!["rona", "-c", "--unsigned"];
-        let cli = Cli::try_parse_from(args).unwrap();
+        let cli = Cli::try_parse_from(args)?;
 
-        match cli.command {
-            CliCommand::Commit {
-                args,
-                push,
-                dry_run,
-                unsigned,
-                yes,
-                copy,
-            } => {
-                assert!(!push);
-                assert!(args.is_empty());
-                assert!(!dry_run);
-                assert!(unsigned);
-                assert!(!yes);
-                assert!(!copy);
-            }
-            _ => panic!("Wrong command parsed"),
-        }
+        let CliCommand::Commit {
+            args,
+            push,
+            dry_run,
+            unsigned,
+            yes,
+            copy,
+        } = cli.command
+        else {
+            return Err("Wrong command parsed".into());
+        };
+        assert!(!push);
+        assert!(args.is_empty());
+        assert!(!dry_run);
+        assert!(unsigned);
+        assert!(!yes);
+        assert!(!copy);
+        Ok(())
     }
 
     #[test]
-    fn test_commit_unsigned_with_push_and_args() {
+    fn test_commit_unsigned_with_push_and_args() -> TestResult {
         let args = vec!["rona", "-c", "-u", "--push", "--amend"];
-        let cli = Cli::try_parse_from(args).unwrap();
+        let cli = Cli::try_parse_from(args)?;
 
-        match cli.command {
-            CliCommand::Commit {
-                args,
-                push,
-                dry_run,
-                unsigned,
-                yes,
-                copy,
-            } => {
-                assert!(push);
-                assert_eq!(args, vec!["--amend"]);
-                assert!(!dry_run);
-                assert!(unsigned);
-                assert!(!yes);
-                assert!(!copy);
-            }
-            _ => panic!("Wrong command parsed"),
-        }
+        let CliCommand::Commit {
+            args,
+            push,
+            dry_run,
+            unsigned,
+            yes,
+            copy,
+        } = cli.command
+        else {
+            return Err("Wrong command parsed".into());
+        };
+        assert!(push);
+        assert_eq!(args, vec!["--amend"]);
+        assert!(!dry_run);
+        assert!(unsigned);
+        assert!(!yes);
+        assert!(!copy);
+        Ok(())
     }
 
     #[test]
-    fn test_commit_dry_run_short_flag() {
+    fn test_commit_dry_run_short_flag() -> TestResult {
         let args = vec!["rona", "-c", "-d"];
-        let cli = Cli::try_parse_from(args).unwrap();
+        let cli = Cli::try_parse_from(args)?;
 
-        match cli.command {
-            CliCommand::Commit {
-                args,
-                push,
-                dry_run,
-                unsigned,
-                yes,
-                copy,
-            } => {
-                assert!(!push);
-                assert!(args.is_empty());
-                assert!(dry_run);
-                assert!(!unsigned);
-                assert!(!yes);
-                assert!(!copy);
-            }
-            _ => panic!("Wrong command parsed"),
-        }
+        let CliCommand::Commit {
+            args,
+            push,
+            dry_run,
+            unsigned,
+            yes,
+            copy,
+        } = cli.command
+        else {
+            return Err("Wrong command parsed".into());
+        };
+        assert!(!push);
+        assert!(args.is_empty());
+        assert!(dry_run);
+        assert!(!unsigned);
+        assert!(!yes);
+        assert!(!copy);
+        Ok(())
     }
 
     #[test]
-    fn test_commit_dry_run_long_flag() {
+    fn test_commit_dry_run_long_flag() -> TestResult {
         let args = vec!["rona", "-c", "--dry-run"];
-        let cli = Cli::try_parse_from(args).unwrap();
+        let cli = Cli::try_parse_from(args)?;
 
-        match cli.command {
-            CliCommand::Commit {
-                args,
-                push,
-                dry_run,
-                unsigned,
-                yes,
-                copy,
-            } => {
-                assert!(!push);
-                assert!(args.is_empty());
-                assert!(dry_run);
-                assert!(!unsigned);
-                assert!(!yes);
-                assert!(!copy);
-            }
-            _ => panic!("Wrong command parsed"),
-        }
+        let CliCommand::Commit {
+            args,
+            push,
+            dry_run,
+            unsigned,
+            yes,
+            copy,
+        } = cli.command
+        else {
+            return Err("Wrong command parsed".into());
+        };
+        assert!(!push);
+        assert!(args.is_empty());
+        assert!(dry_run);
+        assert!(!unsigned);
+        assert!(!yes);
+        assert!(!copy);
+        Ok(())
     }
 
     #[test]
-    fn test_commit_dry_run_with_push() {
+    fn test_commit_dry_run_with_push() -> TestResult {
         let args = vec!["rona", "-c", "-d", "--push"];
-        let cli = Cli::try_parse_from(args).unwrap();
+        let cli = Cli::try_parse_from(args)?;
 
-        match cli.command {
-            CliCommand::Commit {
-                args,
-                push,
-                dry_run,
-                unsigned,
-                yes,
-                copy,
-            } => {
-                assert!(push);
-                assert!(args.is_empty());
-                assert!(dry_run);
-                assert!(!unsigned);
-                assert!(!yes);
-                assert!(!copy);
-            }
-            _ => panic!("Wrong command parsed"),
-        }
+        let CliCommand::Commit {
+            args,
+            push,
+            dry_run,
+            unsigned,
+            yes,
+            copy,
+        } = cli.command
+        else {
+            return Err("Wrong command parsed".into());
+        };
+        assert!(push);
+        assert!(args.is_empty());
+        assert!(dry_run);
+        assert!(!unsigned);
+        assert!(!yes);
+        assert!(!copy);
+        Ok(())
     }
 
     // === COPY FLAG TESTS ===
 
     #[test]
-    fn test_commit_with_copy_flag() {
+    fn test_commit_with_copy_flag() -> TestResult {
         let args = vec!["rona", "-c", "--copy"];
-        let cli = Cli::try_parse_from(args).unwrap();
+        let cli = Cli::try_parse_from(args)?;
 
-        match cli.command {
-            CliCommand::Commit {
-                args,
-                push,
-                dry_run,
-                unsigned,
-                yes,
-                copy,
-            } => {
-                assert!(!push);
-                assert!(args.is_empty());
-                assert!(!dry_run);
-                assert!(!unsigned);
-                assert!(!yes);
-                assert!(copy);
-            }
-            _ => panic!("Wrong command parsed"),
-        }
+        let CliCommand::Commit {
+            args,
+            push,
+            dry_run,
+            unsigned,
+            yes,
+            copy,
+        } = cli.command
+        else {
+            return Err("Wrong command parsed".into());
+        };
+        assert!(!push);
+        assert!(args.is_empty());
+        assert!(!dry_run);
+        assert!(!unsigned);
+        assert!(!yes);
+        assert!(copy);
+        Ok(())
     }
 
     #[test]
-    fn test_commit_copy_flag_with_other_flags() {
+    fn test_commit_copy_flag_with_other_flags() -> TestResult {
         let args = vec!["rona", "-c", "--copy", "--dry-run"];
-        let cli = Cli::try_parse_from(args).unwrap();
+        let cli = Cli::try_parse_from(args)?;
 
-        match cli.command {
-            CliCommand::Commit {
-                args,
-                push,
-                dry_run,
-                unsigned,
-                yes,
-                copy,
-            } => {
-                assert!(!push);
-                assert!(args.is_empty());
-                assert!(dry_run);
-                assert!(!unsigned);
-                assert!(!yes);
-                assert!(copy);
-            }
-            _ => panic!("Wrong command parsed"),
-        }
+        let CliCommand::Commit {
+            args,
+            push,
+            dry_run,
+            unsigned,
+            yes,
+            copy,
+        } = cli.command
+        else {
+            return Err("Wrong command parsed".into());
+        };
+        assert!(!push);
+        assert!(args.is_empty());
+        assert!(dry_run);
+        assert!(!unsigned);
+        assert!(!yes);
+        assert!(copy);
+        Ok(())
     }
 
     // === CONFIG COMMAND TESTS ===
 
     #[test]
-    fn test_config_local() {
+    fn test_config_local() -> TestResult {
         let args = vec!["rona", "config", "local"];
-        let cli = Cli::try_parse_from(args).unwrap();
+        let cli = Cli::try_parse_from(args)?;
 
-        match cli.command {
-            CliCommand::Config { scope, dry_run } => {
-                assert!(matches!(scope, ConfigScope::Local));
-                assert!(!dry_run);
-            }
-            _ => panic!("Wrong command parsed"),
-        }
+        let CliCommand::Config { scope, dry_run } = cli.command else {
+            return Err("Wrong command parsed".into());
+        };
+        assert!(matches!(scope, ConfigScope::Local));
+        assert!(!dry_run);
+        Ok(())
     }
 
     #[test]
-    fn test_config_global() {
+    fn test_config_global() -> TestResult {
         let args = vec!["rona", "config", "global"];
-        let cli = Cli::try_parse_from(args).unwrap();
+        let cli = Cli::try_parse_from(args)?;
 
-        match cli.command {
-            CliCommand::Config { scope, dry_run } => {
-                assert!(matches!(scope, ConfigScope::Global));
-                assert!(!dry_run);
-            }
-            _ => panic!("Wrong command parsed"),
-        }
+        let CliCommand::Config { scope, dry_run } = cli.command else {
+            return Err("Wrong command parsed".into());
+        };
+        assert!(matches!(scope, ConfigScope::Global));
+        assert!(!dry_run);
+        Ok(())
     }
 
     #[test]
-    fn test_config_local_dry_run() {
+    fn test_config_local_dry_run() -> TestResult {
         let args = vec!["rona", "config", "local", "--dry-run"];
-        let cli = Cli::try_parse_from(args).unwrap();
+        let cli = Cli::try_parse_from(args)?;
 
-        match cli.command {
-            CliCommand::Config { scope, dry_run } => {
-                assert!(matches!(scope, ConfigScope::Local));
-                assert!(dry_run);
-            }
-            _ => panic!("Wrong command parsed"),
-        }
+        let CliCommand::Config { scope, dry_run } = cli.command else {
+            return Err("Wrong command parsed".into());
+        };
+        assert!(matches!(scope, ConfigScope::Local));
+        assert!(dry_run);
+        Ok(())
     }
 
     #[test]
-    fn test_config_global_dry_run() {
+    fn test_config_global_dry_run() -> TestResult {
         let args = vec!["rona", "config", "global", "--dry-run"];
-        let cli = Cli::try_parse_from(args).unwrap();
+        let cli = Cli::try_parse_from(args)?;
 
-        match cli.command {
-            CliCommand::Config { scope, dry_run } => {
-                assert!(matches!(scope, ConfigScope::Global));
-                assert!(dry_run);
-            }
-            _ => panic!("Wrong command parsed"),
-        }
+        let CliCommand::Config { scope, dry_run } = cli.command else {
+            return Err("Wrong command parsed".into());
+        };
+        assert!(matches!(scope, ConfigScope::Global));
+        assert!(dry_run);
+        Ok(())
     }
 
     #[test]
@@ -1866,10 +1857,9 @@ mod cli_tests {
     /// REGRESSION TEST: Verify template selection logic for interactive mode with `no_commit_number`
     /// This test verifies that the new conditional block syntax properly handles None `commit_number`
     #[test]
-    fn test_template_selection_with_no_commit_number() {
+    fn test_template_selection_with_no_commit_number() -> TestResult {
         use crate::template::{TemplateVariables, process_template};
 
-        // With the new conditional block syntax, we use ONE template for both cases
         let default_template = "{?commit_number}[{commit_number}] {/commit_number}({commit_type} on {branch_name}) {message}";
 
         let variables = TemplateVariables {
@@ -1883,22 +1873,21 @@ mod cli_tests {
             email: "test@example.com".to_string(),
         };
 
-        let result = process_template(default_template, &variables).unwrap();
+        let result = process_template(default_template, &variables)?;
 
-        // Should NOT contain empty brackets
         assert!(
             !result.contains("[]"),
             "Output should not contain empty brackets: {result}"
         );
         assert_eq!(result, "(docs on main) Update docs");
+        Ok(())
     }
 
     /// REGRESSION TEST: Verify template selection logic for interactive mode WITH `commit_number`
     #[test]
-    fn test_template_selection_with_commit_number() {
+    fn test_template_selection_with_commit_number() -> TestResult {
         use crate::template::{TemplateVariables, process_template};
 
-        // With the new conditional block syntax, we use ONE template for both cases
         let default_template = "{?commit_number}[{commit_number}] {/commit_number}({commit_type} on {branch_name}) {message}";
 
         let variables = TemplateVariables {
@@ -1912,27 +1901,26 @@ mod cli_tests {
             email: "test@example.com".to_string(),
         };
 
-        let result = process_template(default_template, &variables).unwrap();
+        let result = process_template(default_template, &variables)?;
 
-        // Should contain properly formatted commit number
         assert!(
             result.starts_with("[42]"),
             "Output should start with [42]: {result}"
         );
         assert_eq!(result, "[42] (feat on new-feature) Add feature");
+        Ok(())
     }
 
     /// REGRESSION TEST: Verify that using wrong template produces the bug
     /// This documents the original bug and ensures our fix prevents it
     #[test]
-    fn test_bug_using_wrong_template_with_no_commit_number() {
+    fn test_bug_using_wrong_template_with_no_commit_number() -> TestResult {
         use crate::template::{TemplateVariables, process_template};
 
-        // This simulates the BUG: using default template with None commit_number
         let wrong_template = "[{commit_number}] ({commit_type} on {branch_name}) {message}";
 
         let variables = TemplateVariables {
-            commit_number: None, // This is the key: None with a template that expects a number
+            commit_number: None,
             commit_type: "docs".to_string(),
             branch_name: "main".to_string(),
             message: "Update docs".to_string(),
@@ -1942,18 +1930,17 @@ mod cli_tests {
             email: "test@example.com".to_string(),
         };
 
-        let result = process_template(wrong_template, &variables).unwrap();
+        let result = process_template(wrong_template, &variables)?;
 
-        // This DOCUMENTS the bug: using wrong template produces empty brackets
         assert_eq!(result, "[] (docs on main) Update docs");
         assert!(result.contains("[]"), "This demonstrates the bug we fixed");
+        Ok(())
     }
 
     /// REGRESSION TEST: Test fallback format in `handle_interactive_mode`
     /// Verify the fallback format also respects `no_commit_number` flag
     #[test]
     fn test_fallback_format_with_no_commit_number() {
-        // Simulate the fallback format from handle_interactive_mode
         let no_commit_number = true;
         let commit_type = "fix";
         let branch_name = "bugfix";
@@ -1975,7 +1962,6 @@ mod cli_tests {
     /// REGRESSION TEST: Test fallback format with commit number
     #[test]
     fn test_fallback_format_with_commit_number() {
-        // Simulate the fallback format from handle_interactive_mode
         let no_commit_number = false;
         let commit_number = 15u32;
         let commit_type = "feat";
@@ -1998,175 +1984,175 @@ mod cli_tests {
     // === SYNC COMMAND TESTS ===
 
     #[test]
-    fn test_sync_basic() {
+    fn test_sync_basic() -> TestResult {
         let args = vec!["rona", "sync"];
-        let cli = Cli::try_parse_from(args).unwrap();
+        let cli = Cli::try_parse_from(args)?;
 
-        match cli.command {
-            CliCommand::Sync {
-                source_branch,
-                rebase,
-                new_branch,
-                dry_run,
-            } => {
-                assert_eq!(source_branch, "main");
-                assert!(!rebase);
-                assert!(new_branch.is_none());
-                assert!(!dry_run);
-            }
-            _ => panic!("Wrong command parsed"),
-        }
+        let CliCommand::Sync {
+            source_branch,
+            rebase,
+            new_branch,
+            dry_run,
+        } = cli.command
+        else {
+            return Err("Wrong command parsed".into());
+        };
+        assert_eq!(source_branch, "main");
+        assert!(!rebase);
+        assert!(new_branch.is_none());
+        assert!(!dry_run);
+        Ok(())
     }
 
     #[test]
-    fn test_sync_with_branch() {
+    fn test_sync_with_branch() -> TestResult {
         let args = vec!["rona", "sync", "--branch", "develop"];
-        let cli = Cli::try_parse_from(args).unwrap();
+        let cli = Cli::try_parse_from(args)?;
 
-        match cli.command {
-            CliCommand::Sync {
-                source_branch,
-                rebase,
-                new_branch,
-                dry_run,
-            } => {
-                assert_eq!(source_branch, "develop");
-                assert!(!rebase);
-                assert!(new_branch.is_none());
-                assert!(!dry_run);
-            }
-            _ => panic!("Wrong command parsed"),
-        }
+        let CliCommand::Sync {
+            source_branch,
+            rebase,
+            new_branch,
+            dry_run,
+        } = cli.command
+        else {
+            return Err("Wrong command parsed".into());
+        };
+        assert_eq!(source_branch, "develop");
+        assert!(!rebase);
+        assert!(new_branch.is_none());
+        assert!(!dry_run);
+        Ok(())
     }
 
     #[test]
-    fn test_sync_with_branch_short_flag() {
+    fn test_sync_with_branch_short_flag() -> TestResult {
         let args = vec!["rona", "sync", "-b", "staging"];
-        let cli = Cli::try_parse_from(args).unwrap();
+        let cli = Cli::try_parse_from(args)?;
 
-        match cli.command {
-            CliCommand::Sync {
-                source_branch,
-                rebase,
-                new_branch,
-                dry_run,
-            } => {
-                assert_eq!(source_branch, "staging");
-                assert!(!rebase);
-                assert!(new_branch.is_none());
-                assert!(!dry_run);
-            }
-            _ => panic!("Wrong command parsed"),
-        }
+        let CliCommand::Sync {
+            source_branch,
+            rebase,
+            new_branch,
+            dry_run,
+        } = cli.command
+        else {
+            return Err("Wrong command parsed".into());
+        };
+        assert_eq!(source_branch, "staging");
+        assert!(!rebase);
+        assert!(new_branch.is_none());
+        assert!(!dry_run);
+        Ok(())
     }
 
     #[test]
-    fn test_sync_with_rebase() {
+    fn test_sync_with_rebase() -> TestResult {
         let args = vec!["rona", "sync", "--rebase"];
-        let cli = Cli::try_parse_from(args).unwrap();
+        let cli = Cli::try_parse_from(args)?;
 
-        match cli.command {
-            CliCommand::Sync {
-                source_branch,
-                rebase,
-                new_branch,
-                dry_run,
-            } => {
-                assert_eq!(source_branch, "main");
-                assert!(rebase);
-                assert!(new_branch.is_none());
-                assert!(!dry_run);
-            }
-            _ => panic!("Wrong command parsed"),
-        }
+        let CliCommand::Sync {
+            source_branch,
+            rebase,
+            new_branch,
+            dry_run,
+        } = cli.command
+        else {
+            return Err("Wrong command parsed".into());
+        };
+        assert_eq!(source_branch, "main");
+        assert!(rebase);
+        assert!(new_branch.is_none());
+        assert!(!dry_run);
+        Ok(())
     }
 
     #[test]
-    fn test_sync_with_rebase_short_flag() {
+    fn test_sync_with_rebase_short_flag() -> TestResult {
         let args = vec!["rona", "sync", "-r"];
-        let cli = Cli::try_parse_from(args).unwrap();
+        let cli = Cli::try_parse_from(args)?;
 
-        match cli.command {
-            CliCommand::Sync {
-                source_branch,
-                rebase,
-                new_branch,
-                dry_run,
-            } => {
-                assert_eq!(source_branch, "main");
-                assert!(rebase);
-                assert!(new_branch.is_none());
-                assert!(!dry_run);
-            }
-            _ => panic!("Wrong command parsed"),
-        }
+        let CliCommand::Sync {
+            source_branch,
+            rebase,
+            new_branch,
+            dry_run,
+        } = cli.command
+        else {
+            return Err("Wrong command parsed".into());
+        };
+        assert_eq!(source_branch, "main");
+        assert!(rebase);
+        assert!(new_branch.is_none());
+        assert!(!dry_run);
+        Ok(())
     }
 
     #[test]
-    fn test_sync_with_new_branch() {
+    fn test_sync_with_new_branch() -> TestResult {
         let args = vec!["rona", "sync", "--new-branch", "feature/new-feature"];
-        let cli = Cli::try_parse_from(args).unwrap();
+        let cli = Cli::try_parse_from(args)?;
 
-        match cli.command {
-            CliCommand::Sync {
-                source_branch,
-                rebase,
-                new_branch,
-                dry_run,
-            } => {
-                assert_eq!(source_branch, "main");
-                assert!(!rebase);
-                assert_eq!(new_branch, Some("feature/new-feature".to_string()));
-                assert!(!dry_run);
-            }
-            _ => panic!("Wrong command parsed"),
-        }
+        let CliCommand::Sync {
+            source_branch,
+            rebase,
+            new_branch,
+            dry_run,
+        } = cli.command
+        else {
+            return Err("Wrong command parsed".into());
+        };
+        assert_eq!(source_branch, "main");
+        assert!(!rebase);
+        assert_eq!(new_branch, Some("feature/new-feature".to_string()));
+        assert!(!dry_run);
+        Ok(())
     }
 
     #[test]
-    fn test_sync_with_new_branch_short_flag() {
+    fn test_sync_with_new_branch_short_flag() -> TestResult {
         let args = vec!["rona", "sync", "-n", "bugfix/issue-123"];
-        let cli = Cli::try_parse_from(args).unwrap();
+        let cli = Cli::try_parse_from(args)?;
 
-        match cli.command {
-            CliCommand::Sync {
-                source_branch,
-                rebase,
-                new_branch,
-                dry_run,
-            } => {
-                assert_eq!(source_branch, "main");
-                assert!(!rebase);
-                assert_eq!(new_branch, Some("bugfix/issue-123".to_string()));
-                assert!(!dry_run);
-            }
-            _ => panic!("Wrong command parsed"),
-        }
+        let CliCommand::Sync {
+            source_branch,
+            rebase,
+            new_branch,
+            dry_run,
+        } = cli.command
+        else {
+            return Err("Wrong command parsed".into());
+        };
+        assert_eq!(source_branch, "main");
+        assert!(!rebase);
+        assert_eq!(new_branch, Some("bugfix/issue-123".to_string()));
+        assert!(!dry_run);
+        Ok(())
     }
 
     #[test]
-    fn test_sync_with_dry_run() {
+    fn test_sync_with_dry_run() -> TestResult {
         let args = vec!["rona", "sync", "--dry-run"];
-        let cli = Cli::try_parse_from(args).unwrap();
+        let cli = Cli::try_parse_from(args)?;
 
-        match cli.command {
-            CliCommand::Sync {
-                source_branch,
-                rebase,
-                new_branch,
-                dry_run,
-            } => {
-                assert_eq!(source_branch, "main");
-                assert!(!rebase);
-                assert!(new_branch.is_none());
-                assert!(dry_run);
-            }
-            _ => panic!("Wrong command parsed"),
-        }
+        let CliCommand::Sync {
+            source_branch,
+            rebase,
+            new_branch,
+            dry_run,
+        } = cli.command
+        else {
+            return Err("Wrong command parsed".into());
+        };
+        assert_eq!(source_branch, "main");
+        assert!(!rebase);
+        assert!(new_branch.is_none());
+        assert!(dry_run);
+        Ok(())
     }
 
     #[test]
-    fn test_sync_all_options() {
+    fn test_sync_all_options() -> TestResult {
         let args = vec![
             "rona",
             "sync",
@@ -2177,26 +2163,26 @@ mod cli_tests {
             "feature/test",
             "--dry-run",
         ];
-        let cli = Cli::try_parse_from(args).unwrap();
+        let cli = Cli::try_parse_from(args)?;
 
-        match cli.command {
-            CliCommand::Sync {
-                source_branch,
-                rebase,
-                new_branch,
-                dry_run,
-            } => {
-                assert_eq!(source_branch, "develop");
-                assert!(rebase);
-                assert_eq!(new_branch, Some("feature/test".to_string()));
-                assert!(dry_run);
-            }
-            _ => panic!("Wrong command parsed"),
-        }
+        let CliCommand::Sync {
+            source_branch,
+            rebase,
+            new_branch,
+            dry_run,
+        } = cli.command
+        else {
+            return Err("Wrong command parsed".into());
+        };
+        assert_eq!(source_branch, "develop");
+        assert!(rebase);
+        assert_eq!(new_branch, Some("feature/test".to_string()));
+        assert!(dry_run);
+        Ok(())
     }
 
     #[test]
-    fn test_sync_short_flags_combination() {
+    fn test_sync_short_flags_combination() -> TestResult {
         let args = vec![
             "rona",
             "sync",
@@ -2206,21 +2192,21 @@ mod cli_tests {
             "-n",
             "hotfix/critical",
         ];
-        let cli = Cli::try_parse_from(args).unwrap();
+        let cli = Cli::try_parse_from(args)?;
 
-        match cli.command {
-            CliCommand::Sync {
-                source_branch,
-                rebase,
-                new_branch,
-                dry_run,
-            } => {
-                assert_eq!(source_branch, "staging");
-                assert!(rebase);
-                assert_eq!(new_branch, Some("hotfix/critical".to_string()));
-                assert!(!dry_run);
-            }
-            _ => panic!("Wrong command parsed"),
-        }
+        let CliCommand::Sync {
+            source_branch,
+            rebase,
+            new_branch,
+            dry_run,
+        } = cli.command
+        else {
+            return Err("Wrong command parsed".into());
+        };
+        assert_eq!(source_branch, "staging");
+        assert!(rebase);
+        assert_eq!(new_branch, Some("hotfix/critical".to_string()));
+        assert!(!dry_run);
+        Ok(())
     }
 }

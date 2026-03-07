@@ -239,7 +239,9 @@ pub fn git_pull(verbose: bool) -> Result<()> {
         pb.set_message("Pulling...");
         pb.enable_steady_tick(Duration::from_millis(80));
         let handle = std::thread::spawn(|| Command::new("git").arg("pull").output());
-        let result = handle.join().expect("git pull thread panicked");
+        let result = handle.join().map_err(|_| RonaError::CommandFailed {
+            command: "git pull".to_string(),
+        })?;
         pb.finish_and_clear();
         result?
     } else {
@@ -274,7 +276,9 @@ pub fn git_merge(branch_name: &str, verbose: bool) -> Result<()> {
         let handle = std::thread::spawn(move || {
             Command::new("git").arg("merge").arg(&branch_owned).output()
         });
-        let result = handle.join().expect("git merge thread panicked");
+        let result = handle.join().map_err(|_| RonaError::CommandFailed {
+            command: "git merge".to_string(),
+        })?;
         pb.finish_and_clear();
         result?
     } else {
@@ -312,7 +316,9 @@ pub fn git_rebase(branch_name: &str, verbose: bool) -> Result<()> {
                 .arg(&branch_owned)
                 .output()
         });
-        let result = handle.join().expect("git rebase thread panicked");
+        let result = handle.join().map_err(|_| RonaError::CommandFailed {
+            command: "git rebase".to_string(),
+        })?;
         pb.finish_and_clear();
         result?
     } else {

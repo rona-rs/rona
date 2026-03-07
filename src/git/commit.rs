@@ -387,18 +387,17 @@ mod tests {
 
     /// Initializes a minimal git repo in `path` suitable for making real commits.
     #[cfg(unix)]
-    fn init_git_repo(path: &std::path::Path) {
+    fn init_git_repo(
+        path: &std::path::Path,
+    ) -> std::result::Result<(), Box<dyn std::error::Error>> {
         for args in [
             vec!["init"],
             vec!["config", "user.email", "test@example.com"],
             vec!["config", "user.name", "Test"],
         ] {
-            Command::new("git")
-                .current_dir(path)
-                .args(&args)
-                .output()
-                .unwrap();
+            Command::new("git").current_dir(path).args(&args).output()?;
         }
+        Ok(())
     }
 
     #[test]
@@ -408,29 +407,30 @@ mod tests {
     }
 
     #[test]
-    fn test_git_commit_dry_run_with_unsigned() {
-        let _guard = DIR_MUTEX.lock().unwrap();
+    fn test_git_commit_dry_run_with_unsigned() -> std::result::Result<(), Box<dyn std::error::Error>>
+    {
+        let _guard = DIR_MUTEX.lock().map_err(|e| e.to_string())?;
 
-        let temp_dir = TempDir::new().unwrap();
+        let temp_dir = TempDir::new()?;
         let temp_path = temp_dir.path();
 
         Command::new("git")
             .current_dir(temp_path)
             .arg("init")
-            .output()
-            .unwrap();
+            .output()?;
 
         let commit_msg = "[1] (test on main)\n\n- `test.txt`:\n\n\t\n";
-        write(temp_path.join("commit_message.md"), commit_msg).unwrap();
+        write(temp_path.join("commit_message.md"), commit_msg)?;
 
-        let original_dir = std::env::current_dir().unwrap();
-        std::env::set_current_dir(temp_path).unwrap();
+        let original_dir = std::env::current_dir()?;
+        std::env::set_current_dir(temp_path)?;
 
         let result = git_commit(&[], true, true);
 
-        std::env::set_current_dir(original_dir).unwrap();
+        std::env::set_current_dir(original_dir)?;
 
         assert!(result.is_ok());
+        Ok(())
     }
 
     /// Verifies that a `pre-commit` hook is triggered when `git_commit` runs.
@@ -439,51 +439,50 @@ mod tests {
     /// This test would have been impossible with git2 (which bypasses all hooks).
     #[test]
     #[cfg(unix)]
-    fn test_pre_commit_hook_fires() {
+    fn test_pre_commit_hook_fires() -> std::result::Result<(), Box<dyn std::error::Error>> {
         use std::os::unix::fs::PermissionsExt;
 
-        let _guard = DIR_MUTEX.lock().unwrap();
+        let _guard = DIR_MUTEX.lock().map_err(|e| e.to_string())?;
 
-        let temp_dir = TempDir::new().unwrap();
+        let temp_dir = TempDir::new()?;
         let temp_path = temp_dir.path();
 
-        init_git_repo(temp_path);
+        init_git_repo(temp_path)?;
 
         // Stage a file so the commit has something to record.
-        write(temp_path.join("test.txt"), "hello").unwrap();
+        write(temp_path.join("test.txt"), "hello")?;
         Command::new("git")
             .current_dir(temp_path)
             .args(["add", "test.txt"])
-            .output()
-            .unwrap();
+            .output()?;
 
         // Install a pre-commit hook that writes a marker file.
         let hooks_dir = temp_path.join(".git/hooks");
-        std::fs::create_dir_all(&hooks_dir).unwrap();
+        std::fs::create_dir_all(&hooks_dir)?;
         let hook_path = hooks_dir.join("pre-commit");
-        write(&hook_path, "#!/bin/sh\ntouch HOOK_FIRED\n").unwrap();
-        let mut perms = std::fs::metadata(&hook_path).unwrap().permissions();
+        write(&hook_path, "#!/bin/sh\ntouch HOOK_FIRED\n")?;
+        let mut perms = std::fs::metadata(&hook_path)?.permissions();
         perms.set_mode(0o755);
-        std::fs::set_permissions(&hook_path, perms).unwrap();
+        std::fs::set_permissions(&hook_path, perms)?;
 
         write(
             temp_path.join("commit_message.md"),
             "(test on main)\n\n- `test.txt`:\n\n\t\n",
-        )
-        .unwrap();
+        )?;
 
-        let original_dir = std::env::current_dir().unwrap();
-        std::env::set_current_dir(temp_path).unwrap();
+        let original_dir = std::env::current_dir()?;
+        std::env::set_current_dir(temp_path)?;
 
         let result = git_commit(&[], true, false);
 
-        std::env::set_current_dir(&original_dir).unwrap();
+        std::env::set_current_dir(&original_dir)?;
 
         assert!(result.is_ok(), "commit failed: {result:?}");
         assert!(
             temp_path.join("HOOK_FIRED").exists(),
             "pre-commit hook did not fire"
         );
+        Ok(())
     }
 
     /// Verifies that a failing `pre-commit` hook prevents the commit.
@@ -491,48 +490,47 @@ mod tests {
     /// A hook that exits non-zero must cause `git_commit` to return an error.
     #[test]
     #[cfg(unix)]
-    fn test_pre_commit_hook_blocks_commit() {
+    fn test_pre_commit_hook_blocks_commit() -> std::result::Result<(), Box<dyn std::error::Error>> {
         use std::os::unix::fs::PermissionsExt;
 
-        let _guard = DIR_MUTEX.lock().unwrap();
+        let _guard = DIR_MUTEX.lock().map_err(|e| e.to_string())?;
 
-        let temp_dir = TempDir::new().unwrap();
+        let temp_dir = TempDir::new()?;
         let temp_path = temp_dir.path();
 
-        init_git_repo(temp_path);
+        init_git_repo(temp_path)?;
 
-        write(temp_path.join("test.txt"), "hello").unwrap();
+        write(temp_path.join("test.txt"), "hello")?;
         Command::new("git")
             .current_dir(temp_path)
             .args(["add", "test.txt"])
-            .output()
-            .unwrap();
+            .output()?;
 
         // Install a pre-commit hook that always rejects the commit.
         let hooks_dir = temp_path.join(".git/hooks");
-        std::fs::create_dir_all(&hooks_dir).unwrap();
+        std::fs::create_dir_all(&hooks_dir)?;
         let hook_path = hooks_dir.join("pre-commit");
-        write(&hook_path, "#!/bin/sh\nexit 1\n").unwrap();
-        let mut perms = std::fs::metadata(&hook_path).unwrap().permissions();
+        write(&hook_path, "#!/bin/sh\nexit 1\n")?;
+        let mut perms = std::fs::metadata(&hook_path)?.permissions();
         perms.set_mode(0o755);
-        std::fs::set_permissions(&hook_path, perms).unwrap();
+        std::fs::set_permissions(&hook_path, perms)?;
 
         write(
             temp_path.join("commit_message.md"),
             "(test on main)\n\n- `test.txt`:\n\n\t\n",
-        )
-        .unwrap();
+        )?;
 
-        let original_dir = std::env::current_dir().unwrap();
-        std::env::set_current_dir(temp_path).unwrap();
+        let original_dir = std::env::current_dir()?;
+        std::env::set_current_dir(temp_path)?;
 
         let result = git_commit(&[], true, false);
 
-        std::env::set_current_dir(&original_dir).unwrap();
+        std::env::set_current_dir(&original_dir)?;
 
         assert!(
             result.is_err(),
             "commit should have been blocked by the pre-commit hook"
         );
+        Ok(())
     }
 }

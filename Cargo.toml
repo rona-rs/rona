@@ -16,7 +16,7 @@ license = "Apache-2.0 OR MIT"
 name = "rona"
 readme = "README.md"
 repository = "https://github.com/rona-rs/rona"
-version = "2.18.1"
+version = "2.18.2"
 
 [[bin]]
 doc = true
@@ -24,7 +24,7 @@ name = "rona"
 path = "src/main.rs"
 
 [dependencies]
-clap = { version = "4.5.59", features = ["derive"] }
+clap = { version = "4.5.60", features = ["derive"] }
 clap_complete = "4.5.66"
 inquire = { version = "0.7" }
 glob = "0.3.3"
@@ -43,4 +43,28 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 [dev-dependencies]
 assert_cmd = "2.1.2"
 mockall = "0.13.1"
-tempfile = "3.25.0"
+tempfile = "3.26.0"
+
+
+[lints.rust]
+dead_code                     = "deny"
+missing_debug_implementations = "deny"
+unreachable_pub               = "deny"
+unsafe_code                   = "forbid"
+unused_imports                = "deny"
+unused_variables              = "deny"
+
+[lints.clippy]
+correctness        = { level = "deny", priority = -1 }
+suspicious         = { level = "deny", priority = -1 }
+complexity         = { level = "deny", priority = -1 }
+perf               = { level = "deny", priority = -1 }
+style              = { level = "deny", priority = -1 }
+pedantic           = { level = "deny", priority = -1 }
+nursery            = { level = "warn", priority = -1 }
+redundant_pub_crate = "allow"
+
+expect_used = "warn"
+panic       = "warn"
+todo        = "warn"
+unwrap_used = "warn"

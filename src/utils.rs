@@ -168,16 +168,23 @@ mod tests {
     use std::path::Path;
 
     #[test]
-    fn test_check_for_file_in_folder() {
+    fn test_check_for_file_in_folder() -> std::result::Result<(), Box<dyn std::error::Error>> {
         // Valid cases
-        assert!(check_for_file_in_folder(Path::new("src/file.rs"), Path::new("src")).unwrap());
+        assert!(check_for_file_in_folder(
+            Path::new("src/file.rs"),
+            Path::new("src")
+        )?);
 
-        assert!(
-            check_for_file_in_folder(Path::new("src/nested/deep/file.rs"), Path::new("src"))
-                .unwrap()
-        );
+        assert!(check_for_file_in_folder(
+            Path::new("src/nested/deep/file.rs"),
+            Path::new("src")
+        )?);
 
-        assert!(!check_for_file_in_folder(Path::new("other/file.rs"), Path::new("src")).unwrap());
+        assert!(!check_for_file_in_folder(
+            Path::new("other/file.rs"),
+            Path::new("src")
+        )?);
+        Ok(())
     }
 
     #[test]

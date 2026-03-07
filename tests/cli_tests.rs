@@ -62,8 +62,8 @@ fn test_version_command() {
 /// - Files not matching the pattern remain unstaged
 /// - Git status shows correct staging state
 #[test]
-fn test_add_command() {
-    let temp_dir = TempDir::new().unwrap();
+fn test_add_command() -> Result<(), Box<dyn std::error::Error>> {
+    let temp_dir = TempDir::new()?;
     let temp_path = temp_dir.path();
 
     // Initialize git repository
@@ -72,9 +72,9 @@ fn test_add_command() {
     git_init.assert().success();
 
     // Create test files
-    fs::write(temp_path.join("test.txt"), "test content").unwrap();
-    fs::write(temp_path.join("test2.md"), "test content").unwrap();
-    fs::write(temp_path.join("test3.md"), "test content").unwrap();
+    fs::write(temp_path.join("test.txt"), "test content")?;
+    fs::write(temp_path.join("test2.md"), "test content")?;
+    fs::write(temp_path.join("test3.md"), "test content")?;
 
     // Test rona add with pattern exclusion
     let mut cmd = cargo_bin_cmd!("rona");
@@ -93,6 +93,8 @@ fn test_add_command() {
         .stdout(predicate::str::contains(r"A  test.txt")) // .txt file added
         .stdout(predicate::str::contains(r"?? test2.md")) // .md file excluded
         .stdout(predicate::str::contains(r"?? test3.md")); // .md file excluded
+
+    Ok(())
 }
 
 /// Tests that `rona -a` correctly stages files when run from a subdirectory.
@@ -108,8 +110,8 @@ fn test_add_command() {
 /// - Paths are not doubled in the git index
 /// - `git add` succeeds when the user's CWD is not the repo root
 #[test]
-fn test_add_from_subdirectory() {
-    let temp_dir = TempDir::new().unwrap();
+fn test_add_from_subdirectory() -> Result<(), Box<dyn std::error::Error>> {
+    let temp_dir = TempDir::new()?;
     let temp_path = temp_dir.path();
 
     // Initialize git repository at the root
@@ -121,11 +123,11 @@ fn test_add_from_subdirectory() {
 
     // Create a deep nested directory structure (mirrors the reported scenario)
     let subdir = temp_path.join("packages/preview/clean-cnam-template/1.6.4");
-    fs::create_dir_all(&subdir).unwrap();
+    fs::create_dir_all(&subdir)?;
 
     // Create files inside the nested directory
-    fs::write(subdir.join("thumbnail.png"), "fake png").unwrap();
-    fs::write(subdir.join("README.md"), "# readme").unwrap();
+    fs::write(subdir.join("thumbnail.png"), "fake png")?;
+    fs::write(subdir.join("README.md"), "# readme")?;
 
     // Run `rona -a` from the subdirectory, not from the repo root
     let mut cmd = cargo_bin_cmd!("rona");
@@ -136,8 +138,7 @@ fn test_add_from_subdirectory() {
     let git_status = Command::new("git")
         .current_dir(temp_path)
         .args(["status", "--porcelain"])
-        .output()
-        .unwrap();
+        .output()?;
 
     let status_output = String::from_utf8_lossy(&git_status.stdout);
 
@@ -156,6 +157,8 @@ fn test_add_from_subdirectory() {
         !status_output.contains("packages/preview/clean-cnam-template/1.6.4/packages"),
         "Paths must not be doubled, got:\n{status_output}"
     );
+
+    Ok(())
 }
 
 /// Tests that `rona -a` correctly handles deleted files when run from a subdirectory.
@@ -167,8 +170,8 @@ fn test_add_from_subdirectory() {
 /// - A file deleted in a subdirectory is staged for deletion correctly
 /// - The deletion is reflected in `git status` without path doubling
 #[test]
-fn test_add_deleted_file_from_subdirectory() {
-    let temp_dir = TempDir::new().unwrap();
+fn test_add_deleted_file_from_subdirectory() -> Result<(), Box<dyn std::error::Error>> {
+    let temp_dir = TempDir::new()?;
     let temp_path = temp_dir.path();
 
     // Initialize git repository
@@ -193,8 +196,8 @@ fn test_add_deleted_file_from_subdirectory() {
 
     // Create the nested directory and a file, then commit it
     let subdir = temp_path.join("packages/preview/mypkg/1.0");
-    fs::create_dir_all(&subdir).unwrap();
-    fs::write(subdir.join("asset.png"), "data").unwrap();
+    fs::create_dir_all(&subdir)?;
+    fs::write(subdir.join("asset.png"), "data")?;
 
     Command::new("git")
         .current_dir(temp_path)
@@ -209,7 +212,7 @@ fn test_add_deleted_file_from_subdirectory() {
         .success();
 
     // Delete the file
-    fs::remove_file(subdir.join("asset.png")).unwrap();
+    fs::remove_file(subdir.join("asset.png"))?;
 
     // Run `rona -a` from the subdirectory
     let mut cmd = cargo_bin_cmd!("rona");
@@ -220,8 +223,7 @@ fn test_add_deleted_file_from_subdirectory() {
     let git_status = Command::new("git")
         .current_dir(temp_path)
         .args(["status", "--porcelain"])
-        .output()
-        .unwrap();
+        .output()?;
 
     let status_output = String::from_utf8_lossy(&git_status.stdout);
 
@@ -234,6 +236,8 @@ fn test_add_deleted_file_from_subdirectory() {
         !status_output.contains("packages/preview/mypkg/1.0/packages"),
         "Paths must not be doubled for deleted files, got:\n{status_output}"
     );
+
+    Ok(())
 }
 
 /// Tests the commit functionality.
@@ -244,8 +248,8 @@ fn test_add_deleted_file_from_subdirectory() {
 /// - Commit message is correctly applied
 /// - Git log shows the commit with correct message
 #[test]
-fn test_commit_command() {
-    let temp_dir = TempDir::new().unwrap();
+fn test_commit_command() -> Result<(), Box<dyn std::error::Error>> {
+    let temp_dir = TempDir::new()?;
     let temp_path = temp_dir.path();
 
     // Initialize git repository
@@ -280,14 +284,14 @@ fn test_commit_command() {
     git_disable_gpgsign.assert().success();
 
     // Create and stage a test file
-    fs::write(temp_path.join("test.txt"), "test content").unwrap();
+    fs::write(temp_path.join("test.txt"), "test content")?;
     let mut git_add = Command::new("git");
     git_add.current_dir(temp_path).args(["add", "test.txt"]);
     git_add.assert().success();
 
     // Create commit message file with proper format
     let commit_msg = "[1] (feat on main)\n\n- `test.txt`:\n\n\t\n";
-    fs::write(temp_path.join("commit_message.md"), commit_msg).unwrap();
+    fs::write(temp_path.join("commit_message.md"), commit_msg)?;
 
     // Test rona commit with --yes to skip confirmation
     let mut cmd = cargo_bin_cmd!("rona");
@@ -304,4 +308,6 @@ fn test_commit_command() {
         .assert()
         .success()
         .stdout(predicate::str::contains("feat"));
+
+    Ok(())
 }
