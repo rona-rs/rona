@@ -108,18 +108,18 @@ fn process_conditional_blocks(template: &str, variables: &TemplateVariables) -> 
     // Process conditional blocks iteratively
     loop {
         // Find the first opening tag
-        let open_match = open_regex.find(&result);
-        if open_match.is_none() {
+        let Some(open_match) = open_regex.find(&result) else {
             break;
-        }
-
-        let open_match = open_match.unwrap();
+        };
         let open_start = open_match.start();
         let open_end = open_match.end();
 
         // Extract variable name from the opening tag
         if let Some(captures) = open_regex.captures(&result[open_start..open_end]) {
-            let var_name = captures.get(1).unwrap().as_str();
+            let Some(cap) = captures.get(1) else {
+                break;
+            };
+            let var_name = cap.as_str();
 
             // Look for the matching closing tag {/variable_name}
             let close_pattern = format!("{{/{var_name}}}");
@@ -334,7 +334,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_template_processing() {
+    fn test_template_processing() -> std::result::Result<(), Box<dyn std::error::Error>> {
         let template = "[{commit_number}] ({commit_type} on {branch_name}) {message}";
         let variables = TemplateVariables {
             commit_number: Some(42),
@@ -347,15 +347,18 @@ mod tests {
             email: "john@example.com".to_string(),
         };
 
-        let result = process_template(template, &variables).unwrap();
+        let result = process_template(template, &variables)?;
         assert_eq!(
             result,
             "[42] (feat on feature/new-feature) Add new functionality"
         );
+
+        Ok(())
     }
 
     #[test]
-    fn test_template_without_commit_number() {
+    fn test_template_without_commit_number() -> std::result::Result<(), Box<dyn std::error::Error>>
+    {
         let template = "({commit_type} on {branch_name}) {message}";
         let variables = TemplateVariables {
             commit_number: None,
@@ -368,8 +371,10 @@ mod tests {
             email: "john@example.com".to_string(),
         };
 
-        let result = process_template(template, &variables).unwrap();
+        let result = process_template(template, &variables)?;
         assert_eq!(result, "(fix on main) Fix bug");
+
+        Ok(())
     }
 
     #[test]
@@ -385,7 +390,7 @@ mod tests {
     }
 
     #[test]
-    fn test_template_variables_to_map() {
+    fn test_template_variables_to_map() -> std::result::Result<(), Box<dyn std::error::Error>> {
         let variables = TemplateVariables {
             commit_number: Some(42),
             commit_type: "feat".to_string(),
@@ -398,18 +403,35 @@ mod tests {
         };
 
         let map = variables.to_map();
-        assert_eq!(map.get("commit_number").unwrap(), "42");
-        assert_eq!(map.get("commit_type").unwrap(), "feat");
-        assert_eq!(map.get("branch_name").unwrap(), "feature/test");
-        assert_eq!(map.get("message").unwrap(), "Test message");
-        assert_eq!(map.get("date").unwrap(), "2024-01-15");
-        assert_eq!(map.get("time").unwrap(), "14:30:00");
-        assert_eq!(map.get("author").unwrap(), "Test Author");
-        assert_eq!(map.get("email").unwrap(), "test@example.com");
+        assert_eq!(
+            map.get("commit_number").ok_or("commit_number not found")?,
+            "42"
+        );
+        assert_eq!(
+            map.get("commit_type").ok_or("commit_type not found")?,
+            "feat"
+        );
+        assert_eq!(
+            map.get("branch_name").ok_or("branch_name not found")?,
+            "feature/test"
+        );
+        assert_eq!(
+            map.get("message").ok_or("message not found")?,
+            "Test message"
+        );
+        assert_eq!(map.get("date").ok_or("date not found")?, "2024-01-15");
+        assert_eq!(map.get("time").ok_or("time not found")?, "14:30:00");
+        assert_eq!(map.get("author").ok_or("author not found")?, "Test Author");
+        assert_eq!(
+            map.get("email").ok_or("email not found")?,
+            "test@example.com"
+        );
+
+        Ok(())
     }
 
     #[test]
-    fn test_template_with_all_variables() {
+    fn test_template_with_all_variables() -> std::result::Result<(), Box<dyn std::error::Error>> {
         let template = "{commit_type}: {message} by {author} <{email}> on {branch_name} at {date} {time} (#{commit_number})";
         let variables = TemplateVariables {
             commit_number: Some(123),
@@ -422,15 +444,17 @@ mod tests {
             email: "jane@company.com".to_string(),
         };
 
-        let result = process_template(template, &variables).unwrap();
+        let result = process_template(template, &variables)?;
         assert_eq!(
             result,
             "fix: Fix critical authentication bug by Jane Doe <jane@company.com> on hotfix/critical-bug at 2024-01-15 14:30:00 (#123)"
         );
+
+        Ok(())
     }
 
     #[test]
-    fn test_template_with_emoji() {
+    fn test_template_with_emoji() -> std::result::Result<(), Box<dyn std::error::Error>> {
         let template = "🚀 {commit_type}: {message}";
         let variables = TemplateVariables {
             commit_number: None,
@@ -443,12 +467,15 @@ mod tests {
             email: "john@example.com".to_string(),
         };
 
-        let result = process_template(template, &variables).unwrap();
+        let result = process_template(template, &variables)?;
         assert_eq!(result, "🚀 feat: Add new feature");
+
+        Ok(())
     }
 
     #[test]
-    fn test_template_without_commit_number_variable() {
+    fn test_template_without_commit_number_variable()
+    -> std::result::Result<(), Box<dyn std::error::Error>> {
         let template = "({commit_type} on {branch_name}) {message}";
         let variables = TemplateVariables {
             commit_number: None,
@@ -461,27 +488,31 @@ mod tests {
             email: "john@example.com".to_string(),
         };
 
-        let result = process_template(template, &variables).unwrap();
+        let result = process_template(template, &variables)?;
         assert_eq!(result, "(docs on main) Update documentation");
+
+        Ok(())
     }
 
     #[test]
-    fn test_template_validation_with_unknown_variable() {
+    fn test_template_validation_with_unknown_variable()
+    -> std::result::Result<(), Box<dyn std::error::Error>> {
         let template = "[{commit_number}] ({unknown_var} on {branch_name}) {message}";
         let result = validate_template(template);
         assert!(result.is_err());
-        assert!(
-            result
-                .unwrap_err()
-                .to_string()
-                .contains("Unknown template variable")
-        );
+        let Err(e) = result else {
+            return Err("Expected error".into());
+        };
+        assert!(e.to_string().contains("Unknown template variable"));
+
+        Ok(())
     }
 
     /// REGRESSION TEST: This test would have caught the bug where using the default template
     /// with `no_commit_number` flag would produce empty brackets "[]"
     #[test]
-    fn test_default_template_with_none_commit_number_produces_empty_brackets() {
+    fn test_default_template_with_none_commit_number_produces_empty_brackets()
+    -> std::result::Result<(), Box<dyn std::error::Error>> {
         // This is the BUG - using default template with None commit_number
         let template = "[{commit_number}] ({commit_type} on {branch_name}) {message}";
         let variables = TemplateVariables {
@@ -495,7 +526,7 @@ mod tests {
             email: "john@example.com".to_string(),
         };
 
-        let result = process_template(template, &variables).unwrap();
+        let result = process_template(template, &variables)?;
 
         // This demonstrates the bug: empty brackets appear
         assert_eq!(result, "[] (docs on main) Update docs");
@@ -505,11 +536,14 @@ mod tests {
             result.contains("[]"),
             "This test documents the bug: empty brackets appear when commit_number is None"
         );
+
+        Ok(())
     }
 
     /// REGRESSION TEST: Verify that using the correct template avoids empty brackets
     #[test]
-    fn test_template_without_commit_number_placeholder_avoids_empty_brackets() {
+    fn test_template_without_commit_number_placeholder_avoids_empty_brackets()
+    -> std::result::Result<(), Box<dyn std::error::Error>> {
         // This is the FIX - use appropriate template without commit_number placeholder
         let template = "({commit_type} on {branch_name}) {message}";
         let variables = TemplateVariables {
@@ -523,7 +557,7 @@ mod tests {
             email: "john@example.com".to_string(),
         };
 
-        let result = process_template(template, &variables).unwrap();
+        let result = process_template(template, &variables)?;
 
         // Correct output without empty brackets
         assert_eq!(result, "(docs on main) Update docs");
@@ -537,11 +571,14 @@ mod tests {
             !result.contains("[{"),
             "Output should not contain unprocessed template variables"
         );
+
+        Ok(())
     }
 
     /// REGRESSION TEST: Test multiple scenarios with None `commit_number`
     #[test]
-    fn test_various_templates_with_none_commit_number() {
+    fn test_various_templates_with_none_commit_number()
+    -> std::result::Result<(), Box<dyn std::error::Error>> {
         let variables = TemplateVariables {
             commit_number: None,
             commit_type: "feat".to_string(),
@@ -555,7 +592,7 @@ mod tests {
 
         // Test template WITH commit_number placeholder (produces empty brackets - the bug)
         let template_with = "[{commit_number}] {commit_type}: {message}";
-        let result_with = process_template(template_with, &variables).unwrap();
+        let result_with = process_template(template_with, &variables)?;
         assert!(
             result_with.starts_with("[]"),
             "Bug: produces empty brackets"
@@ -563,7 +600,7 @@ mod tests {
 
         // Test template WITHOUT commit_number placeholder (correct)
         let template_without = "{commit_type}: {message}";
-        let result_without = process_template(template_without, &variables).unwrap();
+        let result_without = process_template(template_without, &variables)?;
         assert_eq!(result_without, "feat: Add feature");
         assert!(
             !result_without.contains("[]"),
@@ -572,16 +609,19 @@ mod tests {
 
         // Test template with optional-style syntax (shows limitation of current implementation)
         let template_prefix = "#{commit_number} {commit_type}: {message}";
-        let result_prefix = process_template(template_prefix, &variables).unwrap();
+        let result_prefix = process_template(template_prefix, &variables)?;
         assert_eq!(
             result_prefix, "# feat: Add feature",
             "Empty string for None values"
         );
+
+        Ok(())
     }
 
     /// REGRESSION TEST: Verify `commit_number` `to_map` behavior
     #[test]
-    fn test_variables_to_map_with_none_commit_number() {
+    fn test_variables_to_map_with_none_commit_number()
+    -> std::result::Result<(), Box<dyn std::error::Error>> {
         let variables = TemplateVariables {
             commit_number: None,
             commit_type: "test".to_string(),
@@ -596,16 +636,24 @@ mod tests {
         let map = variables.to_map();
 
         // When commit_number is None, it should map to empty string
-        assert_eq!(map.get("commit_number").unwrap(), "");
-        assert_eq!(map.get("commit_type").unwrap(), "test");
+        assert_eq!(
+            map.get("commit_number").ok_or("commit_number not found")?,
+            ""
+        );
+        assert_eq!(
+            map.get("commit_type").ok_or("commit_type not found")?,
+            "test"
+        );
 
         // This empty string is what causes the bug when used in "[{commit_number}]"
+
+        Ok(())
     }
 
     // CONDITIONAL BLOCK TESTS
 
     #[test]
-    fn test_conditional_block_with_value() {
+    fn test_conditional_block_with_value() -> std::result::Result<(), Box<dyn std::error::Error>> {
         let template = "{?commit_number}[{commit_number}] {/commit_number}({commit_type} on {branch_name}) {message}";
         let variables = TemplateVariables {
             commit_number: Some(42),
@@ -618,12 +666,15 @@ mod tests {
             email: "john@example.com".to_string(),
         };
 
-        let result = process_template(template, &variables).unwrap();
+        let result = process_template(template, &variables)?;
         assert_eq!(result, "[42] (feat on new-feature) Add feature");
+
+        Ok(())
     }
 
     #[test]
-    fn test_conditional_block_without_value() {
+    fn test_conditional_block_without_value() -> std::result::Result<(), Box<dyn std::error::Error>>
+    {
         let template = "{?commit_number}[{commit_number}] {/commit_number}({commit_type} on {branch_name}) {message}";
         let variables = TemplateVariables {
             commit_number: None,
@@ -636,15 +687,17 @@ mod tests {
             email: "john@example.com".to_string(),
         };
 
-        let result = process_template(template, &variables).unwrap();
+        let result = process_template(template, &variables)?;
         // The conditional block should be completely removed, including the space after it
         assert_eq!(result, "(feat on new-feature) Add feature");
         // Verify no empty brackets
         assert!(!result.contains("[]"));
+
+        Ok(())
     }
 
     #[test]
-    fn test_multiple_conditional_blocks() {
+    fn test_multiple_conditional_blocks() -> std::result::Result<(), Box<dyn std::error::Error>> {
         let template = "{?commit_number}[{commit_number}]{/commit_number} {?date}on {date}{/date} ({commit_type}) {message}";
         let variables = TemplateVariables {
             commit_number: Some(5),
@@ -657,12 +710,15 @@ mod tests {
             email: "jane@example.com".to_string(),
         };
 
-        let result = process_template(template, &variables).unwrap();
+        let result = process_template(template, &variables)?;
         assert_eq!(result, "[5] on 2024-01-15 (fix) Fix bug");
+
+        Ok(())
     }
 
     #[test]
-    fn test_multiple_conditional_blocks_partial() {
+    fn test_multiple_conditional_blocks_partial()
+    -> std::result::Result<(), Box<dyn std::error::Error>> {
         let template = "{?commit_number}[{commit_number}]{/commit_number} {?author}by {author}{/author} - {message}";
         let variables = TemplateVariables {
             commit_number: None,
@@ -675,13 +731,16 @@ mod tests {
             email: "alice@example.com".to_string(),
         };
 
-        let result = process_template(template, &variables).unwrap();
+        let result = process_template(template, &variables)?;
         // commit_number is None, so first block removed; author has value, so second block kept
         assert_eq!(result, " by Alice - Update docs");
+
+        Ok(())
     }
 
     #[test]
-    fn test_conditional_block_with_static_text() {
+    fn test_conditional_block_with_static_text()
+    -> std::result::Result<(), Box<dyn std::error::Error>> {
         let template = "{?commit_number}Commit #{commit_number}: {/commit_number}{message}";
         let variables = TemplateVariables {
             commit_number: Some(100),
@@ -694,8 +753,10 @@ mod tests {
             email: "bob@example.com".to_string(),
         };
 
-        let result = process_template(template, &variables).unwrap();
+        let result = process_template(template, &variables)?;
         assert_eq!(result, "Commit #100: Update dependencies");
+
+        Ok(())
     }
 
     #[test]
@@ -706,46 +767,53 @@ mod tests {
     }
 
     #[test]
-    fn test_conditional_block_validation_unclosed() {
+    fn test_conditional_block_validation_unclosed()
+    -> std::result::Result<(), Box<dyn std::error::Error>> {
         let template = "{?commit_number}[{commit_number}] ({commit_type}) {message}";
         let result = validate_template(template);
         assert!(result.is_err());
-        assert!(
-            result
-                .unwrap_err()
-                .to_string()
-                .contains("Unclosed conditional block")
-        );
+        let Err(e) = result else {
+            return Err("Expected error".into());
+        };
+        assert!(e.to_string().contains("Unclosed conditional block"));
+
+        Ok(())
     }
 
     #[test]
-    fn test_conditional_block_validation_unmatched_closing() {
+    fn test_conditional_block_validation_unmatched_closing()
+    -> std::result::Result<(), Box<dyn std::error::Error>> {
         let template = "[{commit_number}] {/commit_number}({commit_type}) {message}";
         let result = validate_template(template);
         assert!(result.is_err());
-        assert!(
-            result
-                .unwrap_err()
-                .to_string()
-                .contains("Unmatched closing tag")
-        );
+        let Err(e) = result else {
+            return Err("Expected error".into());
+        };
+        assert!(e.to_string().contains("Unmatched closing tag"));
+
+        Ok(())
     }
 
     #[test]
-    fn test_conditional_block_validation_invalid_variable() {
+    fn test_conditional_block_validation_invalid_variable()
+    -> std::result::Result<(), Box<dyn std::error::Error>> {
         let template = "{?invalid_var}[{invalid_var}]{/invalid_var} {message}";
         let result = validate_template(template);
         assert!(result.is_err());
+        let Err(e) = result else {
+            return Err("Expected error".into());
+        };
         assert!(
-            result
-                .unwrap_err()
-                .to_string()
+            e.to_string()
                 .contains("Unknown variable in conditional block")
         );
+
+        Ok(())
     }
 
     #[test]
-    fn test_conditional_block_empty_string_variable() {
+    fn test_conditional_block_empty_string_variable()
+    -> std::result::Result<(), Box<dyn std::error::Error>> {
         // Test that empty string is treated as "no value"
         let template = "{?commit_number}[{commit_number}] {/commit_number}{message}";
         let variables = TemplateVariables {
@@ -759,13 +827,15 @@ mod tests {
             email: "test@example.com".to_string(),
         };
 
-        let result = process_template(template, &variables).unwrap();
+        let result = process_template(template, &variables)?;
         assert_eq!(result, "Test");
         assert!(!result.contains("[]"));
+
+        Ok(())
     }
 
     #[test]
-    fn test_original_bug_fix() {
+    fn test_original_bug_fix() -> std::result::Result<(), Box<dyn std::error::Error>> {
         // This is the original problem: using -n flag should not produce empty brackets
         let template = "{?commit_number}[{commit_number}] {/commit_number}({commit_type} on {branch_name}) {message}";
 
@@ -781,7 +851,7 @@ mod tests {
             email: "dev@example.com".to_string(),
         };
 
-        let result_with = process_template(template, &with_number).unwrap();
+        let result_with = process_template(template, &with_number)?;
         assert_eq!(result_with, "[42] (feat on new-feature) Add feature");
 
         // Scenario 2: Without commit number (-n flag)
@@ -796,10 +866,12 @@ mod tests {
             email: "dev@example.com".to_string(),
         };
 
-        let result_without = process_template(template, &without_number).unwrap();
+        let result_without = process_template(template, &without_number)?;
         assert_eq!(result_without, "(feat on new-feature) Add feature");
         // CRITICAL: No empty brackets!
         assert!(!result_without.contains("[]"));
         assert!(!result_without.starts_with("[]"));
+
+        Ok(())
     }
 }

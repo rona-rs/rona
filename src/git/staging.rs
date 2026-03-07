@@ -318,95 +318,113 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_pattern_matches_file_full_path() {
-        let pattern = Pattern::new("tp08-sujet/RESPONSE.md").unwrap();
+    fn test_pattern_matches_file_full_path() -> std::result::Result<(), Box<dyn std::error::Error>>
+    {
+        let pattern = Pattern::new("tp08-sujet/RESPONSE.md")?;
         let file_path = "tp08-sujet/RESPONSE.md";
 
         // Should match with full path pattern
         assert!(pattern_matches_file(&pattern, file_path, None));
+        Ok(())
     }
 
     #[test]
-    fn test_pattern_matches_file_relative_to_current_dir() {
-        let pattern = Pattern::new("RESPONSE.md").unwrap();
+    fn test_pattern_matches_file_relative_to_current_dir()
+    -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let pattern = Pattern::new("RESPONSE.md")?;
         let file_path = "tp08-sujet/RESPONSE.md";
         let current_dir = Some("tp08-sujet");
 
         // Should match when pattern is relative to current directory
         assert!(pattern_matches_file(&pattern, file_path, current_dir));
+        Ok(())
     }
 
     #[test]
-    fn test_pattern_matches_file_filename_only() {
-        let pattern = Pattern::new("RESPONSE.md").unwrap();
+    fn test_pattern_matches_file_filename_only()
+    -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let pattern = Pattern::new("RESPONSE.md")?;
         let file_path = "some/nested/dir/RESPONSE.md";
 
         // Should match just the filename even without current_dir context
         assert!(pattern_matches_file(&pattern, file_path, None));
+        Ok(())
     }
 
     #[test]
-    fn test_pattern_matches_file_glob_pattern() {
-        let pattern = Pattern::new("*/RESPONSE.md").unwrap();
+    fn test_pattern_matches_file_glob_pattern()
+    -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let pattern = Pattern::new("*/RESPONSE.md")?;
         let file_path = "tp08-sujet/RESPONSE.md";
 
         // Should match with glob pattern
         assert!(pattern_matches_file(&pattern, file_path, None));
+        Ok(())
     }
 
     #[test]
-    fn test_pattern_matches_file_double_star_glob() {
-        let pattern = Pattern::new("**/RESPONSE.md").unwrap();
+    fn test_pattern_matches_file_double_star_glob()
+    -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let pattern = Pattern::new("**/RESPONSE.md")?;
         let file_path = "some/deep/nested/dir/RESPONSE.md";
 
         // Should match with double-star glob pattern
         assert!(pattern_matches_file(&pattern, file_path, None));
+        Ok(())
     }
 
     #[test]
-    fn test_pattern_does_not_match() {
-        let pattern = Pattern::new("README.md").unwrap();
+    fn test_pattern_does_not_match() -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let pattern = Pattern::new("README.md")?;
         let file_path = "tp08-sujet/RESPONSE.md";
 
         // Should not match different filename
         assert!(!pattern_matches_file(&pattern, file_path, None));
+        Ok(())
     }
 
     #[test]
-    fn test_pattern_matches_relative_path_in_subdirectory() {
-        let pattern = Pattern::new("src/main.java").unwrap();
+    fn test_pattern_matches_relative_path_in_subdirectory()
+    -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let pattern = Pattern::new("src/main.java")?;
         let file_path = "tp08-sujet/src/main.java";
         let current_dir = Some("tp08-sujet");
 
         // Should match relative path from current directory
         assert!(pattern_matches_file(&pattern, file_path, current_dir));
+        Ok(())
     }
 
     #[test]
-    fn test_pattern_matches_nested_path_from_root() {
-        let pattern = Pattern::new("tp08-sujet/src/main.java").unwrap();
+    fn test_pattern_matches_nested_path_from_root()
+    -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let pattern = Pattern::new("tp08-sujet/src/main.java")?;
         let file_path = "tp08-sujet/src/main.java";
 
         // Should match full path from repository root
         assert!(pattern_matches_file(&pattern, file_path, None));
+        Ok(())
     }
 
     #[test]
-    fn test_pattern_with_extension_wildcard() {
-        let pattern = Pattern::new("*.md").unwrap();
+    fn test_pattern_with_extension_wildcard() -> std::result::Result<(), Box<dyn std::error::Error>>
+    {
+        let pattern = Pattern::new("*.md")?;
         let file_path = "tp08-sujet/RESPONSE.md";
 
         // Should match with extension wildcard
         assert!(pattern_matches_file(&pattern, file_path, None));
+        Ok(())
     }
 
     #[test]
-    fn test_pattern_at_repo_root() {
-        let pattern = Pattern::new("README.md").unwrap();
+    fn test_pattern_at_repo_root() -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let pattern = Pattern::new("README.md")?;
         let file_path = "README.md";
         let current_dir = Some(""); // At repository root
 
         // Should match when at repository root
         assert!(pattern_matches_file(&pattern, file_path, current_dir));
+        Ok(())
     }
 }

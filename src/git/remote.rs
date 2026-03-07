@@ -9,7 +9,7 @@ use std::time::Duration;
 use indicatif::ProgressBar;
 use indicatif::ProgressDrawTarget;
 
-use crate::errors::Result;
+use crate::errors::{Result, RonaError};
 
 /// Pushes committed changes to the remote repository.
 ///
@@ -74,7 +74,9 @@ pub fn git_push(args: &[String], verbose: bool, dry_run: bool) -> Result<()> {
 
         let handle =
             std::thread::spawn(move || Command::new("git").arg("push").args(&args_vec).output());
-        let result = handle.join().expect("git push thread panicked");
+        let result = handle.join().map_err(|_| RonaError::CommandFailed {
+            command: "git push".to_string(),
+        })?;
         pb.finish_and_clear();
         result?
     } else {
