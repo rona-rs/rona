@@ -41,9 +41,9 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [dev-dependencies]
-assert_cmd = "2.1.2"
+assert_cmd = "2.2.0"
 mockall = "0.13.1"
-tempfile = "3.26.0"
+tempfile = "3.27.0"
 
 
 [lints.rust]
