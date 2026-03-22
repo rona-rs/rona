@@ -7,6 +7,54 @@ use std::{collections::HashSet, process::Command};
 
 use crate::errors::{GitError, Result, RonaError};
 
+/// Unquotes a git path.
+///
+/// When a path contains special characters (spaces, non-ASCII bytes, etc.),
+/// git wraps it in double quotes and uses C-style escape sequences. This
+/// function strips the surrounding quotes and unescapes the content.
+fn unquote_git_path(path: &str) -> String {
+    if path.starts_with('"') && path.ends_with('"') && path.len() >= 2 {
+        let inner = &path[1..path.len() - 1];
+        let mut result = String::with_capacity(inner.len());
+        let mut chars = inner.chars().peekable();
+        while let Some(ch) = chars.next() {
+            if ch != '\\' {
+                result.push(ch);
+                continue;
+            }
+            match chars.next() {
+                Some('\\') | None => result.push('\\'),
+                Some('"') => result.push('"'),
+                Some('n') => result.push('\n'),
+                Some('t') => result.push('\t'),
+                Some('r') => result.push('\r'),
+                Some(c @ '0'..='7') => {
+                    // Octal escape: up to 3 digits
+                    let mut octal = String::from(c);
+                    for _ in 0..2 {
+                        match chars.peek() {
+                            Some(&d) if d.is_ascii_digit() && d <= '7' => {
+                                octal.push(d);
+                                chars.next();
+                            }
+                            _ => break,
+                        }
+                    }
+                    if let Ok(byte) = u8::from_str_radix(&octal, 8) {
+                        result.push(byte as char);
+                    }
+                }
+                Some(c) => {
+                    result.push('\\');
+                    result.push(c);
+                }
+            }
+        }
+        return result;
+    }
+    path.to_string()
+}
+
 /// Runs `git status --porcelain=v1` and returns the output lines.
 ///
 /// Each line has the format `XY PATH` where X is the index status and Y is the
@@ -90,7 +138,7 @@ pub fn get_status_files() -> Result<Vec<String>> {
         let mut chars = line.chars();
         let index_char = chars.next().unwrap_or(' ');
         let wt_char = chars.next().unwrap_or(' ');
-        let path = &line[3..];
+        let path = unquote_git_path(&line[3..]);
 
         // Skip index-deleted entries unless the working tree has modifications
         if index_char == 'D' && wt_char != 'M' && wt_char != '?' {
@@ -107,7 +155,7 @@ pub fn get_status_files() -> Result<Vec<String>> {
             continue;
         }
 
-        files.insert(path.to_string());
+        files.insert(path);
     }
 
     // Add new paths for renamed files
@@ -138,11 +186,11 @@ pub fn process_deleted_files_for_staging() -> Result<Vec<String>> {
         let mut chars = line.chars();
         let index_char = chars.next().unwrap_or(' ');
         let wt_char = chars.next().unwrap_or(' ');
-        let path = &line[3..];
+        let path = unquote_git_path(&line[3..]);
 
         // Working-tree deleted but NOT staged for deletion (index char != 'D')
         if wt_char == 'D' && index_char != 'D' {
-            deleted_files.push(path.to_string());
+            deleted_files.push(path);
         }
     }
 
@@ -167,11 +215,11 @@ pub fn process_deleted_files_for_commit_message() -> Result<Vec<String>> {
         }
 
         let index_char = line.chars().next().unwrap_or(' ');
-        let path = &line[3..];
+        let path = unquote_git_path(&line[3..]);
 
         // Index-deleted (staged deletion)
         if index_char == 'D' {
-            deleted_files.push(path.to_string());
+            deleted_files.push(path);
         }
     }
 
@@ -197,10 +245,10 @@ pub fn process_git_status() -> Result<Vec<String>> {
         }
 
         let index_char = line.chars().next().unwrap_or(' ');
-        let path = &line[3..];
+        let path = unquote_git_path(&line[3..]);
 
         match index_char {
-            'M' | 'A' | 'T' => files.push(path.to_string()),
+            'M' | 'A' | 'T' => files.push(path),
             _ => {} // 'R' (renamed) files are collected separately below; skip all others
         }
     }
@@ -232,17 +280,31 @@ pub fn count_renamed_files() -> Result<usize> {
 
 #[cfg(test)]
 mod tests {
+    use super::unquote_git_path;
+
     #[test]
-    fn test_count_renamed_files() {
-        // These tests require a git repository, so they're integration tests
-        // The function now works with git CLI rather than parsing strings
-        // Tests are validated through the integration test suite
+    fn test_unquote_plain_path() {
+        assert_eq!(unquote_git_path("src/main.rs"), "src/main.rs");
     }
 
     #[test]
-    fn test_get_status_files_with_renamed() {
-        // These tests require a git repository, so they're integration tests
-        // The function now works with git CLI rather than parsing strings
-        // Tests are validated through the integration test suite
+    fn test_unquote_quoted_path_with_spaces() {
+        assert_eq!(
+            unquote_git_path("\"assets/foo bar/file.txt\""),
+            "assets/foo bar/file.txt"
+        );
+    }
+
+    #[test]
+    fn test_unquote_escape_sequences() {
+        assert_eq!(unquote_git_path("\"a\\\\b\""), "a\\b");
+        assert_eq!(unquote_git_path("\"a\\\"b\""), "a\"b");
+        assert_eq!(unquote_git_path("\"a\\nb\""), "a\nb");
+    }
+
+    #[test]
+    fn test_unquote_octal_escape() {
+        // Space is octal 040
+        assert_eq!(unquote_git_path("\"a\\040b\""), "a b");
     }
 }
