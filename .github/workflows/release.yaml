@@ -211,6 +211,11 @@ jobs:
           HEAD="${OWNER}:bump/rona-${TAG}"
           RES=$(curl -s -H "Authorization: token ${TOKEN}" \
             "https://api.github.com/repos/${OWNER}/${REPO}/pulls?state=open&head=${HEAD}")
+          if ! echo "$RES" | jq -e 'type == "array"' > /dev/null 2>&1; then
+            echo "ERROR: Invalid API response (possibly auth issue)"
+            echo "Response: $RES"
+            exit 1
+          fi
           COUNT=$(echo "$RES" | jq 'length')
           if [ "$COUNT" -gt 0 ]; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
