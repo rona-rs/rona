@@ -1353,7 +1353,7 @@ dependencies = [
 
 [[package]]
 name = "rona"
-version = "2.18.2"
+version = "2.18.3"
 dependencies = [
  "arboard",
  "assert_cmd",
