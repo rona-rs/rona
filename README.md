@@ -749,8 +749,8 @@ All git operations in Rona delegate to the `git` CLI binary via `std::process::C
 | Repo root path | `git rev-parse --show-toplevel` |
 | Current branch | `git symbolic-ref --short HEAD` |
 | File status | `git status --porcelain=v1` |
-| Stage files | `git add -- <files>` |
-| Unstage deletions | `git rm --cached -- <files>` |
+| Stage files | `git add -A` |
+| Unstage excluded files | `git rm --cached -- <files>` |
 | Commit | `git commit -F commit_message.md` |
 | Amend | `git commit --amend -F commit_message.md` |
 | Commit count | `git rev-list --count HEAD` |
