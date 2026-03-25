@@ -15,19 +15,22 @@ use crate::errors::{GitError, Result, RonaError};
 fn unquote_git_path(path: &str) -> String {
     if path.starts_with('"') && path.ends_with('"') && path.len() >= 2 {
         let inner = &path[1..path.len() - 1];
-        let mut result = String::with_capacity(inner.len());
+        // Collect raw bytes so that multi-byte UTF-8 octal sequences (e.g. \303\242 -> â)
+        // are decoded correctly at the end rather than being misinterpreted as Latin-1.
+        let mut result: Vec<u8> = Vec::with_capacity(inner.len());
         let mut chars = inner.chars().peekable();
         while let Some(ch) = chars.next() {
             if ch != '\\' {
-                result.push(ch);
+                let mut buf = [0u8; 4];
+                result.extend_from_slice(ch.encode_utf8(&mut buf).as_bytes());
                 continue;
             }
             match chars.next() {
-                Some('\\') | None => result.push('\\'),
-                Some('"') => result.push('"'),
-                Some('n') => result.push('\n'),
-                Some('t') => result.push('\t'),
-                Some('r') => result.push('\r'),
+                Some('\\') | None => result.push(b'\\'),
+                Some('"') => result.push(b'"'),
+                Some('n') => result.push(b'\n'),
+                Some('t') => result.push(b'\t'),
+                Some('r') => result.push(b'\r'),
                 Some(c @ '0'..='7') => {
                     // Octal escape: up to 3 digits
                     let mut octal = String::from(c);
@@ -41,16 +44,17 @@ fn unquote_git_path(path: &str) -> String {
                         }
                     }
                     if let Ok(byte) = u8::from_str_radix(&octal, 8) {
-                        result.push(byte as char);
+                        result.push(byte);
                     }
                 }
                 Some(c) => {
-                    result.push('\\');
-                    result.push(c);
+                    result.push(b'\\');
+                    let mut buf = [0u8; 4];
+                    result.extend_from_slice(c.encode_utf8(&mut buf).as_bytes());
                 }
             }
         }
-        return result;
+        return String::from_utf8_lossy(&result).into_owned();
     }
     path.to_string()
 }
@@ -259,6 +263,50 @@ pub fn process_git_status() -> Result<Vec<String>> {
     Ok(files)
 }
 
+/// Returns all file paths currently staged in the index.
+///
+/// Used after `git add -A` to discover which staged files should be unstaged
+/// based on exclude patterns.
+///
+/// # Errors
+/// * If reading git status fails
+///
+/// # Returns
+/// * `Result<Vec<String>>` - All staged file paths
+pub fn get_all_staged_file_paths() -> Result<Vec<String>> {
+    let lines = run_git_status()?;
+    let mut files: HashSet<String> = HashSet::new();
+
+    for line in &lines {
+        if line.len() < 4 {
+            continue;
+        }
+
+        let mut chars = line.chars();
+        let index_char = chars.next().unwrap_or(' ');
+
+        // Skip untracked and purely unstaged entries
+        if index_char == ' ' || index_char == '?' {
+            continue;
+        }
+
+        // Renames are handled separately to get the new path
+        if index_char == 'R' {
+            continue;
+        }
+
+        let path = unquote_git_path(&line[3..]);
+        files.insert(path);
+    }
+
+    // Add new paths for renamed files
+    for path in get_renamed_new_paths()? {
+        files.insert(path);
+    }
+
+    Ok(files.into_iter().collect())
+}
+
 /// Counts the number of renamed files in the git status.
 ///
 /// This function helps with accurate file counting since renamed files appear
@@ -306,5 +354,15 @@ mod tests {
     fn test_unquote_octal_escape() {
         // Space is octal 040
         assert_eq!(unquote_git_path("\"a\\040b\""), "a b");
+    }
+
+    #[test]
+    fn test_unquote_multibyte_utf8_octal() {
+        // â is U+00E2, encoded in UTF-8 as 0xC3 0xA2 (octal \303\242)
+        // git quotes filenames like "Marags\303\242-Display.otf"
+        assert_eq!(
+            unquote_git_path("\"Marags\\303\\242-Display.otf\""),
+            "Maragsâ-Display.otf"
+        );
     }
 }

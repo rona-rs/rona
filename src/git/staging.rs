@@ -11,7 +11,10 @@ use crate::errors::{GitError, Result, RonaError};
 
 use super::{
     repository::get_top_level_path,
-    status::{count_renamed_files, get_status_files, process_deleted_files_for_staging},
+    status::{
+        count_renamed_files, get_all_staged_file_paths, get_status_files,
+        process_deleted_files_for_staging,
+    },
 };
 
 /// Checks if a pattern matches a file path, considering both absolute (repo-relative)
@@ -166,38 +169,34 @@ pub fn git_add_with_exclude_patterns(
             .map(String::from)
     };
 
-    let (deleted_files, files_to_add, staged_files_len) = {
+    if dry_run {
         let deleted_files = process_deleted_files_for_staging()?;
-        let staged_files = get_status_files()?;
-        let staged_files_len = staged_files.len();
+        let all_files = get_status_files()?;
+        let total_len = all_files.len() + deleted_files.len();
 
-        let files_to_add: Vec<String> = staged_files
+        let files_to_add: Vec<String> = all_files
             .into_iter()
-            .filter(|file| {
-                !exclude_patterns.iter().any(|pattern| {
-                    pattern_matches_file(pattern, file, current_dir_rel_to_repo.as_deref())
-                })
+            .filter(|f| {
+                !exclude_patterns
+                    .iter()
+                    .any(|p| pattern_matches_file(p, f, current_dir_rel_to_repo.as_deref()))
+            })
+            .collect();
+        let deleted_to_stage: Vec<String> = deleted_files
+            .into_iter()
+            .filter(|f| {
+                !exclude_patterns
+                    .iter()
+                    .any(|p| pattern_matches_file(p, f, current_dir_rel_to_repo.as_deref()))
             })
             .collect();
 
-        (deleted_files, files_to_add, staged_files_len)
-    };
-
-    if files_to_add.is_empty() && deleted_files.is_empty() {
-        println!("No files to add or delete");
+        let excluded_count = total_len - files_to_add.len() - deleted_to_stage.len();
+        print_dry_run_summary(&files_to_add, &deleted_to_stage, excluded_count);
         return Ok(());
     }
 
-    let deleted_files_count = deleted_files.len();
-
-    if dry_run {
-        print_dry_run_summary(&files_to_add, &deleted_files, staged_files_len);
-        return Ok(());
-    }
-
-    let total_ops = files_to_add.len() + deleted_files.len();
-    let show_progress = total_ops > 15 && std::io::stderr().is_terminal() && !verbose;
-
+    let show_progress = std::io::stderr().is_terminal() && !verbose;
     let pb = if show_progress {
         let bar = ProgressBar::new_spinner();
         bar.set_draw_target(ProgressDrawTarget::stderr());
@@ -208,46 +207,52 @@ pub fn git_add_with_exclude_patterns(
         None
     };
 
-    // Stage files to add as a single batched call
-    if !files_to_add.is_empty() {
-        let output = Command::new("git")
-            .current_dir(&repo_root)
-            .arg("add")
-            .arg("--")
-            .args(&files_to_add)
-            .output()
-            .map_err(RonaError::Io)?;
+    // Stage everything at once
+    let output = Command::new("git")
+        .current_dir(&repo_root)
+        .args(["add", "-A"])
+        .output()
+        .map_err(RonaError::Io)?;
 
-        if !output.status.success() {
-            if let Some(bar) = pb {
-                bar.finish_and_clear();
-            }
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(RonaError::Git(GitError::CommandFailed {
-                command: "git add".to_string(),
-                output: stderr.trim().to_string(),
-            }));
+    if !output.status.success() {
+        if let Some(bar) = &pb {
+            bar.finish_and_clear();
         }
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(RonaError::Git(GitError::CommandFailed {
+            command: "git add -A".to_string(),
+            output: stderr.trim().to_string(),
+        }));
     }
 
-    // Stage deleted files as a single batched call
-    if !deleted_files.is_empty() {
+    // Unstage files matching exclude patterns
+    let staged_files = get_all_staged_file_paths()?;
+    let total_staged = staged_files.len();
+
+    let files_to_unstage: Vec<String> = staged_files
+        .into_iter()
+        .filter(|f| {
+            exclude_patterns
+                .iter()
+                .any(|p| pattern_matches_file(p, f, current_dir_rel_to_repo.as_deref()))
+        })
+        .collect();
+
+    if !files_to_unstage.is_empty() {
         let output = Command::new("git")
             .current_dir(&repo_root)
-            .arg("rm")
-            .arg("--cached")
-            .arg("--")
-            .args(&deleted_files)
+            .args(["rm", "--cached", "--"])
+            .args(&files_to_unstage)
             .output()
             .map_err(RonaError::Io)?;
 
         if !output.status.success() {
-            if let Some(bar) = pb {
+            if let Some(bar) = &pb {
                 bar.finish_and_clear();
             }
             let stderr = String::from_utf8_lossy(&output.stderr);
             return Err(RonaError::Git(GitError::CommandFailed {
-                command: "git rm".to_string(),
+                command: "git rm --cached".to_string(),
                 output: stderr.trim().to_string(),
             }));
         }
@@ -257,15 +262,12 @@ pub fn git_add_with_exclude_patterns(
         bar.finish_and_clear();
     }
 
-    // Get the new git status after staging to count renamed files
+    let excluded_count = files_to_unstage.len();
+    let staged_count = total_staged - excluded_count;
     let renamed_count = count_renamed_files()?;
 
-    // Count the actual number of files staged
-    let staged_count = files_to_add.len();
-    let excluded_count = staged_files_len - files_to_add.len();
-
     println!(
-        "Added {staged_count} files, deleted {deleted_files_count}, renamed {renamed_count} while excluding {excluded_count} files for commit."
+        "Added {staged_count} files, renamed {renamed_count} while excluding {excluded_count} files for commit."
     );
 
     Ok(())
