@@ -29,7 +29,7 @@ Rona is a command-line interface tool designed to enhance your Git workflow with
 - Branch synchronization with merge/rebase support
 - Interactive commit type selection with customizable types
 - Multi-shell completion support (Bash, Fish, Zsh, PowerShell)
-- Flexible configuration system (global and project-level)
+- Flexible configuration system (global, project-level, and custom file via `--config`)
 - Colored interactive prompts powered by Inquire
 - Structured logging via `tracing` with `RUST_LOG` support
 
@@ -66,6 +66,15 @@ Rona supports flexible configuration through TOML files:
 
 - **Global config**: `~/.config/rona.toml` - applies to all projects
 - **Project config**: `./.rona.toml` - applies only to the current project (overrides global)
+- **Custom config**: any TOML file passed via `--config <PATH>` - bypasses the default hierarchy entirely
+
+```bash
+# Use a custom config file instead of the default global/project one
+rona --config /path/to/my-config.toml -g -i
+
+# Useful for testing different configs or CI environments
+rona --config .rona.ci.toml -c -p
+```
 
 ### Configuration Options
 
@@ -343,6 +352,21 @@ rona -c -p
 rona -a "src/"
 rona -g -i  # Select type and input message directly
 rona -c -p
+```
+
+## Global Flags
+
+These flags apply to all commands and are placed before the subcommand:
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--config <PATH>` | | Load a specific TOML config file, bypassing global and project config |
+| `--verbose` | `-v` | Enable debug-level log output |
+
+```bash
+rona --config .rona.toml -g -i
+rona --verbose -c -p
+rona --config ~/.config/rona-work.toml sync
 ```
 
 ## Command Reference
