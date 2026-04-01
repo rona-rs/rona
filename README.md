@@ -28,6 +28,7 @@ Rona is a command-line interface tool designed to enhance your Git workflow with
 - Streamlined push operations
 - Branch synchronization with merge/rebase support
 - Interactive commit type selection with customizable types
+- Config-driven extra prompt fields (scope, ticket, etc.) with optional prefetching, regex validation, and configurable ordering
 - Multi-shell completion support (Bash, Fish, Zsh, PowerShell)
 - Flexible configuration system (global, project-level, and custom file via `--config`)
 - Colored interactive prompts powered by Inquire
@@ -85,15 +86,27 @@ editor = "nano"  # Examples: "vim", "zed", "code --wait", "emacs"
 # Custom commit types (defaults shown below)
 commit_types = [
     "feat",    # New features
-    "fix",     # Bug fixes  
+    "fix",     # Bug fixes
     "docs",    # Documentation changes
     "test",    # Adding or updating tests
     "chore"    # Maintenance tasks
 ]
 
 # Template for interactive commit message generation
-# Available variables: {commit_number}, {commit_type}, {branch_name}, {message}, {date}, {time}, {author}, {email}
+# Built-in variables: {commit_number}, {commit_type}, {branch_name}, {message}, {date}, {time}, {author}, {email}
+# Extra field names defined in [[extra_fields]] are also valid template variables.
 template = "{?commit_number}[{commit_number}] {/commit_number}({commit_type} on {branch_name}) {message}"
+
+# Optional: control the order of prompts in interactive mode.
+# Use "message" to position the built-in message prompt among the extra fields.
+# Unlisted extra fields are appended after all listed items.
+# Default (empty): extra fields first, then message.
+# field_order = ["message", "scope", "ticket"]
+
+# Extra prompts shown after commit type selection (see "Extra Fields" section below)
+# [[extra_fields]]
+# name = "scope"
+# ...
 ```
 
 **Note**: When no configuration exists, Rona falls back to: `["chore", "feat", "fix", "test"]`
@@ -111,6 +124,7 @@ Rona supports customizable templates for interactive commit message generation. 
 - `{time}` - Current time (HH:MM:SS)
 - `{author}` - Git author name
 - `{email}` - Git author email
+- `{name}` - Any extra field defined under `[[extra_fields]]` (e.g. `{scope}`, `{ticket}`)
 
 **Conditional Blocks:**
 
@@ -154,6 +168,143 @@ template = "{?commit_number}Commit {commit_number}: {/commit_number}{commit_type
 ```
 
 **Note**: If no template is specified, Rona uses the default format: `{?commit_number}[{commit_number}] {/commit_number}({commit_type} on {branch_name}) {message}`
+
+### Extra Fields
+
+Extra fields let you declare additional prompts in `.rona.toml` that are shown after the commit type selector and before the message. Each field becomes a template variable using its `name`, so you can embed it in the `template` option with full conditional block support.
+
+This replaces the need for a separate tool when a project requires additional structured inputs such as a component scope or a ticket reference.
+
+**Field options:**
+
+| Key | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | yes | Variable name used in templates (`{scope}`, `{ticket}`, etc.) |
+| `prompt` | string | no | Label shown to the user. Defaults to `name`. |
+| `kind` | `"text"` \| `"select"` | no | Input style. Default: `"text"`. |
+| `required` | bool | no | Whether an empty answer is rejected. Default: `false`. |
+| `validation` | string | no | Regex the answer must match. |
+| `prefetch.source` | `"command"` \| `"branch"` | no | Where to fetch candidate values from. |
+| `prefetch.command` | string | no | Shell command to run (for `source = "command"`). |
+| `prefetch.extract_regex` | string | no | Regex applied to each output line or the branch name. Priority: named group `value`, then capture group 1, then full match. |
+| `prefetch.deduplicate` | bool | no | Remove duplicate results (for `source = "command"`). Default: `false`. |
+
+**Prompt behaviour by kind and prefetch:**
+
+| `kind` | Prefetch result | Behaviour |
+|---|---|---|
+| `select` | non-empty list | Select from list + `(none)` (if optional) + `Other (enter manually)` |
+| `select` | empty | Falls back to a free-text prompt |
+| `text` | non-empty list from `command` | Same as `select` with non-empty list |
+| `text` | 0–1 values from `branch` | Free-text prompt with the extracted value as the default |
+| `text` | nothing | Plain free-text prompt |
+
+When a field is skipped (optional + user chose `(none)`), the variable is simply absent. Use a conditional block in your template to handle this cleanly: `{?scope}({scope}){/scope}`.
+
+#### Prompt order
+
+By default, extra fields are shown first (in declaration order), then the built-in `message` prompt. Use `field_order` to change this:
+
+```toml
+# Show message first, then scope, then ticket
+field_order = ["message", "scope", "ticket"]
+```
+
+The reserved name `"message"` positions the built-in message prompt. Any extra field not listed in `field_order` is appended after the last listed item. `message` is always included — if you omit it from `field_order`, it is appended at the very end.
+
+**TOML ordering note**: In TOML, every key-value pair after a `[[extra_fields]]` header belongs to that array item — not to the top-level table. Always place `template`, `editor`, and `commit_types` **before** any `[[extra_fields]]` entry.
+
+#### Example: scope and ticket
+
+The example below replicates a conventional-commit workflow where the scope is suggested from recent commits and the ticket number is extracted automatically from the branch name.
+
+**.rona.toml**
+```toml
+editor = "zed"
+commit_types = ["feat", "fix", "docs", "refactor", "test", "chore"]
+
+# Template uses both built-in variables and the extra fields defined below
+template = "{?commit_number}[{commit_number}] {/commit_number}{commit_type}{?scope}({scope}){/scope}: {message}{?ticket} [{ticket}]{/ticket}"
+
+# --- scope ---
+# Populated by scanning the last 20 commit subjects.
+# Extracts text between parentheses, e.g. "feat(api): ..." -> "api"
+[[extra_fields]]
+name = "scope"
+prompt = "Select scope"
+kind = "select"
+required = false
+prefetch.source = "command"
+prefetch.command = "git log -20 --pretty=format:%s"
+prefetch.extract_regex = "\\w+\\((?P<value>[^)]*)\\):"
+prefetch.deduplicate = true
+
+# --- ticket ---
+# Default value extracted from the branch name, e.g. "feat/PROJ-123_add-login" -> "PROJ-123"
+# User can edit it or leave it empty if not required.
+[[extra_fields]]
+name = "ticket"
+prompt = "Ticket reference"
+kind = "text"
+required = false
+validation = "^[A-Z]+-[0-9]+$"
+prefetch.source = "branch"
+prefetch.extract_regex = "[A-Z]+-[0-9]+"
+```
+
+**Session example** (`rona -g -i` on branch `feat/PROJ-42_add-login`, default order: scope → ticket → message):
+
+```
+$ Select commit type
+> feat
+
+$ Select scope
+> api
+  auth
+  (none)
+  Other (enter manually)
+
+$ Ticket reference (PROJ-42)
+> PROJ-42
+
+$ Message
+> Add login endpoint
+```
+
+To prompt for the message first, add `field_order = ["message", "scope", "ticket"]` above the `[[extra_fields]]` entries.
+
+**Resulting commit message:**
+
+```
+feat(api): Add login endpoint [PROJ-42]
+```
+
+Or, with commit number enabled:
+
+```
+[7] feat(api): Add login endpoint [PROJ-42]
+```
+
+If the user skips the scope, the conditional block is omitted:
+
+```
+feat: Add login endpoint [PROJ-42]
+```
+
+#### Example: static select options (no prefetch)
+
+If you just want a fixed list without any prefetching, omit the `prefetch` block and list `kind = "select"` — but note that without prefetch, an empty candidate list causes the prompt to fall back to a free-text input. For a true fixed list, provide the options via `prefetch.command` using a shell command like `echo`:
+
+```toml
+[[extra_fields]]
+name = "env"
+prompt = "Target environment"
+kind = "select"
+required = true
+prefetch.source = "command"
+prefetch.command = "printf 'staging\\nproduction\\n'"
+prefetch.extract_regex = "(.+)"
+```
 
 ### Working with Configuration
 
@@ -472,7 +623,7 @@ rona -g -i -n
 **Interactive Mode Usage:**
 When using the `-i` flag, Rona will:
 1. Show the commit type selector (uses configured types or defaults: feat, fix, docs, test, chore)
-2. Prompt for a single commit message input
+2. Show prompts for any configured extra fields and the message, in the order defined by `field_order` (defaults to extra fields first, then message)
 3. Generate a clean format using your template (or default)
 4. Save directly to `commit_message.md` without file details
 
@@ -788,8 +939,8 @@ All git operations in Rona delegate to the `git` CLI binary via `std::process::C
 ## Development
 
 ### Requirements
-- Rust 2021 edition or later
-- Git 2.28 or later (`git switch` was added in 2.23; `--porcelain=v1` in 2.11)
+- Rust 2024 edition or later
+- Git 2.23 or later (`git switch` was introduced in 2.23)
 
 ### Building from Source
 ```bash

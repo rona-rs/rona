@@ -7,7 +7,7 @@ Thank you for your interest in contributing to Rona! This document provides guid
 ### Prerequisites
 
 - Rust 1.70 or later
-- Git 2.28 or later (`git switch` requires 2.23; `--porcelain=v1` requires 2.11)
+- Git 2.23 or later (`git switch` was introduced in 2.23)
 - A text editor or IDE with Rust support
 
 ### Development Setup

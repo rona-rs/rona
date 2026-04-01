@@ -70,7 +70,20 @@ pub struct ProjectConfig {
 
     /// Template for interactive commit message generation
     /// Available variables: {`commit_number`}, {`commit_type`}, {`branch_name`}, {`message`}, {`date`}, {`time`}, {`author`}, {`email`}
+    /// Extra field names defined in `extra_fields` are also available.
     pub template: Option<String>,
+
+    /// Extra fields to prompt after commit type and before the message.
+    /// Each field becomes a template variable with the field's `name`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub extra_fields: Vec<crate::extra_fields::ExtraField>,
+
+    /// Controls the order of prompts in interactive mode.
+    /// Use the reserved name `"message"` to position the built-in message prompt.
+    /// Extra fields not listed are appended after all listed items.
+    /// When empty (the default), extra fields are shown first, then `message`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub field_order: Vec<String>,
 }
 
 impl Default for ProjectConfig {
@@ -86,6 +99,8 @@ impl Default for ProjectConfig {
             template: Some(
                 "{?commit_number}[{commit_number}] {/commit_number}({commit_type} on {branch_name}) {message}".to_string(),
             ),
+            extra_fields: vec![],
+            field_order: vec![],
         }
     }
 }
