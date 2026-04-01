@@ -6,7 +6,7 @@
 
 use chrono::Local;
 use regex::Regex;
-use std::collections::HashMap;
+use std::{collections::HashMap, hash::BuildHasher};
 
 use crate::errors::{Result, RonaError};
 
@@ -87,15 +87,21 @@ impl TemplateVariables {
 ///
 /// # Arguments
 /// * `template` - The template string containing conditional blocks
-/// * `variables` - The variables to check
+/// * `variables` - The built-in template variables
+/// * `extra_variables` - Additional variables from configured extra fields
 ///
 /// # Returns
 /// * `Result<String>` - The template with conditional blocks processed
 ///
 /// # Errors
 /// * If the template contains mismatched or invalid conditional blocks
-fn process_conditional_blocks(template: &str, variables: &TemplateVariables) -> Result<String> {
-    let variable_map = variables.to_map();
+fn process_conditional_blocks<S: BuildHasher>(
+    template: &str,
+    variables: &TemplateVariables,
+    extra_variables: &HashMap<String, String, S>,
+) -> Result<String> {
+    let mut variable_map = variables.to_map();
+    variable_map.extend(extra_variables.iter().map(|(k, v)| (k.clone(), v.clone())));
     let mut result = template.to_string();
 
     // Regex to find opening conditional tags: {?variable_name}
@@ -152,7 +158,8 @@ fn process_conditional_blocks(template: &str, variables: &TemplateVariables) -> 
 ///
 /// # Arguments
 /// * `template` - The template string containing variables in {`variable_name`} format
-/// * `variables` - The variables to substitute
+/// * `variables` - The built-in template variables
+/// * `extra_variables` - Additional variables from configured extra fields
 ///
 /// # Returns
 /// * `Result<String>` - The processed template with variables substituted
@@ -160,11 +167,16 @@ fn process_conditional_blocks(template: &str, variables: &TemplateVariables) -> 
 /// # Errors
 /// * If the template contains invalid variable syntax
 /// * If required variables are missing
-pub fn process_template(template: &str, variables: &TemplateVariables) -> Result<String> {
+pub fn process_template<S: BuildHasher>(
+    template: &str,
+    variables: &TemplateVariables,
+    extra_variables: &HashMap<String, String, S>,
+) -> Result<String> {
     // First, process conditional blocks
-    let after_conditionals = process_conditional_blocks(template, variables)?;
+    let after_conditionals = process_conditional_blocks(template, variables, extra_variables)?;
 
-    let variable_map = variables.to_map();
+    let mut variable_map = variables.to_map();
+    variable_map.extend(extra_variables.iter().map(|(k, v)| (k.clone(), v.clone())));
 
     // Find all variables in the template
     let regex = Regex::new(r"\{([^}]+)\}").map_err(|e| {
@@ -193,6 +205,7 @@ pub fn process_template(template: &str, variables: &TemplateVariables) -> Result
 ///
 /// # Arguments
 /// * `template` - The template string to validate
+/// * `extra_variable_names` - Additional variable names from configured extra fields
 ///
 /// # Returns
 /// * `Result<()>` - Ok if valid, Err if invalid variables found or mismatched blocks
@@ -200,8 +213,8 @@ pub fn process_template(template: &str, variables: &TemplateVariables) -> Result
 /// # Errors
 /// * If the template contains unknown variables
 /// * If conditional blocks are mismatched or malformed
-pub fn validate_template(template: &str) -> Result<()> {
-    let valid_variables = [
+pub fn validate_template(template: &str, extra_variable_names: &[&str]) -> Result<()> {
+    let mut valid_variables: Vec<&str> = vec![
         "commit_number",
         "commit_type",
         "branch_name",
@@ -211,6 +224,7 @@ pub fn validate_template(template: &str) -> Result<()> {
         "author",
         "email",
     ];
+    valid_variables.extend_from_slice(extra_variable_names);
 
     // First, validate conditional blocks are properly matched
     let conditional_regex = Regex::new(r"\{\?(\w+)\}").map_err(|e| {
@@ -331,6 +345,8 @@ fn get_git_author_info() -> Result<(String, String)> {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use super::*;
 
     #[test]
@@ -347,7 +363,7 @@ mod tests {
             email: "john@example.com".to_string(),
         };
 
-        let result = process_template(template, &variables)?;
+        let result = process_template(template, &variables, &HashMap::new())?;
         assert_eq!(
             result,
             "[42] (feat on feature/new-feature) Add new functionality"
@@ -371,7 +387,7 @@ mod tests {
             email: "john@example.com".to_string(),
         };
 
-        let result = process_template(template, &variables)?;
+        let result = process_template(template, &variables, &HashMap::new())?;
         assert_eq!(result, "(fix on main) Fix bug");
 
         Ok(())
@@ -380,13 +396,13 @@ mod tests {
     #[test]
     fn test_template_validation_valid() {
         let template = "[{commit_number}] ({commit_type} on {branch_name}) {message}";
-        assert!(validate_template(template).is_ok());
+        assert!(validate_template(template, &[]).is_ok());
     }
 
     #[test]
     fn test_template_validation_invalid() {
         let template = "[{commit_number}] ({invalid_var} on {branch_name}) {message}";
-        assert!(validate_template(template).is_err());
+        assert!(validate_template(template, &[]).is_err());
     }
 
     #[test]
@@ -444,7 +460,7 @@ mod tests {
             email: "jane@company.com".to_string(),
         };
 
-        let result = process_template(template, &variables)?;
+        let result = process_template(template, &variables, &HashMap::new())?;
         assert_eq!(
             result,
             "fix: Fix critical authentication bug by Jane Doe <jane@company.com> on hotfix/critical-bug at 2024-01-15 14:30:00 (#123)"
@@ -467,7 +483,7 @@ mod tests {
             email: "john@example.com".to_string(),
         };
 
-        let result = process_template(template, &variables)?;
+        let result = process_template(template, &variables, &HashMap::new())?;
         assert_eq!(result, "🚀 feat: Add new feature");
 
         Ok(())
@@ -488,7 +504,7 @@ mod tests {
             email: "john@example.com".to_string(),
         };
 
-        let result = process_template(template, &variables)?;
+        let result = process_template(template, &variables, &HashMap::new())?;
         assert_eq!(result, "(docs on main) Update documentation");
 
         Ok(())
@@ -498,7 +514,7 @@ mod tests {
     fn test_template_validation_with_unknown_variable()
     -> std::result::Result<(), Box<dyn std::error::Error>> {
         let template = "[{commit_number}] ({unknown_var} on {branch_name}) {message}";
-        let result = validate_template(template);
+        let result = validate_template(template, &[]);
         assert!(result.is_err());
         let Err(e) = result else {
             return Err("Expected error".into());
@@ -526,7 +542,7 @@ mod tests {
             email: "john@example.com".to_string(),
         };
 
-        let result = process_template(template, &variables)?;
+        let result = process_template(template, &variables, &HashMap::new())?;
 
         // This demonstrates the bug: empty brackets appear
         assert_eq!(result, "[] (docs on main) Update docs");
@@ -557,7 +573,7 @@ mod tests {
             email: "john@example.com".to_string(),
         };
 
-        let result = process_template(template, &variables)?;
+        let result = process_template(template, &variables, &HashMap::new())?;
 
         // Correct output without empty brackets
         assert_eq!(result, "(docs on main) Update docs");
@@ -592,7 +608,7 @@ mod tests {
 
         // Test template WITH commit_number placeholder (produces empty brackets - the bug)
         let template_with = "[{commit_number}] {commit_type}: {message}";
-        let result_with = process_template(template_with, &variables)?;
+        let result_with = process_template(template_with, &variables, &HashMap::new())?;
         assert!(
             result_with.starts_with("[]"),
             "Bug: produces empty brackets"
@@ -600,7 +616,7 @@ mod tests {
 
         // Test template WITHOUT commit_number placeholder (correct)
         let template_without = "{commit_type}: {message}";
-        let result_without = process_template(template_without, &variables)?;
+        let result_without = process_template(template_without, &variables, &HashMap::new())?;
         assert_eq!(result_without, "feat: Add feature");
         assert!(
             !result_without.contains("[]"),
@@ -609,7 +625,7 @@ mod tests {
 
         // Test template with optional-style syntax (shows limitation of current implementation)
         let template_prefix = "#{commit_number} {commit_type}: {message}";
-        let result_prefix = process_template(template_prefix, &variables)?;
+        let result_prefix = process_template(template_prefix, &variables, &HashMap::new())?;
         assert_eq!(
             result_prefix, "# feat: Add feature",
             "Empty string for None values"
@@ -666,7 +682,7 @@ mod tests {
             email: "john@example.com".to_string(),
         };
 
-        let result = process_template(template, &variables)?;
+        let result = process_template(template, &variables, &HashMap::new())?;
         assert_eq!(result, "[42] (feat on new-feature) Add feature");
 
         Ok(())
@@ -687,7 +703,7 @@ mod tests {
             email: "john@example.com".to_string(),
         };
 
-        let result = process_template(template, &variables)?;
+        let result = process_template(template, &variables, &HashMap::new())?;
         // The conditional block should be completely removed, including the space after it
         assert_eq!(result, "(feat on new-feature) Add feature");
         // Verify no empty brackets
@@ -710,7 +726,7 @@ mod tests {
             email: "jane@example.com".to_string(),
         };
 
-        let result = process_template(template, &variables)?;
+        let result = process_template(template, &variables, &HashMap::new())?;
         assert_eq!(result, "[5] on 2024-01-15 (fix) Fix bug");
 
         Ok(())
@@ -731,7 +747,7 @@ mod tests {
             email: "alice@example.com".to_string(),
         };
 
-        let result = process_template(template, &variables)?;
+        let result = process_template(template, &variables, &HashMap::new())?;
         // commit_number is None, so first block removed; author has value, so second block kept
         assert_eq!(result, " by Alice - Update docs");
 
@@ -753,7 +769,7 @@ mod tests {
             email: "bob@example.com".to_string(),
         };
 
-        let result = process_template(template, &variables)?;
+        let result = process_template(template, &variables, &HashMap::new())?;
         assert_eq!(result, "Commit #100: Update dependencies");
 
         Ok(())
@@ -763,14 +779,14 @@ mod tests {
     fn test_conditional_block_validation_valid() {
         let template =
             "{?commit_number}[{commit_number}] {/commit_number}({commit_type}) {message}";
-        assert!(validate_template(template).is_ok());
+        assert!(validate_template(template, &[]).is_ok());
     }
 
     #[test]
     fn test_conditional_block_validation_unclosed()
     -> std::result::Result<(), Box<dyn std::error::Error>> {
         let template = "{?commit_number}[{commit_number}] ({commit_type}) {message}";
-        let result = validate_template(template);
+        let result = validate_template(template, &[]);
         assert!(result.is_err());
         let Err(e) = result else {
             return Err("Expected error".into());
@@ -784,7 +800,7 @@ mod tests {
     fn test_conditional_block_validation_unmatched_closing()
     -> std::result::Result<(), Box<dyn std::error::Error>> {
         let template = "[{commit_number}] {/commit_number}({commit_type}) {message}";
-        let result = validate_template(template);
+        let result = validate_template(template, &[]);
         assert!(result.is_err());
         let Err(e) = result else {
             return Err("Expected error".into());
@@ -798,7 +814,7 @@ mod tests {
     fn test_conditional_block_validation_invalid_variable()
     -> std::result::Result<(), Box<dyn std::error::Error>> {
         let template = "{?invalid_var}[{invalid_var}]{/invalid_var} {message}";
-        let result = validate_template(template);
+        let result = validate_template(template, &[]);
         assert!(result.is_err());
         let Err(e) = result else {
             return Err("Expected error".into());
@@ -827,7 +843,7 @@ mod tests {
             email: "test@example.com".to_string(),
         };
 
-        let result = process_template(template, &variables)?;
+        let result = process_template(template, &variables, &HashMap::new())?;
         assert_eq!(result, "Test");
         assert!(!result.contains("[]"));
 
@@ -851,7 +867,7 @@ mod tests {
             email: "dev@example.com".to_string(),
         };
 
-        let result_with = process_template(template, &with_number)?;
+        let result_with = process_template(template, &with_number, &HashMap::new())?;
         assert_eq!(result_with, "[42] (feat on new-feature) Add feature");
 
         // Scenario 2: Without commit number (-n flag)
@@ -866,7 +882,7 @@ mod tests {
             email: "dev@example.com".to_string(),
         };
 
-        let result_without = process_template(template, &without_number)?;
+        let result_without = process_template(template, &without_number, &HashMap::new())?;
         assert_eq!(result_without, "(feat on new-feature) Add feature");
         // CRITICAL: No empty brackets!
         assert!(!result_without.contains("[]"));

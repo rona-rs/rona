@@ -50,6 +50,7 @@
 pub mod cli;
 pub mod config;
 pub mod errors;
+pub mod extra_fields;
 pub mod git;
 pub mod template;
 pub mod utils;

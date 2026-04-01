@@ -1,0 +1,167 @@
+# .rona.toml — Rona configuration example
+#
+# Copy this file to .rona.toml (project-level) or ~/.config/rona.toml (global).
+# Project-level settings always override global ones.
+#
+# IMPORTANT: In TOML, every key-value pair that appears after a [[extra_fields]]
+# header belongs to that array item — not to the top-level table. Always place
+# editor, commit_types, template, and field_order BEFORE any [[extra_fields]] entry.
+
+# ---------------------------------------------------------------------------
+# Editor
+# ---------------------------------------------------------------------------
+# The command used to open the commit message file in non-interactive mode.
+# Any editor that can be launched as `<editor> <file>` works.
+
+editor = "nano"
+# editor = "vim"
+# editor = "zed --wait"
+# editor = "code --wait"
+
+
+# ---------------------------------------------------------------------------
+# Commit types
+# ---------------------------------------------------------------------------
+# The list shown in the commit-type selector.
+# Omit this key to use the built-in default: ["feat", "fix", "docs", "test", "chore"].
+
+commit_types = [
+    "feat",     # New feature
+    "fix",      # Bug fix
+    "docs",     # Documentation only
+    "refactor", # Code change that neither fixes a bug nor adds a feature
+    "test",     # Adding or updating tests
+    "perf",     # Performance improvement
+    "chore",    # Build process, dependency, or tooling changes
+    "ci",       # CI/CD configuration changes
+]
+
+
+# ---------------------------------------------------------------------------
+# Commit message template
+# ---------------------------------------------------------------------------
+# Used in interactive mode (-i flag) to format the final message.
+#
+# Built-in variables:
+#   {commit_number}   Incremental commit count on the current branch
+#   {commit_type}     The type selected at the prompt
+#   {branch_name}     Current branch name (prefix like "feat/" is stripped)
+#   {message}         The message entered by the user
+#   {date}            Today's date as YYYY-MM-DD
+#   {time}            Current time as HH:MM:SS
+#   {author}          Git author name (from git config)
+#   {email}           Git author email (from git config)
+#
+# Extra field variables (defined below under [[extra_fields]]):
+#   {scope}           Component / module scope
+#   {ticket}          Issue or ticket reference
+#
+# Conditional blocks — content is included only when the variable is non-empty:
+#   {?variable}...{/variable}
+#
+# This is especially useful for optional variables such as commit_number
+# (omitted with the -n flag), or optional extra fields the user can skip.
+
+template = "{?commit_number}[{commit_number}] {/commit_number}{commit_type}{?scope}({scope}){/scope}: {message}{?ticket} [{ticket}]{/ticket}"
+
+# Alternative: conventional commits with date prefix
+# template = "{?date}[{date}] {/date}{commit_type}{?scope}({scope}){/scope}: {message}"
+
+# Alternative: minimal — just type and message
+# template = "{commit_type}: {message}"
+
+# Alternative: include author and branch
+# template = "{commit_type}({branch_name}) by {author}: {message}"
+
+
+# ---------------------------------------------------------------------------
+# Prompt order  (interactive mode only)
+# ---------------------------------------------------------------------------
+# Controls the sequence of prompts shown after the commit-type selector.
+# Use the reserved name "message" to position the built-in message prompt.
+# Extra fields not listed here are appended after all listed items.
+# When this key is absent the default order is: extra fields, then message.
+
+field_order = ["scope", "message", "ticket"]
+
+# Alternative: message first, then the extra fields
+# field_order = ["message", "scope", "ticket"]
+
+
+# ---------------------------------------------------------------------------
+# Extra fields
+# ---------------------------------------------------------------------------
+# Each [[extra_fields]] entry adds one interactive prompt. The value entered
+# becomes a template variable matching the field's `name`.
+#
+# Available keys per entry:
+#   name              (required) Variable name used in the template.
+#   prompt            Label shown to the user. Defaults to `name`.
+#   kind              "text" (default) or "select".
+#   required          true / false (default). Reject empty answers when true.
+#   validation        Regex the answer must match. Shown as an error on mismatch.
+#   prefetch.source   "command" or "branch". Populates the prompt automatically.
+#   prefetch.command  Shell command whose stdout is parsed (source = "command").
+#   prefetch.extract_regex  Regex applied per line (command) or to branch name.
+#                     Extraction priority: named group `value`, capture group 1,
+#                     then the full match. A bare pattern like [A-Z]+-[0-9]+ works.
+#   prefetch.deduplicate  Remove duplicate results (source = "command"). Default: false.
+#
+# Prompt behaviour:
+#   select + non-empty prefetch  → select list with "(none)" and "Other" options
+#   select + empty prefetch      → falls back to free-text
+#   text   + command prefetch    → same as select with non-empty prefetch
+#   text   + branch prefetch     → free-text with the extracted value as default
+#   text   + no prefetch         → plain free-text
+
+# --- scope ---
+# Conventional-commit component scope, e.g. feat(api): ...
+# Candidates are extracted from the last 20 commit subjects.
+[[extra_fields]]
+name = "scope"
+prompt = "Select scope"
+kind = "select"
+required = false
+prefetch.source = "command"
+prefetch.command = "git log -20 --pretty=format:%s"
+prefetch.extract_regex = "\\w+\\((?P<value>[^)]*)\\):"
+prefetch.deduplicate = true
+
+# --- ticket ---
+# Issue / ticket reference such as PROJ-123.
+# Default value is extracted from the branch name automatically,
+# e.g. branch "feat/PROJ-123_add-login" → default "PROJ-123".
+[[extra_fields]]
+name = "ticket"
+prompt = "Ticket:"
+kind = "text"
+required = false
+validation = "^[A-Z]+-[0-9]+$"
+prefetch.source = "branch"
+prefetch.extract_regex = "[A-Z]+-[0-9]+"
+
+# --- env ---
+# Fixed list of deployment targets. No prefetch needed — options are provided
+# directly via a printf command so they never change.
+# Uncomment to enable.
+#
+# [[extra_fields]]
+# name = "env"
+# prompt = "Target environment"
+# kind = "select"
+# required = true
+# prefetch.source = "command"
+# prefetch.command = "printf 'dev\\nstaging\\nproduction\\n'"
+# prefetch.extract_regex = "(.+)"
+
+# --- breaking ---
+# Free-text description of a breaking change. Required, no prefetch.
+# Use in template as: {?breaking} BREAKING: {breaking}{/breaking}
+# Uncomment to enable.
+#
+# [[extra_fields]]
+# name = "breaking"
+# prompt = "Breaking change description (leave empty to skip)"
+# kind = "text"
+# required = false
+# validation = "^.{10,}$"

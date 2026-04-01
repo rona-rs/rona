@@ -31,11 +31,12 @@ use clap_complete::{Shell, generate};
 use glob::Pattern;
 use inquire::ui::{Attributes, Color, RenderConfig, StyleSheet, Styled};
 use inquire::{Confirm, Select, Text};
-use std::{fs::read_to_string, io, process::Command};
+use std::{collections::HashMap, fs::read_to_string, io, process::Command};
 
 use crate::{
     config::{Config, find_config_sources},
     errors::{Result, RonaError},
+    extra_fields::{ExtraField, prompt_extra_field},
     git::{
         COMMIT_MESSAGE_FILE_PATH, COMMIT_TYPES, create_needed_files, format_branch_name,
         generate_commit_message, get_current_branch, get_current_commit_nb, get_status_files,
@@ -407,6 +408,63 @@ fn handle_completion(shell: Shell) {
     }
 }
 
+/// Prompt the commit message and any configured extra fields in the order defined by
+/// `field_order`.
+///
+/// The reserved name `"message"` positions the built-in message prompt among the extra
+/// fields. Extra fields not listed in `field_order` are appended after all listed items.
+/// When `field_order` is empty the default order is: extra fields first, then message.
+///
+/// # Errors
+/// Returns an error if any prompt is cancelled or a validation regex is invalid.
+fn prompt_interactive_fields(
+    extra_fields: &[ExtraField],
+    field_order: &[String],
+) -> Result<(String, HashMap<String, String>)> {
+    const MESSAGE_KEY: &str = "message";
+
+    let ordered: Vec<String> = if field_order.is_empty() {
+        let mut v: Vec<String> = extra_fields.iter().map(|f| f.name.clone()).collect();
+        v.push(MESSAGE_KEY.to_string());
+        v
+    } else {
+        let mut v: Vec<String> = field_order.to_vec();
+        // Append extra fields not explicitly listed
+        for f in extra_fields {
+            if !v.iter().any(|s| s == &f.name) {
+                v.push(f.name.clone());
+            }
+        }
+        // Guarantee message is always prompted
+        if !v.iter().any(|s| s == MESSAGE_KEY) {
+            v.push(MESSAGE_KEY.to_string());
+        }
+        v
+    };
+
+    let mut message: Option<String> = None;
+    let mut extra_values: HashMap<String, String> = HashMap::new();
+
+    for name in &ordered {
+        if name == MESSAGE_KEY {
+            message = Some(
+                Text::new("Message")
+                    .prompt()
+                    .map_err(|_| RonaError::UserCancelled)?,
+            );
+        } else if let Some(field) = extra_fields.iter().find(|f| f.name == *name)
+            && let Some(value) = prompt_extra_field(field)?
+        {
+            extra_values.insert(field.name.clone(), value);
+        }
+    }
+
+    let message = message
+        .ok_or_else(|| RonaError::InvalidInput("message prompt was not executed".to_string()))?;
+
+    Ok((message, extra_values))
+}
+
 /// Handle the Generate command which creates a new commit message file.
 ///
 /// # Arguments
@@ -441,9 +499,18 @@ fn handle_generate(interactive: bool, no_commit_number: bool, config: &Config) -
     };
 
     if interactive {
-        // In interactive mode, skip generating the template file
-        // The file will be created/overwritten after message validation
-        handle_interactive_mode(commit_type, no_commit_number, config)?;
+        // In interactive mode, prompt all fields (including message) in configured order
+        let (message, extra_values) = prompt_interactive_fields(
+            &config.project_config.extra_fields,
+            &config.project_config.field_order,
+        )?;
+        handle_interactive_mode(
+            commit_type,
+            no_commit_number,
+            &message,
+            &extra_values,
+            config,
+        )?;
     } else {
         // In editor mode, generate the template file first, then open editor
         generate_commit_message(commit_type, no_commit_number)?;
@@ -456,16 +523,14 @@ fn handle_generate(interactive: bool, no_commit_number: bool, config: &Config) -
 fn handle_interactive_mode(
     commit_type: &str,
     no_commit_number: bool,
+    message: &str,
+    extra_values: &HashMap<String, String>,
     config: &Config,
 ) -> Result<()> {
     use std::fs;
 
     let project_root = get_top_level_path()?;
     let commit_file_path = project_root.join(COMMIT_MESSAGE_FILE_PATH);
-
-    let message: String = Text::new("Message")
-        .prompt()
-        .map_err(|_| RonaError::UserCancelled)?;
 
     if message.trim().is_empty() {
         println!("⚠️  Empty message provided. Exiting.");
@@ -489,8 +554,22 @@ fn handle_interactive_mode(
         .as_deref()
         .unwrap_or(default_template);
 
-    // Validate template
-    if let Err(e) = validate_template(template) {
+    // Warn about extra fields that are configured but not referenced in the template.
+    // A field is considered "used" if {name} or {?name} appears anywhere in the template.
+    for field in &config.project_config.extra_fields {
+        let referenced = template.contains(&format!("{{{}}}", field.name))
+            || template.contains(&format!("{{?{}}}", field.name));
+        if !referenced {
+            println!(
+                "[WARNING] Extra field '{}' is configured but not referenced in the template.",
+                field.name
+            );
+        }
+    }
+
+    // Validate template (including any extra field variable names)
+    let extra_names: Vec<&str> = extra_values.keys().map(String::as_str).collect();
+    if let Err(e) = validate_template(template, &extra_names) {
         println!("⚠️  Template validation error: {e}");
         println!("Using fallback format...");
         let formatted_message = if no_commit_number {
@@ -518,8 +597,8 @@ fn handle_interactive_mode(
         message.trim().to_string(),
     )?;
 
-    // Process template
-    let formatted_message = process_template(template, &variables)?;
+    // Process template (extra_values are substituted alongside built-in variables)
+    let formatted_message = process_template(template, &variables, extra_values)?;
 
     // Write the formatted message to commit_message.md
     fs::write(&commit_file_path, &formatted_message)?;
@@ -1862,6 +1941,8 @@ mod cli_tests {
     /// This test verifies that the new conditional block syntax properly handles None `commit_number`
     #[test]
     fn test_template_selection_with_no_commit_number() -> TestResult {
+        use std::collections::HashMap;
+
         use crate::template::{TemplateVariables, process_template};
 
         let default_template = "{?commit_number}[{commit_number}] {/commit_number}({commit_type} on {branch_name}) {message}";
@@ -1877,7 +1958,7 @@ mod cli_tests {
             email: "test@example.com".to_string(),
         };
 
-        let result = process_template(default_template, &variables)?;
+        let result = process_template(default_template, &variables, &HashMap::new())?;
 
         assert!(
             !result.contains("[]"),
@@ -1890,6 +1971,8 @@ mod cli_tests {
     /// REGRESSION TEST: Verify template selection logic for interactive mode WITH `commit_number`
     #[test]
     fn test_template_selection_with_commit_number() -> TestResult {
+        use std::collections::HashMap;
+
         use crate::template::{TemplateVariables, process_template};
 
         let default_template = "{?commit_number}[{commit_number}] {/commit_number}({commit_type} on {branch_name}) {message}";
@@ -1905,7 +1988,7 @@ mod cli_tests {
             email: "test@example.com".to_string(),
         };
 
-        let result = process_template(default_template, &variables)?;
+        let result = process_template(default_template, &variables, &HashMap::new())?;
 
         assert!(
             result.starts_with("[42]"),
@@ -1919,6 +2002,8 @@ mod cli_tests {
     /// This documents the original bug and ensures our fix prevents it
     #[test]
     fn test_bug_using_wrong_template_with_no_commit_number() -> TestResult {
+        use std::collections::HashMap;
+
         use crate::template::{TemplateVariables, process_template};
 
         let wrong_template = "[{commit_number}] ({commit_type} on {branch_name}) {message}";
@@ -1934,7 +2019,7 @@ mod cli_tests {
             email: "test@example.com".to_string(),
         };
 
-        let result = process_template(wrong_template, &variables)?;
+        let result = process_template(wrong_template, &variables, &HashMap::new())?;
 
         assert_eq!(result, "[] (docs on main) Update docs");
         assert!(result.contains("[]"), "This demonstrates the bug we fixed");
