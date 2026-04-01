@@ -140,6 +140,34 @@ impl ProjectConfig {
         }
     }
 
+    /// Loads the project configuration from a specific file path, bypassing the default
+    /// global/project config hierarchy.
+    ///
+    /// # Arguments
+    /// * `path` - The exact path to the TOML config file to load
+    ///
+    /// # Errors
+    /// Returns `ConfigError::ConfigNotFound` if the file does not exist.
+    /// Returns `ConfigError::InvalidConfig` if deserialization fails.
+    pub fn load_from_file(path: &std::path::Path) -> Result<Self> {
+        if !path.exists() {
+            return Err(ConfigError::ConfigNotFound.into());
+        }
+
+        let settings = config::Config::builder()
+            .add_source(config::File::from(path).required(true))
+            .build()
+            .map_err(|_| ConfigError::ConfigNotFound)?;
+
+        match settings.try_deserialize() {
+            Ok(config) => Ok(config),
+            Err(e) => {
+                eprintln!("Failed to deserialize config: {e}");
+                Err(ConfigError::InvalidConfig.into())
+            }
+        }
+    }
+
     /// Loads the project configuration from a specific directory.
     ///
     /// # Arguments
@@ -304,6 +332,29 @@ impl Config {
             dry_run: false,
             project_config,
         }
+    }
+
+    /// Creates a new Config instance loading only the specified config file,
+    /// bypassing the default global/project config hierarchy.
+    ///
+    /// # Arguments
+    /// * `path` - Path to the TOML config file to load
+    ///
+    /// # Errors
+    /// * If the home directory cannot be determined
+    /// * If the specified config file does not exist or cannot be parsed
+    ///
+    /// # Returns
+    /// * `Result<Config>` - A new Config instance using the provided file
+    pub fn new_with_config_file(path: &std::path::Path) -> Result<Self> {
+        let root = Self::get_config_root()?;
+        let project_config = ProjectConfig::load_from_file(path)?;
+        Ok(Self {
+            root,
+            verbose: false,
+            dry_run: false,
+            project_config,
+        })
     }
 
     /// Sets the verbose flag which controls detailed output logging.

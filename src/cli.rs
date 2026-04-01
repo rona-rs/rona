@@ -869,7 +869,11 @@ pub fn run() -> Result<()> {
         .try_init()
         .ok();
 
-    let mut config = Config::new()?;
+    let mut config = if let Some(ref config_path) = cli.config {
+        Config::new_with_config_file(std::path::Path::new(config_path))?
+    } else {
+        Config::new()?
+    };
 
     // Set the global flags in the config
     config.set_verbose(cli.verbose);
