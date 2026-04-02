@@ -28,15 +28,13 @@ set edit:completion:arg-completer[rona] = {|@words|
             cand add-with-exclude 'Add all files to the `git add` command and exclude the patterns passed as positional arguments'
             cand commit 'Directly commit the file with the text in `commit_message.md`'
             cand completion 'Generate shell completions for your shell'
-            cand config 'Manage configuration files (create or edit local or global config)'
+            cand config 'Manage configuration files (create or inspect)'
             cand generate 'Directly generate the `commit_message.md` file'
             cand init 'Initialize the rona configuration file'
             cand list-status 'List files from git status (for shell completion on the -a)'
             cand push 'Push to a git repository'
             cand set-editor 'Set the editor to use for editing the commit message'
             cand sync 'Sync current branch with main (or another branch) by pulling and merging/rebasing'
-            cand which-config 'Show which configuration files would be used from a directory. Similar to ''git config --show-origin'' - displays all config sources and their priority'
-            cand find-config 'Show which configuration files would be used from a directory. Similar to ''git config --show-origin'' - displays all config sources and their priority'
             cand help 'Print this message or the help of the given subcommand(s)'
         }
         &'rona;add-with-exclude'= {
@@ -62,9 +60,42 @@ set edit:completion:arg-completer[rona] = {|@words|
             cand --help 'Print help'
         }
         &'rona;config'= {
+            cand -h 'Print help'
+            cand --help 'Print help'
+            cand create 'Create or manage a local or global configuration file'
+            cand which 'Show which configuration files would be used from a directory'
+            cand find 'Show which configuration files would be used from a directory'
+            cand help 'Print this message or the help of the given subcommand(s)'
+        }
+        &'rona;config;create'= {
+            cand -e 'Add .rona.toml to .git/info/exclude (only applies to local scope)'
+            cand --exclude 'Add .rona.toml to .git/info/exclude (only applies to local scope)'
             cand --dry-run 'Show what would be created without actually creating the config file'
             cand -h 'Print help (see more with ''--help'')'
             cand --help 'Print help (see more with ''--help'')'
+        }
+        &'rona;config;which'= {
+            cand -e 'Show the effective (merged) configuration values'
+            cand --effective 'Show the effective (merged) configuration values'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'rona;config;find'= {
+            cand -e 'Show the effective (merged) configuration values'
+            cand --effective 'Show the effective (merged) configuration values'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'rona;config;help'= {
+            cand create 'Create or manage a local or global configuration file'
+            cand which 'Show which configuration files would be used from a directory'
+            cand help 'Print this message or the help of the given subcommand(s)'
+        }
+        &'rona;config;help;create'= {
+        }
+        &'rona;config;help;which'= {
+        }
+        &'rona;config;help;help'= {
         }
         &'rona;generate'= {
             cand --dry-run 'Show what would be generated without creating files'
@@ -105,30 +136,17 @@ set edit:completion:arg-completer[rona] = {|@words|
             cand -h 'Print help'
             cand --help 'Print help'
         }
-        &'rona;which-config'= {
-            cand -e 'Show the effective (merged) configuration values'
-            cand --effective 'Show the effective (merged) configuration values'
-            cand -h 'Print help'
-            cand --help 'Print help'
-        }
-        &'rona;find-config'= {
-            cand -e 'Show the effective (merged) configuration values'
-            cand --effective 'Show the effective (merged) configuration values'
-            cand -h 'Print help'
-            cand --help 'Print help'
-        }
         &'rona;help'= {
             cand add-with-exclude 'Add all files to the `git add` command and exclude the patterns passed as positional arguments'
             cand commit 'Directly commit the file with the text in `commit_message.md`'
             cand completion 'Generate shell completions for your shell'
-            cand config 'Manage configuration files (create or edit local or global config)'
+            cand config 'Manage configuration files (create or inspect)'
             cand generate 'Directly generate the `commit_message.md` file'
             cand init 'Initialize the rona configuration file'
             cand list-status 'List files from git status (for shell completion on the -a)'
             cand push 'Push to a git repository'
             cand set-editor 'Set the editor to use for editing the commit message'
             cand sync 'Sync current branch with main (or another branch) by pulling and merging/rebasing'
-            cand which-config 'Show which configuration files would be used from a directory. Similar to ''git config --show-origin'' - displays all config sources and their priority'
             cand help 'Print this message or the help of the given subcommand(s)'
         }
         &'rona;help;add-with-exclude'= {
@@ -138,6 +156,12 @@ set edit:completion:arg-completer[rona] = {|@words|
         &'rona;help;completion'= {
         }
         &'rona;help;config'= {
+            cand create 'Create or manage a local or global configuration file'
+            cand which 'Show which configuration files would be used from a directory'
+        }
+        &'rona;help;config;create'= {
+        }
+        &'rona;help;config;which'= {
         }
         &'rona;help;generate'= {
         }
@@ -150,8 +174,6 @@ set edit:completion:arg-completer[rona] = {|@words|
         &'rona;help;set-editor'= {
         }
         &'rona;help;sync'= {
-        }
-        &'rona;help;which-config'= {
         }
         &'rona;help;help'= {
         }

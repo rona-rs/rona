@@ -41,7 +41,7 @@ pub use commit::{
     COMMIT_MESSAGE_FILE_PATH, COMMIT_TYPES, generate_commit_message, get_current_commit_nb,
     git_commit,
 };
-pub use files::create_needed_files;
+pub use files::{add_to_git_exclude, create_needed_files};
 pub use remote::git_push;
 pub use repository::{find_git_root, get_top_level_path};
 pub use staging::git_add_with_exclude_patterns;

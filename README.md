@@ -333,12 +333,25 @@ For the full configuration reference including all options and edge cases, see t
 # Initialize global configuration
 rona init vim                    # Creates ~/.config/rona.toml
 
-# Initialize project-specific configuration  
+# Initialize project-specific configuration
 cd my-project
 rona init zed                    # Creates ./.rona.toml (overrides global)
 
+# Create a local config and exclude it from git tracking
+rona config create local --exclude
+rona config -c local -e          # Short form
+
+# Create a global config file
+rona config create global
+rona config -c global            # Short form
+
 # Change editor later
 rona set-editor "code --wait"    # Choose global or project scope interactively
+
+# Inspect which config files are active
+rona config which                # Show sources for current directory
+rona config -w                   # Short form
+rona config which --effective    # Also show merged values
 
 # View current configuration
 cat .rona.toml                   # Project config
@@ -624,6 +637,73 @@ rona completion <shell>
 
 ```bash
 rona completion fish > ~/.config/fish/completions/rona.fish
+```
+
+### `config`
+
+Manage configuration files and inspect which ones are active. Groups two subcommands:
+
+#### `config create` (`-c`)
+
+Create a local or global configuration file.
+
+```bash
+rona config create <local|global> [--exclude] [--dry-run]
+# short form
+rona config -c <local|global> [-e] [--dry-run]
+```
+
+**Options:**
+
+- `-e, --exclude` - Add `.rona.toml` to `.git/info/exclude` (local scope only)
+- `--dry-run` - Preview what would be created without writing any files
+
+**Examples:**
+
+```bash
+# Create a local config file
+rona config create local
+rona config -c local
+
+# Create and exclude .rona.toml from git tracking
+rona config create local --exclude
+rona config -c local -e
+
+# Create a global config file
+rona config create global
+rona config -c global
+
+# Preview without writing
+rona config create local --dry-run
+```
+
+#### `config which` (`-w`)
+
+Show which configuration files would be loaded from the current (or given) directory, in priority order.
+
+```bash
+rona config which [PATH] [--effective]
+# short form
+rona config -w [PATH] [-e | --effective]
+```
+
+**Options:**
+
+- `-e, --effective` - Also print the merged configuration values
+
+**Examples:**
+
+```bash
+# Show config sources for the current directory
+rona config which
+rona config -w
+
+# Show config sources from a specific path
+rona config which /path/to/project
+
+# Show config sources and their merged values
+rona config which --effective
+rona config -w -e
 ```
 
 ### `generate` (`-g`)

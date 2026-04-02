@@ -31,15 +31,13 @@ Register-ArgumentCompleter -Native -CommandName 'rona' -ScriptBlock {
             [CompletionResult]::new('add-with-exclude', 'add-with-exclude', [CompletionResultType]::ParameterValue, 'Add all files to the `git add` command and exclude the patterns passed as positional arguments')
             [CompletionResult]::new('commit', 'commit', [CompletionResultType]::ParameterValue, 'Directly commit the file with the text in `commit_message.md`')
             [CompletionResult]::new('completion', 'completion', [CompletionResultType]::ParameterValue, 'Generate shell completions for your shell')
-            [CompletionResult]::new('config', 'config', [CompletionResultType]::ParameterValue, 'Manage configuration files (create or edit local or global config)')
+            [CompletionResult]::new('config', 'config', [CompletionResultType]::ParameterValue, 'Manage configuration files (create or inspect)')
             [CompletionResult]::new('generate', 'generate', [CompletionResultType]::ParameterValue, 'Directly generate the `commit_message.md` file')
             [CompletionResult]::new('init', 'init', [CompletionResultType]::ParameterValue, 'Initialize the rona configuration file')
             [CompletionResult]::new('list-status', 'list-status', [CompletionResultType]::ParameterValue, 'List files from git status (for shell completion on the -a)')
             [CompletionResult]::new('push', 'push', [CompletionResultType]::ParameterValue, 'Push to a git repository')
             [CompletionResult]::new('set-editor', 'set-editor', [CompletionResultType]::ParameterValue, 'Set the editor to use for editing the commit message')
             [CompletionResult]::new('sync', 'sync', [CompletionResultType]::ParameterValue, 'Sync current branch with main (or another branch) by pulling and merging/rebasing')
-            [CompletionResult]::new('which-config', 'which-config', [CompletionResultType]::ParameterValue, 'Show which configuration files would be used from a directory. Similar to ''git config --show-origin'' - displays all config sources and their priority')
-            [CompletionResult]::new('find-config', 'find-config', [CompletionResultType]::ParameterValue, 'Show which configuration files would be used from a directory. Similar to ''git config --show-origin'' - displays all config sources and their priority')
             [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
             break
         }
@@ -69,9 +67,49 @@ Register-ArgumentCompleter -Native -CommandName 'rona' -ScriptBlock {
             break
         }
         'rona;config' {
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('create', 'create', [CompletionResultType]::ParameterValue, 'Create or manage a local or global configuration file')
+            [CompletionResult]::new('which', 'which', [CompletionResultType]::ParameterValue, 'Show which configuration files would be used from a directory')
+            [CompletionResult]::new('find', 'find', [CompletionResultType]::ParameterValue, 'Show which configuration files would be used from a directory')
+            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
+            break
+        }
+        'rona;config;create' {
+            [CompletionResult]::new('-e', '-e', [CompletionResultType]::ParameterName, 'Add .rona.toml to .git/info/exclude (only applies to local scope)')
+            [CompletionResult]::new('--exclude', '--exclude', [CompletionResultType]::ParameterName, 'Add .rona.toml to .git/info/exclude (only applies to local scope)')
             [CompletionResult]::new('--dry-run', '--dry-run', [CompletionResultType]::ParameterName, 'Show what would be created without actually creating the config file')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help (see more with ''--help'')')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help (see more with ''--help'')')
+            break
+        }
+        'rona;config;which' {
+            [CompletionResult]::new('-e', '-e', [CompletionResultType]::ParameterName, 'Show the effective (merged) configuration values')
+            [CompletionResult]::new('--effective', '--effective', [CompletionResultType]::ParameterName, 'Show the effective (merged) configuration values')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'rona;config;find' {
+            [CompletionResult]::new('-e', '-e', [CompletionResultType]::ParameterName, 'Show the effective (merged) configuration values')
+            [CompletionResult]::new('--effective', '--effective', [CompletionResultType]::ParameterName, 'Show the effective (merged) configuration values')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'rona;config;help' {
+            [CompletionResult]::new('create', 'create', [CompletionResultType]::ParameterValue, 'Create or manage a local or global configuration file')
+            [CompletionResult]::new('which', 'which', [CompletionResultType]::ParameterValue, 'Show which configuration files would be used from a directory')
+            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
+            break
+        }
+        'rona;config;help;create' {
+            break
+        }
+        'rona;config;help;which' {
+            break
+        }
+        'rona;config;help;help' {
             break
         }
         'rona;generate' {
@@ -119,32 +157,17 @@ Register-ArgumentCompleter -Native -CommandName 'rona' -ScriptBlock {
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
-        'rona;which-config' {
-            [CompletionResult]::new('-e', '-e', [CompletionResultType]::ParameterName, 'Show the effective (merged) configuration values')
-            [CompletionResult]::new('--effective', '--effective', [CompletionResultType]::ParameterName, 'Show the effective (merged) configuration values')
-            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
-            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
-            break
-        }
-        'rona;find-config' {
-            [CompletionResult]::new('-e', '-e', [CompletionResultType]::ParameterName, 'Show the effective (merged) configuration values')
-            [CompletionResult]::new('--effective', '--effective', [CompletionResultType]::ParameterName, 'Show the effective (merged) configuration values')
-            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
-            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
-            break
-        }
         'rona;help' {
             [CompletionResult]::new('add-with-exclude', 'add-with-exclude', [CompletionResultType]::ParameterValue, 'Add all files to the `git add` command and exclude the patterns passed as positional arguments')
             [CompletionResult]::new('commit', 'commit', [CompletionResultType]::ParameterValue, 'Directly commit the file with the text in `commit_message.md`')
             [CompletionResult]::new('completion', 'completion', [CompletionResultType]::ParameterValue, 'Generate shell completions for your shell')
-            [CompletionResult]::new('config', 'config', [CompletionResultType]::ParameterValue, 'Manage configuration files (create or edit local or global config)')
+            [CompletionResult]::new('config', 'config', [CompletionResultType]::ParameterValue, 'Manage configuration files (create or inspect)')
             [CompletionResult]::new('generate', 'generate', [CompletionResultType]::ParameterValue, 'Directly generate the `commit_message.md` file')
             [CompletionResult]::new('init', 'init', [CompletionResultType]::ParameterValue, 'Initialize the rona configuration file')
             [CompletionResult]::new('list-status', 'list-status', [CompletionResultType]::ParameterValue, 'List files from git status (for shell completion on the -a)')
             [CompletionResult]::new('push', 'push', [CompletionResultType]::ParameterValue, 'Push to a git repository')
             [CompletionResult]::new('set-editor', 'set-editor', [CompletionResultType]::ParameterValue, 'Set the editor to use for editing the commit message')
             [CompletionResult]::new('sync', 'sync', [CompletionResultType]::ParameterValue, 'Sync current branch with main (or another branch) by pulling and merging/rebasing')
-            [CompletionResult]::new('which-config', 'which-config', [CompletionResultType]::ParameterValue, 'Show which configuration files would be used from a directory. Similar to ''git config --show-origin'' - displays all config sources and their priority')
             [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
             break
         }
@@ -158,6 +181,14 @@ Register-ArgumentCompleter -Native -CommandName 'rona' -ScriptBlock {
             break
         }
         'rona;help;config' {
+            [CompletionResult]::new('create', 'create', [CompletionResultType]::ParameterValue, 'Create or manage a local or global configuration file')
+            [CompletionResult]::new('which', 'which', [CompletionResultType]::ParameterValue, 'Show which configuration files would be used from a directory')
+            break
+        }
+        'rona;help;config;create' {
+            break
+        }
+        'rona;help;config;which' {
             break
         }
         'rona;help;generate' {
@@ -176,9 +207,6 @@ Register-ArgumentCompleter -Native -CommandName 'rona' -ScriptBlock {
             break
         }
         'rona;help;sync' {
-            break
-        }
-        'rona;help;which-config' {
             break
         }
         'rona;help;help' {
