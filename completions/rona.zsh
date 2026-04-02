@@ -64,12 +64,78 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (config)
 _arguments "${_arguments_options[@]}" : \
+'-h[Print help]' \
+'--help[Print help]' \
+":: :_rona__config_commands" \
+"*::: :->config" \
+&& ret=0
+
+    case $state in
+    (config)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:rona-config-command-$line[1]:"
+        case $line[1] in
+            (create)
+_arguments "${_arguments_options[@]}" : \
+'-e[Add .rona.toml to .git/info/exclude (only applies to local scope)]' \
+'--exclude[Add .rona.toml to .git/info/exclude (only applies to local scope)]' \
 '--dry-run[Show what would be created without actually creating the config file]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
 ':scope -- Scope of the configuration (local project or global):((local\:"Local project configuration (.rona.toml)"
 global\:"Global configuration (~/.config/rona.toml)"))' \
 && ret=0
+;;
+(which)
+_arguments "${_arguments_options[@]}" : \
+'-e[Show the effective (merged) configuration values]' \
+'--effective[Show the effective (merged) configuration values]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'::path -- Directory to check from (defaults to current directory):_files -/' \
+&& ret=0
+;;
+(find)
+_arguments "${_arguments_options[@]}" : \
+'-e[Show the effective (merged) configuration values]' \
+'--effective[Show the effective (merged) configuration values]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'::path -- Directory to check from (defaults to current directory):_files -/' \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+":: :_rona__config__help_commands" \
+"*::: :->help" \
+&& ret=0
+
+    case $state in
+    (help)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:rona-config-help-command-$line[1]:"
+        case $line[1] in
+            (create)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(which)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+        esac
+    ;;
+esac
 ;;
 (generate)
 _arguments "${_arguments_options[@]}" : \
@@ -125,24 +191,6 @@ _arguments "${_arguments_options[@]}" : \
 '--help[Print help]' \
 && ret=0
 ;;
-(which-config)
-_arguments "${_arguments_options[@]}" : \
-'-e[Show the effective (merged) configuration values]' \
-'--effective[Show the effective (merged) configuration values]' \
-'-h[Print help]' \
-'--help[Print help]' \
-'::path -- Directory to check from (defaults to current directory):_files -/' \
-&& ret=0
-;;
-(find-config)
-_arguments "${_arguments_options[@]}" : \
-'-e[Show the effective (merged) configuration values]' \
-'--effective[Show the effective (merged) configuration values]' \
-'-h[Print help]' \
-'--help[Print help]' \
-'::path -- Directory to check from (defaults to current directory):_files -/' \
-&& ret=0
-;;
 (help)
 _arguments "${_arguments_options[@]}" : \
 ":: :_rona__help_commands" \
@@ -169,7 +217,27 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (config)
 _arguments "${_arguments_options[@]}" : \
+":: :_rona__help__config_commands" \
+"*::: :->config" \
 && ret=0
+
+    case $state in
+    (config)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:rona-help-config-command-$line[1]:"
+        case $line[1] in
+            (create)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(which)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
 ;;
 (generate)
 _arguments "${_arguments_options[@]}" : \
@@ -195,10 +263,6 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
-(which-config)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
 (help)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
@@ -218,15 +282,13 @@ _rona_commands() {
 'add-with-exclude:Add all files to the \`git add\` command and exclude the patterns passed as positional arguments' \
 'commit:Directly commit the file with the text in \`commit_message.md\`' \
 'completion:Generate shell completions for your shell' \
-'config:Manage configuration files (create or edit local or global config)' \
+'config:Manage configuration files (create or inspect)' \
 'generate:Directly generate the \`commit_message.md\` file' \
 'init:Initialize the rona configuration file' \
 'list-status:List files from git status (for shell completion on the -a)' \
 'push:Push to a git repository' \
 'set-editor:Set the editor to use for editing the commit message' \
 'sync:Sync current branch with main (or another branch) by pulling and merging/rebasing' \
-'which-config:Show which configuration files would be used from a directory. Similar to '\''git config --show-origin'\'' - displays all config sources and their priority' \
-'find-config:Show which configuration files would be used from a directory. Similar to '\''git config --show-origin'\'' - displays all config sources and their priority' \
 'help:Print this message or the help of the given subcommand(s)' \
     )
     _describe -t commands 'rona commands' commands "$@"
@@ -248,8 +310,47 @@ _rona__completion_commands() {
 }
 (( $+functions[_rona__config_commands] )) ||
 _rona__config_commands() {
-    local commands; commands=()
+    local commands; commands=(
+'create:Create or manage a local or global configuration file' \
+'which:Show which configuration files would be used from a directory' \
+'find:Show which configuration files would be used from a directory' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
     _describe -t commands 'rona config commands' commands "$@"
+}
+(( $+functions[_rona__config__create_commands] )) ||
+_rona__config__create_commands() {
+    local commands; commands=()
+    _describe -t commands 'rona config create commands' commands "$@"
+}
+(( $+functions[_rona__config__help_commands] )) ||
+_rona__config__help_commands() {
+    local commands; commands=(
+'create:Create or manage a local or global configuration file' \
+'which:Show which configuration files would be used from a directory' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'rona config help commands' commands "$@"
+}
+(( $+functions[_rona__config__help__create_commands] )) ||
+_rona__config__help__create_commands() {
+    local commands; commands=()
+    _describe -t commands 'rona config help create commands' commands "$@"
+}
+(( $+functions[_rona__config__help__help_commands] )) ||
+_rona__config__help__help_commands() {
+    local commands; commands=()
+    _describe -t commands 'rona config help help commands' commands "$@"
+}
+(( $+functions[_rona__config__help__which_commands] )) ||
+_rona__config__help__which_commands() {
+    local commands; commands=()
+    _describe -t commands 'rona config help which commands' commands "$@"
+}
+(( $+functions[_rona__config__which_commands] )) ||
+_rona__config__which_commands() {
+    local commands; commands=()
+    _describe -t commands 'rona config which commands' commands "$@"
 }
 (( $+functions[_rona__generate_commands] )) ||
 _rona__generate_commands() {
@@ -262,14 +363,13 @@ _rona__help_commands() {
 'add-with-exclude:Add all files to the \`git add\` command and exclude the patterns passed as positional arguments' \
 'commit:Directly commit the file with the text in \`commit_message.md\`' \
 'completion:Generate shell completions for your shell' \
-'config:Manage configuration files (create or edit local or global config)' \
+'config:Manage configuration files (create or inspect)' \
 'generate:Directly generate the \`commit_message.md\` file' \
 'init:Initialize the rona configuration file' \
 'list-status:List files from git status (for shell completion on the -a)' \
 'push:Push to a git repository' \
 'set-editor:Set the editor to use for editing the commit message' \
 'sync:Sync current branch with main (or another branch) by pulling and merging/rebasing' \
-'which-config:Show which configuration files would be used from a directory. Similar to '\''git config --show-origin'\'' - displays all config sources and their priority' \
 'help:Print this message or the help of the given subcommand(s)' \
     )
     _describe -t commands 'rona help commands' commands "$@"
@@ -291,8 +391,21 @@ _rona__help__completion_commands() {
 }
 (( $+functions[_rona__help__config_commands] )) ||
 _rona__help__config_commands() {
-    local commands; commands=()
+    local commands; commands=(
+'create:Create or manage a local or global configuration file' \
+'which:Show which configuration files would be used from a directory' \
+    )
     _describe -t commands 'rona help config commands' commands "$@"
+}
+(( $+functions[_rona__help__config__create_commands] )) ||
+_rona__help__config__create_commands() {
+    local commands; commands=()
+    _describe -t commands 'rona help config create commands' commands "$@"
+}
+(( $+functions[_rona__help__config__which_commands] )) ||
+_rona__help__config__which_commands() {
+    local commands; commands=()
+    _describe -t commands 'rona help config which commands' commands "$@"
 }
 (( $+functions[_rona__help__generate_commands] )) ||
 _rona__help__generate_commands() {
@@ -329,11 +442,6 @@ _rona__help__sync_commands() {
     local commands; commands=()
     _describe -t commands 'rona help sync commands' commands "$@"
 }
-(( $+functions[_rona__help__which-config_commands] )) ||
-_rona__help__which-config_commands() {
-    local commands; commands=()
-    _describe -t commands 'rona help which-config commands' commands "$@"
-}
 (( $+functions[_rona__init_commands] )) ||
 _rona__init_commands() {
     local commands; commands=()
@@ -358,11 +466,6 @@ _rona__set-editor_commands() {
 _rona__sync_commands() {
     local commands; commands=()
     _describe -t commands 'rona sync commands' commands "$@"
-}
-(( $+functions[_rona__which-config_commands] )) ||
-_rona__which-config_commands() {
-    local commands; commands=()
-    _describe -t commands 'rona which-config commands' commands "$@"
 }
 
 if [ "$funcstack[1]" = "_rona" ]; then

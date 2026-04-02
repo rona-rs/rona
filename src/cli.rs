@@ -38,9 +38,9 @@ use crate::{
     errors::{Result, RonaError},
     extra_fields::{ExtraField, prompt_extra_field},
     git::{
-        COMMIT_MESSAGE_FILE_PATH, COMMIT_TYPES, create_needed_files, format_branch_name,
-        generate_commit_message, get_current_branch, get_current_commit_nb, get_status_files,
-        get_top_level_path, git_add_with_exclude_patterns, git_commit, git_push,
+        COMMIT_MESSAGE_FILE_PATH, COMMIT_TYPES, add_to_git_exclude, create_needed_files,
+        format_branch_name, generate_commit_message, get_current_branch, get_current_commit_nb,
+        get_status_files, get_top_level_path, git_add_with_exclude_patterns, git_commit, git_push,
     },
     template::{TemplateVariables, process_template, validate_template},
 };
@@ -52,6 +52,38 @@ pub(crate) enum ConfigScope {
     Local,
     /// Global configuration (~/.config/rona.toml)
     Global,
+}
+
+/// Subcommands for the `config` command
+#[derive(Subcommand)]
+pub(crate) enum ConfigSubcommand {
+    /// Create or manage a local or global configuration file
+    #[command(short_flag = 'c', name = "create")]
+    Create {
+        /// Scope of the configuration (local project or global)
+        #[arg(value_enum)]
+        scope: ConfigScope,
+
+        /// Add .rona.toml to .git/info/exclude (only applies to local scope)
+        #[arg(short = 'e', long, default_value_t = false)]
+        exclude: bool,
+
+        /// Show what would be created without actually creating the config file
+        #[arg(long, default_value_t = false)]
+        dry_run: bool,
+    },
+
+    /// Show which configuration files would be used from a directory
+    #[command(short_flag = 'w', name = "which", visible_alias = "find")]
+    Which {
+        /// Directory to check from (defaults to current directory)
+        #[arg(value_name = "PATH", value_hint = ValueHint::DirPath)]
+        path: Option<String>,
+
+        /// Show the effective (merged) configuration values
+        #[arg(short = 'e', long = "effective", default_value_t = false)]
+        show_effective: bool,
+    },
 }
 
 /// CLI's commands
@@ -105,16 +137,11 @@ pub(crate) enum CliCommand {
         shell: Shell,
     },
 
-    /// Manage configuration files (create or edit local or global config)
+    /// Manage configuration files (create or inspect)
     #[command(name = "config")]
     Config {
-        /// Scope of the configuration (local project or global)
-        #[arg(value_enum)]
-        scope: ConfigScope,
-
-        /// Show what would be created without actually creating the config file
-        #[arg(long, default_value_t = false)]
-        dry_run: bool,
+        #[command(subcommand)]
+        subcommand: ConfigSubcommand,
     },
 
     /// Directly generate the `commit_message.md` file.
@@ -191,19 +218,6 @@ pub(crate) enum CliCommand {
         /// Show what would be done without actually doing it
         #[arg(long, default_value_t = false)]
         dry_run: bool,
-    },
-
-    /// Show which configuration files would be used from a directory.
-    /// Similar to 'git config --show-origin' - displays all config sources and their priority.
-    #[command(short_flag = 'w', name = "which-config", visible_alias = "find-config")]
-    WhichConfig {
-        /// Directory to check from (defaults to current directory)
-        #[arg(value_name = "PATH", value_hint = ValueHint::DirPath)]
-        path: Option<String>,
-
-        /// Show the effective (merged) configuration values
-        #[arg(short = 'e', long = "effective", default_value_t = false)]
-        show_effective: bool,
     },
 }
 
@@ -861,7 +875,7 @@ fn handle_which_config(path: Option<&str>, show_effective: bool) -> Result<()> {
 /// # Errors
 /// * If creating configuration file fails
 /// * If writing configuration content fails
-fn handle_config_command(scope: ConfigScope, config: &Config) -> Result<()> {
+fn handle_config_command(scope: ConfigScope, exclude: bool, config: &Config) -> Result<()> {
     use std::io::Write;
 
     let config_path = {
@@ -886,6 +900,14 @@ fn handle_config_command(scope: ConfigScope, config: &Config) -> Result<()> {
             },
             config_path.display()
         );
+        if exclude {
+            match scope {
+                ConfigScope::Local => println!("Would add .rona.toml to .git/info/exclude"),
+                ConfigScope::Global => {
+                    println!("--exclude only applies to local scope, ignoring");
+                }
+            }
+        }
         return Ok(());
     }
 
@@ -896,27 +918,38 @@ fn handle_config_command(scope: ConfigScope, config: &Config) -> Result<()> {
             config_path.display()
         );
         println!("Use 'rona set-editor <editor>' to modify the editor setting.");
-        return Ok(());
+    } else {
+        // Create parent directory if it doesn't exist (for global config)
+        if let Some(parent) = config_path.parent()
+            && !parent.exists()
+        {
+            std::fs::create_dir_all(parent)?;
+        }
+
+        // Get default config and serialize to TOML
+        let default_config = crate::config::ProjectConfig::default();
+        let toml_content = toml::to_string_pretty(&default_config)
+            .map_err(|_| crate::errors::ConfigError::InvalidConfig)?;
+
+        // Write the config file
+        let mut file = std::fs::File::create(&config_path)?;
+        file.write_all(toml_content.as_bytes())?;
+
+        println!("Configuration file created at: {}", config_path.display());
+        println!("You can now edit this file to customize your settings.");
     }
 
-    // Create parent directory if it doesn't exist (for global config)
-    if let Some(parent) = config_path.parent()
-        && !parent.exists()
-    {
-        std::fs::create_dir_all(parent)?;
+    if exclude {
+        match scope {
+            ConfigScope::Local => {
+                add_to_git_exclude(&[".rona.toml"])?;
+                println!("Added .rona.toml to .git/info/exclude");
+            }
+            ConfigScope::Global => {
+                println!("--exclude only applies to local scope, ignoring");
+            }
+        }
     }
-
-    // Get default config and serialize to TOML
-    let default_config = crate::config::ProjectConfig::default();
-    let toml_content = toml::to_string_pretty(&default_config)
-        .map_err(|_| crate::errors::ConfigError::InvalidConfig)?;
-
-    // Write the config file
-    let mut file = std::fs::File::create(&config_path)?;
-    file.write_all(toml_content.as_bytes())?;
-
-    println!("Configuration file created at: {}", config_path.display());
-    println!("You can now edit this file to customize your settings.");
 
     Ok(())
 }
@@ -983,10 +1016,20 @@ pub fn run() -> Result<()> {
             Ok(())
         }
 
-        CliCommand::Config { scope, dry_run } => {
-            config.set_dry_run(dry_run);
-            handle_config_command(scope, &config)
-        }
+        CliCommand::Config { subcommand } => match subcommand {
+            ConfigSubcommand::Create {
+                scope,
+                exclude,
+                dry_run,
+            } => {
+                config.set_dry_run(dry_run);
+                handle_config_command(scope, exclude, &config)
+            }
+            ConfigSubcommand::Which {
+                path,
+                show_effective,
+            } => handle_which_config(path.as_deref(), show_effective),
+        },
 
         CliCommand::Generate {
             dry_run,
@@ -1023,11 +1066,6 @@ pub fn run() -> Result<()> {
             config.set_dry_run(dry_run);
             handle_sync(&source_branch, rebase, new_branch.as_deref(), &config)
         }
-
-        CliCommand::WhichConfig {
-            path,
-            show_effective,
-        } => handle_which_config(path.as_deref(), show_effective),
     }
 }
 
@@ -1870,67 +1908,139 @@ mod cli_tests {
 
     // === CONFIG COMMAND TESTS ===
 
-    #[test]
-    fn test_config_local() -> TestResult {
-        let args = vec!["rona", "config", "local"];
-        let cli = Cli::try_parse_from(args)?;
-
-        let CliCommand::Config { scope, dry_run } = cli.command else {
+    fn unwrap_config_create(
+        cli: Cli,
+    ) -> std::result::Result<(ConfigScope, bool, bool), Box<dyn std::error::Error>> {
+        let CliCommand::Config { subcommand } = cli.command else {
             return Err("Wrong command parsed".into());
         };
+        let ConfigSubcommand::Create {
+            scope,
+            exclude,
+            dry_run,
+        } = subcommand
+        else {
+            return Err("Wrong subcommand parsed".into());
+        };
+        Ok((scope, exclude, dry_run))
+    }
+
+    #[test]
+    fn test_config_local() -> TestResult {
+        let args = vec!["rona", "config", "create", "local"];
+        let cli = Cli::try_parse_from(args)?;
+        let (scope, exclude, dry_run) = unwrap_config_create(cli)?;
         assert!(matches!(scope, ConfigScope::Local));
+        assert!(!exclude);
+        assert!(!dry_run);
+        Ok(())
+    }
+
+    #[test]
+    fn test_config_local_short() -> TestResult {
+        let args = vec!["rona", "config", "-c", "local"];
+        let cli = Cli::try_parse_from(args)?;
+        let (scope, exclude, dry_run) = unwrap_config_create(cli)?;
+        assert!(matches!(scope, ConfigScope::Local));
+        assert!(!exclude);
         assert!(!dry_run);
         Ok(())
     }
 
     #[test]
     fn test_config_global() -> TestResult {
-        let args = vec!["rona", "config", "global"];
+        let args = vec!["rona", "config", "create", "global"];
         let cli = Cli::try_parse_from(args)?;
-
-        let CliCommand::Config { scope, dry_run } = cli.command else {
-            return Err("Wrong command parsed".into());
-        };
+        let (scope, exclude, dry_run) = unwrap_config_create(cli)?;
         assert!(matches!(scope, ConfigScope::Global));
+        assert!(!exclude);
         assert!(!dry_run);
         Ok(())
     }
 
     #[test]
     fn test_config_local_dry_run() -> TestResult {
-        let args = vec!["rona", "config", "local", "--dry-run"];
+        let args = vec!["rona", "config", "create", "local", "--dry-run"];
         let cli = Cli::try_parse_from(args)?;
-
-        let CliCommand::Config { scope, dry_run } = cli.command else {
-            return Err("Wrong command parsed".into());
-        };
+        let (scope, exclude, dry_run) = unwrap_config_create(cli)?;
         assert!(matches!(scope, ConfigScope::Local));
+        assert!(!exclude);
         assert!(dry_run);
         Ok(())
     }
 
     #[test]
     fn test_config_global_dry_run() -> TestResult {
-        let args = vec!["rona", "config", "global", "--dry-run"];
+        let args = vec!["rona", "config", "create", "global", "--dry-run"];
         let cli = Cli::try_parse_from(args)?;
-
-        let CliCommand::Config { scope, dry_run } = cli.command else {
-            return Err("Wrong command parsed".into());
-        };
+        let (scope, exclude, dry_run) = unwrap_config_create(cli)?;
         assert!(matches!(scope, ConfigScope::Global));
+        assert!(!exclude);
         assert!(dry_run);
         Ok(())
     }
 
     #[test]
-    fn test_config_missing_scope() {
+    fn test_config_local_exclude() -> TestResult {
+        let args = vec!["rona", "config", "create", "local", "--exclude"];
+        let cli = Cli::try_parse_from(args)?;
+        let (scope, exclude, dry_run) = unwrap_config_create(cli)?;
+        assert!(matches!(scope, ConfigScope::Local));
+        assert!(exclude);
+        assert!(!dry_run);
+        Ok(())
+    }
+
+    #[test]
+    fn test_config_local_exclude_short() -> TestResult {
+        let args = vec!["rona", "config", "-c", "local", "-e"];
+        let cli = Cli::try_parse_from(args)?;
+        let (scope, exclude, dry_run) = unwrap_config_create(cli)?;
+        assert!(matches!(scope, ConfigScope::Local));
+        assert!(exclude);
+        assert!(!dry_run);
+        Ok(())
+    }
+
+    #[test]
+    fn test_config_which() -> TestResult {
+        let args = vec!["rona", "config", "which"];
+        let cli = Cli::try_parse_from(args)?;
+        let CliCommand::Config { subcommand } = cli.command else {
+            return Err("Wrong command parsed".into());
+        };
+        let ConfigSubcommand::Which {
+            path,
+            show_effective,
+        } = subcommand
+        else {
+            return Err("Wrong subcommand parsed".into());
+        };
+        assert!(path.is_none());
+        assert!(!show_effective);
+        Ok(())
+    }
+
+    #[test]
+    fn test_config_which_short() -> TestResult {
+        let args = vec!["rona", "config", "-w"];
+        let cli = Cli::try_parse_from(args)?;
+        let CliCommand::Config { subcommand } = cli.command else {
+            return Err("Wrong command parsed".into());
+        };
+        assert!(matches!(subcommand, ConfigSubcommand::Which { .. }));
+        Ok(())
+    }
+
+    #[test]
+    fn test_config_missing_subcommand() {
         let args = vec!["rona", "config"];
         assert!(Cli::try_parse_from(args).is_err());
     }
 
     #[test]
     fn test_config_invalid_scope() {
-        let args = vec!["rona", "config", "invalid"];
+        let args = vec!["rona", "config", "create", "invalid"];
         assert!(Cli::try_parse_from(args).is_err());
     }
 

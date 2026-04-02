@@ -28,9 +28,6 @@ _rona() {
             rona,config)
                 cmd="rona__config"
                 ;;
-            rona,find-config)
-                cmd="rona__which__config"
-                ;;
             rona,generate)
                 cmd="rona__generate"
                 ;;
@@ -52,8 +49,26 @@ _rona() {
             rona,sync)
                 cmd="rona__sync"
                 ;;
-            rona,which-config)
-                cmd="rona__which__config"
+            rona__config,create)
+                cmd="rona__config__create"
+                ;;
+            rona__config,find)
+                cmd="rona__config__which"
+                ;;
+            rona__config,help)
+                cmd="rona__config__help"
+                ;;
+            rona__config,which)
+                cmd="rona__config__which"
+                ;;
+            rona__config__help,create)
+                cmd="rona__config__help__create"
+                ;;
+            rona__config__help,help)
+                cmd="rona__config__help__help"
+                ;;
+            rona__config__help,which)
+                cmd="rona__config__help__which"
                 ;;
             rona__help,add-with-exclude)
                 cmd="rona__help__add__with__exclude"
@@ -88,8 +103,11 @@ _rona() {
             rona__help,sync)
                 cmd="rona__help__sync"
                 ;;
-            rona__help,which-config)
-                cmd="rona__help__which__config"
+            rona__help__config,create)
+                cmd="rona__help__config__create"
+                ;;
+            rona__help__config,which)
+                cmd="rona__help__config__which"
                 ;;
             *)
                 ;;
@@ -98,7 +116,7 @@ _rona() {
 
     case "${cmd}" in
         rona)
-            opts="-v -h -V --verbose --config --help --version add-with-exclude commit completion config generate init list-status push set-editor sync which-config find-config help"
+            opts="-v -h -V --verbose --config --help --version add-with-exclude commit completion config generate init list-status push set-editor sync help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 1 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -158,8 +176,92 @@ _rona() {
             return 0
             ;;
         rona__config)
-            opts="-h --dry-run --help local global"
+            opts="-h --help create which find help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        rona__config__create)
+            opts="-e -h --exclude --dry-run --help local global"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        rona__config__help)
+            opts="create which help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        rona__config__help__create)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        rona__config__help__help)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        rona__config__help__which)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        rona__config__which)
+            opts="-e -h --effective --help [PATH]"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi
@@ -186,7 +288,7 @@ _rona() {
             return 0
             ;;
         rona__help)
-            opts="add-with-exclude commit completion config generate init list-status push set-editor sync which-config help"
+            opts="add-with-exclude commit completion config generate init list-status push set-editor sync help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -242,8 +344,36 @@ _rona() {
             return 0
             ;;
         rona__help__config)
-            opts=""
+            opts="create which"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        rona__help__config__create)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        rona__help__config__which)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi
@@ -353,20 +483,6 @@ _rona() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        rona__help__which__config)
-            opts=""
-            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
-                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-                return 0
-            fi
-            case "${prev}" in
-                *)
-                    COMPREPLY=()
-                    ;;
-            esac
-            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-            return 0
-            ;;
         rona__init)
             opts="-h --dry-run --help [EDITOR]"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
@@ -446,20 +562,6 @@ _rona() {
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
-                *)
-                    COMPREPLY=()
-                    ;;
-            esac
-            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-            return 0
-            ;;
-        rona__which__config)
-            opts="-e -h --effective --help [PATH]"
-            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
-                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-                return 0
-            fi
-            case "${prev}" in
                 *)
                     COMPREPLY=()
                     ;;
