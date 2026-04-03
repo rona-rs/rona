@@ -10,6 +10,8 @@ use std::{
     process::Command,
 };
 
+use colored::Colorize;
+
 use crate::{
     errors::{GitError, Result, RonaError},
     git::branch::{format_branch_name, get_current_branch},
@@ -136,7 +138,10 @@ fn handle_dry_run_output(
     } else {
         println!("Would create unsigned commit (GPG signing not available)");
         if !gpg_available {
-            println!("⚠️  Warning: GPG signing not available or not configured.");
+            println!(
+                "{} GPG signing not available or not configured.",
+                "WARNING:".yellow().bold()
+            );
             println!("   To suppress this warning, use the --unsigned (-u) flag.");
         }
     }
@@ -214,7 +219,8 @@ pub fn git_commit(args: &[String], unsigned: bool, dry_run: bool) -> Result<()> 
     // Warn if user expects signing but no key is configured
     if !unsigned && !is_gpg_signing_available() {
         println!(
-            "⚠️  Warning: GPG signing not available or not configured. Creating unsigned commit."
+            "{} GPG signing not available or not configured. Creating unsigned commit.",
+            "WARNING:".yellow().bold()
         );
         println!("   To suppress this warning, use the --unsigned (-u) flag.");
     }

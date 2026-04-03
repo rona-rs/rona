@@ -8,10 +8,10 @@
 //! # Message Types
 //!
 //! The module implements four types of messages:
-//! - Error messages (🚨)
-//! - Warning messages (⚠️)
-//! - Success messages (✅)
-//! - Info messages (ℹ️)
+//! - Error messages (colored "ERROR" prefix)
+//! - Warning messages (colored "WARNING" prefix)
+//! - Success messages (colored checkmark prefix)
+//! - Info messages (colored "INFO" prefix)
 //!
 //! # Core Features
 //!
@@ -31,10 +31,12 @@ use std::{
     path::Path,
 };
 
+use colored::Colorize;
+
 /// Trait for message types.
 #[doc(hidden)]
 trait MessageType {
-    /// The emoji prefix for each message type (e.g., "🚨 ERROR")
+    /// The prefix label for each message type (e.g., "ERROR")
     const PREFIX: &'static str;
 
     /// Whether to output to stderr (true) or stdout (false)
@@ -47,7 +49,7 @@ struct Error;
 
 // Implement the MessageType trait for each type
 impl MessageType for Error {
-    const PREFIX: &'static str = "🚨 ERROR";
+    const PREFIX: &'static str = "ERROR";
     const TO_STDERR: bool = true;
 }
 
@@ -60,7 +62,7 @@ impl MessageType for Error {
 /// # Returns
 /// * String - The formatted message.
 fn format_message<T: MessageType>(title: &str, details: &str) -> String {
-    format!("{}: {title}\n\n{details}", T::PREFIX)
+    format!("{}: {title}\n\n{details}", T::PREFIX.red().bold())
 }
 
 /// Formats a message with suggestion.

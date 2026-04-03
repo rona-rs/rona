@@ -16,7 +16,7 @@ license = "Apache-2.0 OR MIT"
 name = "rona"
 readme = "README.md"
 repository = "https://github.com/rona-rs/rona"
-version = "2.22.0"
+version = "2.22.1"
 
 [[bin]]
 doc = true
@@ -39,6 +39,7 @@ arboard = "3.6"
 indicatif = "0.18"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+colored = "3.1.1"
 
 [dev-dependencies]
 assert_cmd = "2.1.2"
