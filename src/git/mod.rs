@@ -32,6 +32,8 @@ pub mod repository;
 pub mod staging;
 pub mod status;
 
+use colored::Colorize;
+
 // Re-export commonly used functions for convenience
 pub use branch::{
     format_branch_name, get_current_branch, git_create_branch, git_merge, git_pull, git_rebase,
@@ -76,7 +78,7 @@ pub fn handle_output(method_name: &str, output: &Output) -> Result<()> {
     } else {
         let error_message = String::from_utf8_lossy(&output.stderr);
 
-        println!("\n🚨 Git {method_name} failed:");
+        println!("\n{}", format!("Git {method_name} failed:").red().bold());
         pretty_print_error(&error_message);
 
         Err(RonaError::Git(GitError::CommandFailed {

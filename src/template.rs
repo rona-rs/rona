@@ -470,8 +470,8 @@ mod tests {
     }
 
     #[test]
-    fn test_template_with_emoji() -> std::result::Result<(), Box<dyn std::error::Error>> {
-        let template = "🚀 {commit_type}: {message}";
+    fn test_template_with_special_chars() -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let template = "* {commit_type}: {message}";
         let variables = TemplateVariables {
             commit_number: None,
             commit_type: "feat".to_string(),
@@ -484,7 +484,7 @@ mod tests {
         };
 
         let result = process_template(template, &variables, &HashMap::new())?;
-        assert_eq!(result, "🚀 feat: Add new feature");
+        assert_eq!(result, "* feat: Add new feature");
 
         Ok(())
     }

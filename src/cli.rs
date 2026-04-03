@@ -28,6 +28,7 @@
 
 use clap::{Command as ClapCommand, CommandFactory, Parser, Subcommand, ValueEnum, ValueHint};
 use clap_complete::{Shell, generate};
+use colored::Colorize;
 use glob::Pattern;
 use inquire::ui::{Attributes, Color, RenderConfig, StyleSheet, Styled};
 use inquire::{Confirm, Select, Text};
@@ -277,7 +278,7 @@ fn get_render_config() -> RenderConfig<'static> {
     // Validation error
     render_config.error_message = render_config
         .error_message
-        .with_prefix(Styled::new("❌").with_fg(Color::LightRed));
+        .with_prefix(Styled::new("✗").with_fg(Color::LightRed));
 
     // Shown after submit (echoed answer)
     render_config.answer = StyleSheet::new()
@@ -547,7 +548,10 @@ fn handle_interactive_mode(
     let commit_file_path = project_root.join(COMMIT_MESSAGE_FILE_PATH);
 
     if message.trim().is_empty() {
-        println!("⚠️  Empty message provided. Exiting.");
+        println!(
+            "{} Empty message provided. Exiting.",
+            "WARNING:".yellow().bold()
+        );
         return Ok(());
     }
 
@@ -584,7 +588,10 @@ fn handle_interactive_mode(
     // Validate template (including any extra field variable names)
     let extra_names: Vec<&str> = extra_values.keys().map(String::as_str).collect();
     if let Err(e) = validate_template(template, &extra_names) {
-        println!("⚠️  Template validation error: {e}");
+        println!(
+            "{} Template validation error: {e}",
+            "WARNING:".yellow().bold()
+        );
         println!("Using fallback format...");
         let formatted_message = if no_commit_number {
             format!("({} on {}) {}", commit_type, branch_name, message.trim())
@@ -598,8 +605,8 @@ fn handle_interactive_mode(
             )
         };
         fs::write(&commit_file_path, &formatted_message)?;
-        println!("\n✅ Commit message created!");
-        println!("📄 Message: {formatted_message}");
+        println!("\n{} Commit message created!", "✔".green());
+        println!("Message: {formatted_message}");
         return Ok(());
     }
 
@@ -617,8 +624,8 @@ fn handle_interactive_mode(
     // Write the formatted message to commit_message.md
     fs::write(&commit_file_path, &formatted_message)?;
 
-    println!("\n✅ Commit message created!");
-    println!("📄 Message: {formatted_message}");
+    println!("\n{} Commit message created!", "✔".green());
+    println!("Message: {formatted_message}");
     Ok(())
 }
 
