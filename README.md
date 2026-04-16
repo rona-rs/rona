@@ -9,6 +9,8 @@
 
 > A powerful CLI tool to streamline your Git workflow
 
+> Created and maintained by [Tom Planche](https://github.com/TomPlanche). The GitHub organization exists solely to host the Homebrew tap alongside the main repository.
+
 <p align="center">
   <a href="https://crates.io/crates/rona"><img src="https://img.shields.io/crates/v/rona.svg" alt="Crates.io Version"></a>
   <a href="https://sonarcloud.io/summary/new_code?id=TomPlanche_rona"><img src="https://sonarcloud.io/api/project_badges/measure?project=TomPlanche_rona&metric=alert_status" alt="SonarCloud Status"></a>
