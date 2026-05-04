@@ -112,11 +112,7 @@ fn process_conditional_blocks<S: BuildHasher>(
     })?;
 
     // Process conditional blocks iteratively
-    loop {
-        // Find the first opening tag
-        let Some(open_match) = open_regex.find(&result) else {
-            break;
-        };
+    while let Some(open_match) = open_regex.find(&result) {
         let open_start = open_match.start();
         let open_end = open_match.end();
 

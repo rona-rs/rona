@@ -66,7 +66,7 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 '-h[Print help]' \
 '--help[Print help]' \
-":: :_rona__config_commands" \
+":: :_rona__subcmd__config_commands" \
 "*::: :->config" \
 && ret=0
 
@@ -107,7 +107,7 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (help)
 _arguments "${_arguments_options[@]}" : \
-":: :_rona__config__help_commands" \
+":: :_rona__subcmd__config__subcmd__help_commands" \
 "*::: :->help" \
 && ret=0
 
@@ -193,7 +193,7 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (help)
 _arguments "${_arguments_options[@]}" : \
-":: :_rona__help_commands" \
+":: :_rona__subcmd__help_commands" \
 "*::: :->help" \
 && ret=0
 
@@ -217,7 +217,7 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (config)
 _arguments "${_arguments_options[@]}" : \
-":: :_rona__help__config_commands" \
+":: :_rona__subcmd__help__subcmd__config_commands" \
 "*::: :->config" \
 && ret=0
 
@@ -293,23 +293,23 @@ _rona_commands() {
     )
     _describe -t commands 'rona commands' commands "$@"
 }
-(( $+functions[_rona__add-with-exclude_commands] )) ||
-_rona__add-with-exclude_commands() {
+(( $+functions[_rona__subcmd__add-with-exclude_commands] )) ||
+_rona__subcmd__add-with-exclude_commands() {
     local commands; commands=()
     _describe -t commands 'rona add-with-exclude commands' commands "$@"
 }
-(( $+functions[_rona__commit_commands] )) ||
-_rona__commit_commands() {
+(( $+functions[_rona__subcmd__commit_commands] )) ||
+_rona__subcmd__commit_commands() {
     local commands; commands=()
     _describe -t commands 'rona commit commands' commands "$@"
 }
-(( $+functions[_rona__completion_commands] )) ||
-_rona__completion_commands() {
+(( $+functions[_rona__subcmd__completion_commands] )) ||
+_rona__subcmd__completion_commands() {
     local commands; commands=()
     _describe -t commands 'rona completion commands' commands "$@"
 }
-(( $+functions[_rona__config_commands] )) ||
-_rona__config_commands() {
+(( $+functions[_rona__subcmd__config_commands] )) ||
+_rona__subcmd__config_commands() {
     local commands; commands=(
 'create:Create or manage a local or global configuration file' \
 'which:Show which configuration files would be used from a directory' \
@@ -318,13 +318,13 @@ _rona__config_commands() {
     )
     _describe -t commands 'rona config commands' commands "$@"
 }
-(( $+functions[_rona__config__create_commands] )) ||
-_rona__config__create_commands() {
+(( $+functions[_rona__subcmd__config__subcmd__create_commands] )) ||
+_rona__subcmd__config__subcmd__create_commands() {
     local commands; commands=()
     _describe -t commands 'rona config create commands' commands "$@"
 }
-(( $+functions[_rona__config__help_commands] )) ||
-_rona__config__help_commands() {
+(( $+functions[_rona__subcmd__config__subcmd__help_commands] )) ||
+_rona__subcmd__config__subcmd__help_commands() {
     local commands; commands=(
 'create:Create or manage a local or global configuration file' \
 'which:Show which configuration files would be used from a directory' \
@@ -332,33 +332,33 @@ _rona__config__help_commands() {
     )
     _describe -t commands 'rona config help commands' commands "$@"
 }
-(( $+functions[_rona__config__help__create_commands] )) ||
-_rona__config__help__create_commands() {
+(( $+functions[_rona__subcmd__config__subcmd__help__subcmd__create_commands] )) ||
+_rona__subcmd__config__subcmd__help__subcmd__create_commands() {
     local commands; commands=()
     _describe -t commands 'rona config help create commands' commands "$@"
 }
-(( $+functions[_rona__config__help__help_commands] )) ||
-_rona__config__help__help_commands() {
+(( $+functions[_rona__subcmd__config__subcmd__help__subcmd__help_commands] )) ||
+_rona__subcmd__config__subcmd__help__subcmd__help_commands() {
     local commands; commands=()
     _describe -t commands 'rona config help help commands' commands "$@"
 }
-(( $+functions[_rona__config__help__which_commands] )) ||
-_rona__config__help__which_commands() {
+(( $+functions[_rona__subcmd__config__subcmd__help__subcmd__which_commands] )) ||
+_rona__subcmd__config__subcmd__help__subcmd__which_commands() {
     local commands; commands=()
     _describe -t commands 'rona config help which commands' commands "$@"
 }
-(( $+functions[_rona__config__which_commands] )) ||
-_rona__config__which_commands() {
+(( $+functions[_rona__subcmd__config__subcmd__which_commands] )) ||
+_rona__subcmd__config__subcmd__which_commands() {
     local commands; commands=()
     _describe -t commands 'rona config which commands' commands "$@"
 }
-(( $+functions[_rona__generate_commands] )) ||
-_rona__generate_commands() {
+(( $+functions[_rona__subcmd__generate_commands] )) ||
+_rona__subcmd__generate_commands() {
     local commands; commands=()
     _describe -t commands 'rona generate commands' commands "$@"
 }
-(( $+functions[_rona__help_commands] )) ||
-_rona__help_commands() {
+(( $+functions[_rona__subcmd__help_commands] )) ||
+_rona__subcmd__help_commands() {
     local commands; commands=(
 'add-with-exclude:Add all files to the \`git add\` command and exclude the patterns passed as positional arguments' \
 'commit:Directly commit the file with the text in \`commit_message.md\`' \
@@ -374,96 +374,96 @@ _rona__help_commands() {
     )
     _describe -t commands 'rona help commands' commands "$@"
 }
-(( $+functions[_rona__help__add-with-exclude_commands] )) ||
-_rona__help__add-with-exclude_commands() {
+(( $+functions[_rona__subcmd__help__subcmd__add-with-exclude_commands] )) ||
+_rona__subcmd__help__subcmd__add-with-exclude_commands() {
     local commands; commands=()
     _describe -t commands 'rona help add-with-exclude commands' commands "$@"
 }
-(( $+functions[_rona__help__commit_commands] )) ||
-_rona__help__commit_commands() {
+(( $+functions[_rona__subcmd__help__subcmd__commit_commands] )) ||
+_rona__subcmd__help__subcmd__commit_commands() {
     local commands; commands=()
     _describe -t commands 'rona help commit commands' commands "$@"
 }
-(( $+functions[_rona__help__completion_commands] )) ||
-_rona__help__completion_commands() {
+(( $+functions[_rona__subcmd__help__subcmd__completion_commands] )) ||
+_rona__subcmd__help__subcmd__completion_commands() {
     local commands; commands=()
     _describe -t commands 'rona help completion commands' commands "$@"
 }
-(( $+functions[_rona__help__config_commands] )) ||
-_rona__help__config_commands() {
+(( $+functions[_rona__subcmd__help__subcmd__config_commands] )) ||
+_rona__subcmd__help__subcmd__config_commands() {
     local commands; commands=(
 'create:Create or manage a local or global configuration file' \
 'which:Show which configuration files would be used from a directory' \
     )
     _describe -t commands 'rona help config commands' commands "$@"
 }
-(( $+functions[_rona__help__config__create_commands] )) ||
-_rona__help__config__create_commands() {
+(( $+functions[_rona__subcmd__help__subcmd__config__subcmd__create_commands] )) ||
+_rona__subcmd__help__subcmd__config__subcmd__create_commands() {
     local commands; commands=()
     _describe -t commands 'rona help config create commands' commands "$@"
 }
-(( $+functions[_rona__help__config__which_commands] )) ||
-_rona__help__config__which_commands() {
+(( $+functions[_rona__subcmd__help__subcmd__config__subcmd__which_commands] )) ||
+_rona__subcmd__help__subcmd__config__subcmd__which_commands() {
     local commands; commands=()
     _describe -t commands 'rona help config which commands' commands "$@"
 }
-(( $+functions[_rona__help__generate_commands] )) ||
-_rona__help__generate_commands() {
+(( $+functions[_rona__subcmd__help__subcmd__generate_commands] )) ||
+_rona__subcmd__help__subcmd__generate_commands() {
     local commands; commands=()
     _describe -t commands 'rona help generate commands' commands "$@"
 }
-(( $+functions[_rona__help__help_commands] )) ||
-_rona__help__help_commands() {
+(( $+functions[_rona__subcmd__help__subcmd__help_commands] )) ||
+_rona__subcmd__help__subcmd__help_commands() {
     local commands; commands=()
     _describe -t commands 'rona help help commands' commands "$@"
 }
-(( $+functions[_rona__help__init_commands] )) ||
-_rona__help__init_commands() {
+(( $+functions[_rona__subcmd__help__subcmd__init_commands] )) ||
+_rona__subcmd__help__subcmd__init_commands() {
     local commands; commands=()
     _describe -t commands 'rona help init commands' commands "$@"
 }
-(( $+functions[_rona__help__list-status_commands] )) ||
-_rona__help__list-status_commands() {
+(( $+functions[_rona__subcmd__help__subcmd__list-status_commands] )) ||
+_rona__subcmd__help__subcmd__list-status_commands() {
     local commands; commands=()
     _describe -t commands 'rona help list-status commands' commands "$@"
 }
-(( $+functions[_rona__help__push_commands] )) ||
-_rona__help__push_commands() {
+(( $+functions[_rona__subcmd__help__subcmd__push_commands] )) ||
+_rona__subcmd__help__subcmd__push_commands() {
     local commands; commands=()
     _describe -t commands 'rona help push commands' commands "$@"
 }
-(( $+functions[_rona__help__set-editor_commands] )) ||
-_rona__help__set-editor_commands() {
+(( $+functions[_rona__subcmd__help__subcmd__set-editor_commands] )) ||
+_rona__subcmd__help__subcmd__set-editor_commands() {
     local commands; commands=()
     _describe -t commands 'rona help set-editor commands' commands "$@"
 }
-(( $+functions[_rona__help__sync_commands] )) ||
-_rona__help__sync_commands() {
+(( $+functions[_rona__subcmd__help__subcmd__sync_commands] )) ||
+_rona__subcmd__help__subcmd__sync_commands() {
     local commands; commands=()
     _describe -t commands 'rona help sync commands' commands "$@"
 }
-(( $+functions[_rona__init_commands] )) ||
-_rona__init_commands() {
+(( $+functions[_rona__subcmd__init_commands] )) ||
+_rona__subcmd__init_commands() {
     local commands; commands=()
     _describe -t commands 'rona init commands' commands "$@"
 }
-(( $+functions[_rona__list-status_commands] )) ||
-_rona__list-status_commands() {
+(( $+functions[_rona__subcmd__list-status_commands] )) ||
+_rona__subcmd__list-status_commands() {
     local commands; commands=()
     _describe -t commands 'rona list-status commands' commands "$@"
 }
-(( $+functions[_rona__push_commands] )) ||
-_rona__push_commands() {
+(( $+functions[_rona__subcmd__push_commands] )) ||
+_rona__subcmd__push_commands() {
     local commands; commands=()
     _describe -t commands 'rona push commands' commands "$@"
 }
-(( $+functions[_rona__set-editor_commands] )) ||
-_rona__set-editor_commands() {
+(( $+functions[_rona__subcmd__set-editor_commands] )) ||
+_rona__subcmd__set-editor_commands() {
     local commands; commands=()
     _describe -t commands 'rona set-editor commands' commands "$@"
 }
-(( $+functions[_rona__sync_commands] )) ||
-_rona__sync_commands() {
+(( $+functions[_rona__subcmd__sync_commands] )) ||
+_rona__subcmd__sync_commands() {
     local commands; commands=()
     _describe -t commands 'rona sync commands' commands "$@"
 }

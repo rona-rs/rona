@@ -17,97 +17,97 @@ _rona() {
                 cmd="rona"
                 ;;
             rona,add-with-exclude)
-                cmd="rona__add__with__exclude"
+                cmd="rona__subcmd__add__subcmd__with__subcmd__exclude"
                 ;;
             rona,commit)
-                cmd="rona__commit"
+                cmd="rona__subcmd__commit"
                 ;;
             rona,completion)
-                cmd="rona__completion"
+                cmd="rona__subcmd__completion"
                 ;;
             rona,config)
-                cmd="rona__config"
+                cmd="rona__subcmd__config"
                 ;;
             rona,generate)
-                cmd="rona__generate"
+                cmd="rona__subcmd__generate"
                 ;;
             rona,help)
-                cmd="rona__help"
+                cmd="rona__subcmd__help"
                 ;;
             rona,init)
-                cmd="rona__init"
+                cmd="rona__subcmd__init"
                 ;;
             rona,list-status)
-                cmd="rona__list__status"
+                cmd="rona__subcmd__list__subcmd__status"
                 ;;
             rona,push)
-                cmd="rona__push"
+                cmd="rona__subcmd__push"
                 ;;
             rona,set-editor)
-                cmd="rona__set__editor"
+                cmd="rona__subcmd__set__subcmd__editor"
                 ;;
             rona,sync)
-                cmd="rona__sync"
+                cmd="rona__subcmd__sync"
                 ;;
-            rona__config,create)
-                cmd="rona__config__create"
+            rona__subcmd__config,create)
+                cmd="rona__subcmd__config__subcmd__create"
                 ;;
-            rona__config,find)
-                cmd="rona__config__which"
+            rona__subcmd__config,find)
+                cmd="rona__subcmd__config__subcmd__which"
                 ;;
-            rona__config,help)
-                cmd="rona__config__help"
+            rona__subcmd__config,help)
+                cmd="rona__subcmd__config__subcmd__help"
                 ;;
-            rona__config,which)
-                cmd="rona__config__which"
+            rona__subcmd__config,which)
+                cmd="rona__subcmd__config__subcmd__which"
                 ;;
-            rona__config__help,create)
-                cmd="rona__config__help__create"
+            rona__subcmd__config__subcmd__help,create)
+                cmd="rona__subcmd__config__subcmd__help__subcmd__create"
                 ;;
-            rona__config__help,help)
-                cmd="rona__config__help__help"
+            rona__subcmd__config__subcmd__help,help)
+                cmd="rona__subcmd__config__subcmd__help__subcmd__help"
                 ;;
-            rona__config__help,which)
-                cmd="rona__config__help__which"
+            rona__subcmd__config__subcmd__help,which)
+                cmd="rona__subcmd__config__subcmd__help__subcmd__which"
                 ;;
-            rona__help,add-with-exclude)
-                cmd="rona__help__add__with__exclude"
+            rona__subcmd__help,add-with-exclude)
+                cmd="rona__subcmd__help__subcmd__add__subcmd__with__subcmd__exclude"
                 ;;
-            rona__help,commit)
-                cmd="rona__help__commit"
+            rona__subcmd__help,commit)
+                cmd="rona__subcmd__help__subcmd__commit"
                 ;;
-            rona__help,completion)
-                cmd="rona__help__completion"
+            rona__subcmd__help,completion)
+                cmd="rona__subcmd__help__subcmd__completion"
                 ;;
-            rona__help,config)
-                cmd="rona__help__config"
+            rona__subcmd__help,config)
+                cmd="rona__subcmd__help__subcmd__config"
                 ;;
-            rona__help,generate)
-                cmd="rona__help__generate"
+            rona__subcmd__help,generate)
+                cmd="rona__subcmd__help__subcmd__generate"
                 ;;
-            rona__help,help)
-                cmd="rona__help__help"
+            rona__subcmd__help,help)
+                cmd="rona__subcmd__help__subcmd__help"
                 ;;
-            rona__help,init)
-                cmd="rona__help__init"
+            rona__subcmd__help,init)
+                cmd="rona__subcmd__help__subcmd__init"
                 ;;
-            rona__help,list-status)
-                cmd="rona__help__list__status"
+            rona__subcmd__help,list-status)
+                cmd="rona__subcmd__help__subcmd__list__subcmd__status"
                 ;;
-            rona__help,push)
-                cmd="rona__help__push"
+            rona__subcmd__help,push)
+                cmd="rona__subcmd__help__subcmd__push"
                 ;;
-            rona__help,set-editor)
-                cmd="rona__help__set__editor"
+            rona__subcmd__help,set-editor)
+                cmd="rona__subcmd__help__subcmd__set__subcmd__editor"
                 ;;
-            rona__help,sync)
-                cmd="rona__help__sync"
+            rona__subcmd__help,sync)
+                cmd="rona__subcmd__help__subcmd__sync"
                 ;;
-            rona__help__config,create)
-                cmd="rona__help__config__create"
+            rona__subcmd__help__subcmd__config,create)
+                cmd="rona__subcmd__help__subcmd__config__subcmd__create"
                 ;;
-            rona__help__config,which)
-                cmd="rona__help__config__which"
+            rona__subcmd__help__subcmd__config,which)
+                cmd="rona__subcmd__help__subcmd__config__subcmd__which"
                 ;;
             *)
                 ;;
@@ -133,7 +133,7 @@ _rona() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        rona__add__with__exclude)
+        rona__subcmd__add__subcmd__with__subcmd__exclude)
             opts="-h --dry-run --help [PATTERNS]..."
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -147,7 +147,7 @@ _rona() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        rona__commit)
+        rona__subcmd__commit)
             opts="-p -d -u -y -h --push --dry-run --unsigned --yes --copy --help [ARGS]..."
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -161,7 +161,7 @@ _rona() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        rona__completion)
+        rona__subcmd__completion)
             opts="-h --help bash elvish fish powershell zsh"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -175,7 +175,7 @@ _rona() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        rona__config)
+        rona__subcmd__config)
             opts="-h --help create which find help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -189,7 +189,7 @@ _rona() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        rona__config__create)
+        rona__subcmd__config__subcmd__create)
             opts="-e -h --exclude --dry-run --help local global"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -203,7 +203,7 @@ _rona() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        rona__config__help)
+        rona__subcmd__config__subcmd__help)
             opts="create which help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -217,7 +217,7 @@ _rona() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        rona__config__help__create)
+        rona__subcmd__config__subcmd__help__subcmd__create)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -231,7 +231,7 @@ _rona() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        rona__config__help__help)
+        rona__subcmd__config__subcmd__help__subcmd__help)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -245,7 +245,7 @@ _rona() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        rona__config__help__which)
+        rona__subcmd__config__subcmd__help__subcmd__which)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -259,7 +259,7 @@ _rona() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        rona__config__which)
+        rona__subcmd__config__subcmd__which)
             opts="-e -h --effective --help [PATH]"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -273,7 +273,7 @@ _rona() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        rona__generate)
+        rona__subcmd__generate)
             opts="-i -n -h --dry-run --interactive --no-commit-number --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -287,7 +287,7 @@ _rona() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        rona__help)
+        rona__subcmd__help)
             opts="add-with-exclude commit completion config generate init list-status push set-editor sync help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -301,7 +301,7 @@ _rona() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        rona__help__add__with__exclude)
+        rona__subcmd__help__subcmd__add__subcmd__with__subcmd__exclude)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -315,7 +315,7 @@ _rona() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        rona__help__commit)
+        rona__subcmd__help__subcmd__commit)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -329,7 +329,7 @@ _rona() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        rona__help__completion)
+        rona__subcmd__help__subcmd__completion)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -343,7 +343,7 @@ _rona() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        rona__help__config)
+        rona__subcmd__help__subcmd__config)
             opts="create which"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -357,7 +357,7 @@ _rona() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        rona__help__config__create)
+        rona__subcmd__help__subcmd__config__subcmd__create)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -371,7 +371,7 @@ _rona() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        rona__help__config__which)
+        rona__subcmd__help__subcmd__config__subcmd__which)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -385,7 +385,7 @@ _rona() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        rona__help__generate)
+        rona__subcmd__help__subcmd__generate)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -399,7 +399,7 @@ _rona() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        rona__help__help)
+        rona__subcmd__help__subcmd__help)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -413,7 +413,7 @@ _rona() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        rona__help__init)
+        rona__subcmd__help__subcmd__init)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -427,7 +427,7 @@ _rona() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        rona__help__list__status)
+        rona__subcmd__help__subcmd__list__subcmd__status)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -441,7 +441,7 @@ _rona() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        rona__help__push)
+        rona__subcmd__help__subcmd__push)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -455,7 +455,7 @@ _rona() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        rona__help__set__editor)
+        rona__subcmd__help__subcmd__set__subcmd__editor)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -469,7 +469,7 @@ _rona() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        rona__help__sync)
+        rona__subcmd__help__subcmd__sync)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -483,7 +483,7 @@ _rona() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        rona__init)
+        rona__subcmd__init)
             opts="-h --dry-run --help [EDITOR]"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -497,7 +497,7 @@ _rona() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        rona__list__status)
+        rona__subcmd__list__subcmd__status)
             opts="-h --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -511,7 +511,7 @@ _rona() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        rona__push)
+        rona__subcmd__push)
             opts="-h --dry-run --help [ARGS]..."
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -525,7 +525,7 @@ _rona() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        rona__set__editor)
+        rona__subcmd__set__subcmd__editor)
             opts="-h --dry-run --help <EDITOR>"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -539,7 +539,7 @@ _rona() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        rona__sync)
+        rona__subcmd__sync)
             opts="-b -r -n -h --branch --rebase --new-branch --dry-run --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
