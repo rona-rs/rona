@@ -253,15 +253,20 @@ struct ExtendsOnly {
 }
 
 /// Resolves an `extends` path relative to the config file that declares it.
+/// A leading `~/` is expanded to the user's home directory before any other resolution.
 fn resolve_extends_path(extends_value: &str, declaring_config: &Path) -> PathBuf {
-    let p = Path::new(extends_value);
-    if p.is_absolute() {
-        p.to_path_buf()
+    let expanded = extends_value.strip_prefix("~/").map_or_else(
+        || PathBuf::from(extends_value),
+        |rest| dirs::home_dir().map_or_else(|| PathBuf::from(extends_value), |h| h.join(rest)),
+    );
+
+    if expanded.is_absolute() {
+        expanded
     } else {
         declaring_config
             .parent()
             .unwrap_or_else(|| Path::new("."))
-            .join(p)
+            .join(expanded)
     }
 }
 
