@@ -84,6 +84,7 @@ Rona supports flexible configuration through TOML files:
 - **Global config**: `~/.config/rona.toml` - applies to all projects
 - **Project config**: `./.rona.toml` - applies only to the current project (overrides global)
 - **Custom config**: any TOML file passed via `--config <PATH>` - bypasses the default hierarchy entirely
+- **Extended config**: a `.rona.toml` containing only `extends = "path/to/config.toml"` delegates all settings to another file
 
 ```bash
 # Use a custom config file instead of the default global/project one
@@ -126,6 +127,24 @@ template = "{?commit_number}[{commit_number}] {/commit_number}({commit_type} on 
 ```
 
 **Note**: When no configuration exists, Rona falls back to: `["chore", "feat", "fix", "test"]`
+
+### Shared Configuration with `extends`
+
+A `.rona.toml` can point to another TOML file using the `extends` key. The referenced file is loaded first, then the current file's values override it. This is useful for sharing a common base config across multiple projects or repositories.
+
+```toml
+# .rona.toml — delegate everything to a shared file
+extends = "~/configs/rona-base.toml"
+```
+
+You can still override individual fields on top of the extended file:
+
+```toml
+extends = "~/configs/rona-base.toml"
+editor = "vim"  # overrides whatever editor is set in the base
+```
+
+The path is resolved relative to the `.rona.toml` file that declares it. Absolute paths are also supported. If the referenced file does not exist, Rona exits with a clear error.
 
 ### Template Configuration
 

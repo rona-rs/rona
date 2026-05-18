@@ -24,7 +24,12 @@
 use config;
 use inquire::Select;
 use serde::{Deserialize, Serialize};
-use std::{env, io::Write, path::PathBuf};
+use std::{
+    collections::HashSet,
+    env,
+    io::Write,
+    path::{Path, PathBuf},
+};
 
 use crate::{
     errors::{ConfigError, GitError, Result, RonaError},
@@ -136,9 +141,13 @@ impl ProjectConfig {
                 builder = builder.add_source(config::File::from(new_global).required(false));
             }
 
-            // Add project config if it exists
+            // Add project config (and any extends chain) if it exists
             let project_config_path = env::current_dir()?.join(".rona.toml");
             if project_config_path.exists() {
+                let mut visited = HashSet::new();
+                for extended in collect_extends_chain(&project_config_path, &mut visited)? {
+                    builder = builder.add_source(config::File::from(extended).required(false));
+                }
                 builder =
                     builder.add_source(config::File::from(project_config_path).required(false));
             }
@@ -169,10 +178,15 @@ impl ProjectConfig {
             return Err(ConfigError::ConfigNotFound.into());
         }
 
-        let settings = config::Config::builder()
-            .add_source(config::File::from(path).required(true))
-            .build()
-            .map_err(|_| ConfigError::ConfigNotFound)?;
+        let mut builder = config::Config::builder();
+
+        let mut visited = HashSet::new();
+        for extended in collect_extends_chain(path, &mut visited)? {
+            builder = builder.add_source(config::File::from(extended).required(false));
+        }
+        builder = builder.add_source(config::File::from(path).required(true));
+
+        let settings = builder.build().map_err(|_| ConfigError::ConfigNotFound)?;
 
         match settings.try_deserialize() {
             Ok(config) => Ok(config),
@@ -208,9 +222,13 @@ impl ProjectConfig {
                 builder = builder.add_source(config::File::from(new_global).required(false));
             }
 
-            // Add project config from specified directory if it exists
+            // Add project config (and any extends chain) from specified directory if it exists
             let project_config_path = from_dir.join(".rona.toml");
             if project_config_path.exists() {
+                let mut visited = HashSet::new();
+                for extended in collect_extends_chain(&project_config_path, &mut visited)? {
+                    builder = builder.add_source(config::File::from(extended).required(false));
+                }
                 builder =
                     builder.add_source(config::File::from(project_config_path).required(false));
             }
@@ -226,6 +244,69 @@ impl ProjectConfig {
             }
         }
     }
+}
+
+/// Peeks at the `extends` key of a TOML config file without full deserialization.
+#[derive(Deserialize)]
+struct ExtendsOnly {
+    extends: Option<String>,
+}
+
+/// Resolves an `extends` path relative to the config file that declares it.
+fn resolve_extends_path(extends_value: &str, declaring_config: &Path) -> PathBuf {
+    let p = Path::new(extends_value);
+    if p.is_absolute() {
+        p.to_path_buf()
+    } else {
+        declaring_config
+            .parent()
+            .unwrap_or_else(|| Path::new("."))
+            .join(p)
+    }
+}
+
+/// Collects the ordered list of config files implied by `extends` chains.
+///
+/// Returns files in base-first order (deepest ancestor first), so they can be
+/// added to the `config` builder before the file that declared the chain -- meaning
+/// each file overrides its ancestors.
+///
+/// Cycle detection uses canonical paths so that symlinks are handled correctly.
+fn collect_extends_chain(
+    config_path: &Path,
+    visited: &mut HashSet<PathBuf>,
+) -> Result<Vec<PathBuf>> {
+    let canonical = config_path
+        .canonicalize()
+        .unwrap_or_else(|_| config_path.to_path_buf());
+
+    if !visited.insert(canonical) {
+        return Err(ConfigError::CircularExtends {
+            path: config_path.display().to_string(),
+        }
+        .into());
+    }
+
+    if !config_path.exists() {
+        return Err(ConfigError::ExtendsNotFound {
+            path: config_path.display().to_string(),
+        }
+        .into());
+    }
+
+    let content = std::fs::read_to_string(config_path)?;
+    let extends_only: ExtendsOnly =
+        toml::from_str(&content).unwrap_or(ExtendsOnly { extends: None });
+
+    let Some(extends_str) = extends_only.extends else {
+        return Ok(vec![]);
+    };
+
+    let extended_path = resolve_extends_path(&extends_str, config_path);
+
+    let mut chain = collect_extends_chain(&extended_path, visited)?;
+    chain.push(extended_path);
+    Ok(chain)
 }
 
 /// Find all configuration sources that would be used from a given directory.
@@ -269,13 +350,26 @@ pub fn find_config_sources(from_dir: Option<&std::path::Path>) -> Result<ConfigI
         priority: 2,
     });
 
-    // Project-local config (priority 3 - highest priority, overrides all)
+    // Extended configs (priority 3 - between global and project, base-first)
     let project_config = search_dir.join(".rona.toml");
+    if project_config.exists() {
+        let chain = collect_extends_chain(&project_config, &mut HashSet::new()).unwrap_or_default();
+        for (i, extended_path) in chain.iter().enumerate() {
+            sources.push(ConfigSource {
+                path: extended_path.clone(),
+                exists: extended_path.exists(),
+                description: format!("Extended config ({})", i + 1),
+                priority: 3,
+            });
+        }
+    }
+
+    // Project-local config (priority 4 - highest priority, overrides all)
     sources.push(ConfigSource {
         path: project_config.clone(),
         exists: project_config.exists(),
         description: "Project config".to_string(),
-        priority: 3,
+        priority: 4,
     });
 
     // Try to load the effective configuration
@@ -711,6 +805,111 @@ mod tests {
             config.get_editor(),
             Err(RonaError::Config(ConfigError::InvalidConfig))
         ));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_extends_basic() -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let temp_dir = TempDir::new()?;
+        let base = temp_dir.path().join("base.toml");
+        let project = temp_dir.path().join(".rona.toml");
+
+        std::fs::write(&base, r#"editor = "vim""#)?;
+        std::fs::write(
+            &project,
+            format!(r#"extends = "base.toml"{}"#, "\ncommit_types = [\"feat\"]"),
+        )?;
+
+        let cfg = ProjectConfig::load_from_file(&project)?;
+        assert_eq!(cfg.editor.as_deref(), Some("vim"));
+        assert_eq!(
+            cfg.commit_types.as_deref(),
+            Some(["feat".to_string()].as_slice())
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_extends_override() -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let temp_dir = TempDir::new()?;
+        let base = temp_dir.path().join("base.toml");
+        let project = temp_dir.path().join(".rona.toml");
+
+        std::fs::write(&base, r#"editor = "vim""#)?;
+        std::fs::write(
+            &project,
+            format!(r#"extends = "base.toml"{}"#, "\neditor = \"nano\""),
+        )?;
+
+        let cfg = ProjectConfig::load_from_file(&project)?;
+        // project file overrides the extended base
+        assert_eq!(cfg.editor.as_deref(), Some("nano"));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_extends_chain() -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let temp_dir = TempDir::new()?;
+        let grandparent = temp_dir.path().join("grandparent.toml");
+        let parent = temp_dir.path().join("parent.toml");
+        let project = temp_dir.path().join(".rona.toml");
+
+        std::fs::write(&grandparent, r#"editor = "vim""#)?;
+        std::fs::write(&parent, r#"extends = "grandparent.toml""#)?;
+        std::fs::write(
+            &project,
+            format!(r#"extends = "parent.toml"{}"#, "\ncommit_types = [\"fix\"]"),
+        )?;
+
+        let cfg = ProjectConfig::load_from_file(&project)?;
+        assert_eq!(cfg.editor.as_deref(), Some("vim"));
+        assert_eq!(
+            cfg.commit_types.as_deref(),
+            Some(["fix".to_string()].as_slice())
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_extends_missing_file() -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let temp_dir = TempDir::new()?;
+        let project = temp_dir.path().join(".rona.toml");
+
+        std::fs::write(&project, r#"extends = "nonexistent.toml""#)?;
+
+        let result = ProjectConfig::load_from_file(&project);
+        assert!(
+            matches!(
+                result,
+                Err(RonaError::Config(ConfigError::ExtendsNotFound { .. }))
+            ),
+            "expected ExtendsNotFound, got {result:?}"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_extends_circular() -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let temp_dir = TempDir::new()?;
+        let a = temp_dir.path().join("a.toml");
+        let b = temp_dir.path().join("b.toml");
+
+        std::fs::write(&a, r#"extends = "b.toml""#)?;
+        std::fs::write(&b, r#"extends = "a.toml""#)?;
+
+        let result = ProjectConfig::load_from_file(&a);
+        assert!(
+            matches!(
+                result,
+                Err(RonaError::Config(ConfigError::CircularExtends { .. }))
+            ),
+            "expected CircularExtends, got {result:?}"
+        );
 
         Ok(())
     }
