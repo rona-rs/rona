@@ -8,6 +8,9 @@ on:
 permissions:
     contents: write
 
+env:
+    FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
 jobs:
     create-tag-if-version-changed:
         name: Create tag when Cargo.toml version changes
