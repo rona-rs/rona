@@ -45,6 +45,12 @@ pub enum ConfigError {
 
     #[error("Unsupported editor: {editor}. Supported editors: vim, zed, nano")]
     UnsupportedEditor { editor: String },
+
+    #[error("Circular extends detected involving config file: {path}")]
+    CircularExtends { path: String },
+
+    #[error("Extended config file not found: {path}")]
+    ExtendsNotFound { path: String },
 }
 
 /// Git-related errors
