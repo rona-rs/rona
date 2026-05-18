@@ -34,8 +34,8 @@ jobs:
           OWNER="rona-rs"
           REPO="homebrew-rona"
           BRANCH="bump/rona-${TAG}"
-          API_URL="https://api.github.com/repos/${OWNER}/${REPO}/pulls?state=open&head=${OWNER}:${BRANCH}"
-          # Query open PRs with the expected head branch (owner:branch format required by GitHub API)
+          API_URL="https://api.github.com/repos/${OWNER}/${REPO}/pulls?state=open&head=${BRANCH}"
+          # Query open PRs with the expected head branch (use just branch name, not owner:branch)
           echo "Checking for existing PRs at: ${API_URL}"
           RES=$(curl -s -H "Authorization: token ${TOKEN}" "${API_URL}")
 

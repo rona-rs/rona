@@ -8,9 +8,6 @@ on:
 permissions:
   contents: write
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
-
 jobs:
   extract-version:
     runs-on: ubuntu-latest
@@ -198,3 +195,47 @@ jobs:
           cargo publish --dry-run
           cargo publish
 
+  notify-homebrew:
+    name: Notify Homebrew Tap
+    needs: [extract-version, build-linux, build-macos-intel, build-macos-arm]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check if PR already exists in tap (guard)
+        id: guard
+        env:
+          TAG: ${{ needs.extract-version.outputs.version }}
+          TOKEN: ${{ secrets.RONA_PRS_TOKEN }}
+        run: |
+          OWNER="rona-rs"
+          REPO="homebrew-rona"
+          HEAD="${OWNER}:bump/rona-${TAG}"
+          RES=$(curl -s -H "Authorization: token ${TOKEN}" \
+            "https://api.github.com/repos/${OWNER}/${REPO}/pulls?state=open&head=${HEAD}")
+          if ! echo "$RES" | jq -e 'type == "array"' > /dev/null 2>&1; then
+            echo "ERROR: Invalid API response (possibly auth issue)"
+            echo "Response: $RES"
+            exit 1
+          fi
+          COUNT=$(echo "$RES" | jq 'length')
+          if [ "$COUNT" -gt 0 ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Found existing PR for ${HEAD}, skipping dispatch"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "No existing PR for ${HEAD}, will dispatch"
+          fi
+      - name: Dispatch update to homebrew-rona
+        if: steps.guard.outputs.exists == 'false'
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.RONA_PRS_TOKEN }}
+          repository: rona-rs/homebrew-rona
+          event-type: rona-release
+          client-payload: |
+            {
+              "tag": "${{ needs.extract-version.outputs.version }}",
+              "tarball_url": "https://github.com/rona-rs/rona/archive/refs/tags/${{ needs.extract-version.outputs.version }}.tar.gz",
+              "sha256_arm64_sequoia": "${{ needs.build-macos-arm.outputs.sha256_bottle }}",
+              "sha256_sequoia": "${{ needs.build-macos-intel.outputs.sha256_bottle }}",
+              "sha256_x86_64_linux": "${{ needs.build-linux.outputs.sha256_bottle }}"
+            }
