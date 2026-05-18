@@ -1,8 +1,9 @@
 name: Notify Homebrew Tap
 
 on:
-  release:
-    types: [published]
+  workflow_run:
+    workflows: ["Build and Release"]
+    types: [completed]
   workflow_dispatch:
     inputs:
       tag:
@@ -12,18 +13,11 @@ on:
 
 jobs:
   dispatch:
+    if: github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     env:
-      TAG: ${{ inputs.tag || github.event.release.tag_name || github.ref_name }}
+      TAG: ${{ inputs.tag || github.event.workflow_run.head_branch }}
     steps:
-      - name: Debug event context
-        run: |
-          echo "Event name: ${{ github.event_name }}"
-          echo "Event action: ${{ github.event.action }}"
-          echo "Tag from release: ${{ github.event.release.tag_name }}"
-          echo "Ref name: ${{ github.ref_name }}"
-          echo "Resolved TAG: $TAG"
-
       - name: Validate tag
         run: |
           if [ -z "$TAG" ]; then
