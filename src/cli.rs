@@ -412,7 +412,7 @@ fn handle_branch(no_switch: bool, config: &Config) -> Result<()> {
     let effective_types = branch_effective_types(config);
     let types_for_branch: Vec<&str> = effective_types.iter().map(String::as_str).collect();
 
-    let default_template = "{commit_type}/{description}";
+    let default_template = "{branch_type}/{description}";
     let template = config
         .project_config
         .branch_template
@@ -420,8 +420,8 @@ fn handle_branch(no_switch: bool, config: &Config) -> Result<()> {
         .unwrap_or(default_template);
 
     // Determine which built-in variables the template actually uses.
-    let needs_commit_type =
-        template.contains("{commit_type}") || template.contains("{?commit_type}");
+    let needs_branch_type =
+        template.contains("{branch_type}") || template.contains("{?branch_type}");
     let needs_description =
         template.contains("{description}") || template.contains("{?description}");
 
@@ -448,7 +448,7 @@ fn handle_branch(no_switch: bool, config: &Config) -> Result<()> {
         }
     }
 
-    let commit_type = if needs_commit_type {
+    let branch_type = if needs_branch_type {
         let type_prompt = if config.project_config.branch_types.is_some() {
             "Select branch type"
         } else {
@@ -477,7 +477,7 @@ fn handle_branch(no_switch: bool, config: &Config) -> Result<()> {
         return Ok(());
     }
 
-    let variables = BranchTemplateVariables::new(commit_type, description.trim().to_owned())?;
+    let variables = BranchTemplateVariables::new(branch_type, description.trim().to_owned())?;
 
     let raw_name = process_branch_template(template, &variables, &extra_values)?;
     let branch_name = sanitize_branch_name(&raw_name);

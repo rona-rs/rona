@@ -83,7 +83,7 @@ impl TemplateVariables {
 /// Branch-specific template variables for branch name generation.
 #[derive(Debug, Clone)]
 pub struct BranchTemplateVariables {
-    pub commit_type: String,
+    pub branch_type: String,
     pub description: String,
     pub date: String,
     pub time: String,
@@ -95,13 +95,13 @@ impl BranchTemplateVariables {
     ///
     /// # Errors
     /// * If git author information cannot be retrieved
-    pub fn new(commit_type: String, description: String) -> Result<Self> {
+    pub fn new(branch_type: String, description: String) -> Result<Self> {
         let now = chrono::Local::now();
         let date = now.format("%Y-%m-%d").to_string();
         let time = now.format("%H:%M:%S").to_string();
         let (author, _email) = get_git_author_info()?;
         Ok(Self {
-            commit_type,
+            branch_type,
             description,
             date,
             time,
@@ -113,7 +113,7 @@ impl BranchTemplateVariables {
     #[must_use]
     pub fn to_map(&self) -> HashMap<String, String> {
         let mut map = HashMap::new();
-        map.insert("commit_type".to_string(), self.commit_type.clone());
+        map.insert("branch_type".to_string(), self.branch_type.clone());
         map.insert("description".to_string(), self.description.clone());
         map.insert("date".to_string(), self.date.clone());
         map.insert("time".to_string(), self.time.clone());
@@ -218,7 +218,7 @@ pub fn process_template<S: BuildHasher>(
 
 /// Processes a branch name template using `BranchTemplateVariables` and optional extra fields.
 ///
-/// Available built-in variables: `commit_type`, `description`, `date`, `time`, `author`.
+/// Available built-in variables: `branch_type`, `description`, `date`, `time`, `author`.
 ///
 /// # Errors
 /// * If the template contains invalid variable syntax or mismatched conditional blocks
@@ -347,13 +347,13 @@ pub fn validate_template(template: &str, extra_variable_names: &[&str]) -> Resul
 
 /// Validates a branch name template string.
 ///
-/// Valid built-in variables: `commit_type`, `description`, `date`, `time`, `author`.
+/// Valid built-in variables: `branch_type`, `description`, `date`, `time`, `author`.
 /// Extra field names are also accepted.
 ///
 /// # Errors
 /// * If the template contains unknown variables or mismatched conditional blocks
 pub fn validate_branch_template(template: &str, extra_variable_names: &[&str]) -> Result<()> {
-    let mut valid: Vec<&str> = vec!["commit_type", "description", "date", "time", "author"];
+    let mut valid: Vec<&str> = vec!["branch_type", "description", "date", "time", "author"];
     valid.extend_from_slice(extra_variable_names);
     validate_template_with_vars(template, &valid)
 }
