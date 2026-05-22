@@ -15,7 +15,8 @@ _rona() {
 
     local context curcontext="$curcontext" state line
     _arguments "${_arguments_options[@]}" : \
-'--config=[Use the custom config file path instead of default]:PATH:_default' \
+'-f+[Config file to use instead of the default global/project hierarchy]:PATH:_files' \
+'--config-file=[Config file to use instead of the default global/project hierarchy]:PATH:_files' \
 '-v[Verbose output - show detailed information about operations]' \
 '--verbose[Verbose output - show detailed information about operations]' \
 '-h[Print help]' \
@@ -33,6 +34,8 @@ _rona() {
         case $line[1] in
             (branch)
 _arguments "${_arguments_options[@]}" : \
+'-f+[Config file to use instead of the default global/project hierarchy]:PATH:_files' \
+'--config-file=[Config file to use instead of the default global/project hierarchy]:PATH:_files' \
 '--dry-run[Show what would be created without actually creating the branch]' \
 '--no-switch[Create the branch without switching to it]' \
 '-h[Print help]' \
@@ -41,6 +44,8 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (add-with-exclude)
 _arguments "${_arguments_options[@]}" : \
+'-f+[Config file to use instead of the default global/project hierarchy]:PATH:_files' \
+'--config-file=[Config file to use instead of the default global/project hierarchy]:PATH:_files' \
 '--dry-run[Show what would be added without actually adding files]' \
 '-h[Print help]' \
 '--help[Print help]' \
@@ -49,6 +54,8 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (commit)
 _arguments "${_arguments_options[@]}" : \
+'-f+[Config file to use instead of the default global/project hierarchy]:PATH:_files' \
+'--config-file=[Config file to use instead of the default global/project hierarchy]:PATH:_files' \
 '-p[Whether to push the commit after committing]' \
 '--push[Whether to push the commit after committing]' \
 '-d[Show what would be committed without actually committing]' \
@@ -65,6 +72,8 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (completion)
 _arguments "${_arguments_options[@]}" : \
+'-f+[Config file to use instead of the default global/project hierarchy]:PATH:_files' \
+'--config-file=[Config file to use instead of the default global/project hierarchy]:PATH:_files' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':shell -- The shell to generate completions for:(bash elvish fish powershell zsh)' \
@@ -72,6 +81,8 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (config)
 _arguments "${_arguments_options[@]}" : \
+'-f+[Config file to use instead of the default global/project hierarchy]:PATH:_files' \
+'--config-file=[Config file to use instead of the default global/project hierarchy]:PATH:_files' \
 '-h[Print help]' \
 '--help[Print help]' \
 ":: :_rona__subcmd__config_commands" \
@@ -86,6 +97,8 @@ _arguments "${_arguments_options[@]}" : \
         case $line[1] in
             (create)
 _arguments "${_arguments_options[@]}" : \
+'-f+[Config file to use instead of the default global/project hierarchy]:PATH:_files' \
+'--config-file=[Config file to use instead of the default global/project hierarchy]:PATH:_files' \
 '-e[Add .rona.toml to .git/info/exclude (only applies to local scope)]' \
 '--exclude[Add .rona.toml to .git/info/exclude (only applies to local scope)]' \
 '--dry-run[Show what would be created without actually creating the config file]' \
@@ -97,6 +110,8 @@ global\:"Global configuration (~/.config/rona.toml)"))' \
 ;;
 (which)
 _arguments "${_arguments_options[@]}" : \
+'-f+[Config file to use instead of the default global/project hierarchy]:PATH:_files' \
+'--config-file=[Config file to use instead of the default global/project hierarchy]:PATH:_files' \
 '-e[Show the effective (merged) configuration values]' \
 '--effective[Show the effective (merged) configuration values]' \
 '-h[Print help]' \
@@ -106,6 +121,8 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (find)
 _arguments "${_arguments_options[@]}" : \
+'-f+[Config file to use instead of the default global/project hierarchy]:PATH:_files' \
+'--config-file=[Config file to use instead of the default global/project hierarchy]:PATH:_files' \
 '-e[Show the effective (merged) configuration values]' \
 '--effective[Show the effective (merged) configuration values]' \
 '-h[Print help]' \
@@ -147,6 +164,8 @@ esac
 ;;
 (generate)
 _arguments "${_arguments_options[@]}" : \
+'-f+[Config file to use instead of the default global/project hierarchy]:PATH:_files' \
+'--config-file=[Config file to use instead of the default global/project hierarchy]:PATH:_files' \
 '--dry-run[Show what would be generated without creating files]' \
 '-i[Interactive mode - input the commit message directly in the terminal]' \
 '--interactive[Interactive mode - input the commit message directly in the terminal]' \
@@ -158,6 +177,8 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (init)
 _arguments "${_arguments_options[@]}" : \
+'-f+[Config file to use instead of the default global/project hierarchy]:PATH:_files' \
+'--config-file=[Config file to use instead of the default global/project hierarchy]:PATH:_files' \
 '--dry-run[Show what would be initialized without creating files]' \
 '-h[Print help]' \
 '--help[Print help]' \
@@ -166,12 +187,16 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (list-status)
 _arguments "${_arguments_options[@]}" : \
+'-f+[Config file to use instead of the default global/project hierarchy]:PATH:_files' \
+'--config-file=[Config file to use instead of the default global/project hierarchy]:PATH:_files' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
 ;;
 (push)
 _arguments "${_arguments_options[@]}" : \
+'-f+[Config file to use instead of the default global/project hierarchy]:PATH:_files' \
+'--config-file=[Config file to use instead of the default global/project hierarchy]:PATH:_files' \
 '--dry-run[Show what would be pushed without actually pushing]' \
 '-h[Print help]' \
 '--help[Print help]' \
@@ -180,6 +205,8 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (set-editor)
 _arguments "${_arguments_options[@]}" : \
+'-f+[Config file to use instead of the default global/project hierarchy]:PATH:_files' \
+'--config-file=[Config file to use instead of the default global/project hierarchy]:PATH:_files' \
 '--dry-run[Show what would be changed without modifying config]' \
 '-h[Print help]' \
 '--help[Print help]' \
@@ -192,6 +219,8 @@ _arguments "${_arguments_options[@]}" : \
 '--branch=[Branch to sync from (default\: main)]:SOURCE_BRANCH:_default' \
 '-n+[Create a new branch before syncing]:NEW_BRANCH:_default' \
 '--new-branch=[Create a new branch before syncing]:NEW_BRANCH:_default' \
+'-f+[Config file to use instead of the default global/project hierarchy]:PATH:_files' \
+'--config-file=[Config file to use instead of the default global/project hierarchy]:PATH:_files' \
 '-r[Use rebase instead of merge]' \
 '--rebase[Use rebase instead of merge]' \
 '--dry-run[Show what would be done without actually doing it]' \

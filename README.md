@@ -47,7 +47,7 @@ Rona is a command-line interface tool designed to enhance your Git workflow with
 - Interactive commit type selection with customizable types
 - Config-driven extra prompt fields (scope, ticket, etc.) with optional prefetching, regex validation, and configurable ordering — for both commit messages and branch names
 - Multi-shell completion support (Bash, Fish, Zsh, PowerShell)
-- Flexible configuration system (global, project-level, and custom file via `--config`)
+- Flexible configuration system (global, project-level, and custom file via `-f`/`--config-file`)
 - Colored interactive prompts powered by Inquire
 - Structured logging via `tracing` with `RUST_LOG` support
 
@@ -84,15 +84,15 @@ Rona supports flexible configuration through TOML files:
 
 - **Global config**: `~/.config/rona.toml` - applies to all projects
 - **Project config**: `./.rona.toml` - applies only to the current project (overrides global)
-- **Custom config**: any TOML file passed via `--config <PATH>` - bypasses the default hierarchy entirely
+- **Custom config**: any TOML file passed via `-f <PATH>` / `--config-file <PATH>` - bypasses the default hierarchy entirely
 - **Extended config**: a `.rona.toml` containing only `extends = "path/to/config.toml"` delegates all settings to another file
 
 ```bash
 # Use a custom config file instead of the default global/project one
-rona --config /path/to/my-config.toml -g -i
+rona -f /path/to/my-config.toml -g -i
 
 # Useful for testing different configs or CI environments
-rona --config .rona.ci.toml -c -p
+rona -f .rona.ci.toml -c -p
 ```
 
 ### Configuration Options
@@ -109,6 +109,15 @@ commit_types = [
     "test",    # Adding or updating tests
     "chore"    # Maintenance tasks
 ]
+
+# Optional: dedicated types shown only in the rona branch type selector.
+# When absent, commit_types is used instead.
+# branch_types = ["feat", "fix", "hotfix", "release"]
+
+# When true and branch_types is set, the selector shows branch_types followed
+# by any commit_types not already present in it.
+# Default: false (only branch_types is shown when branch_types is set).
+# merge_branch_and_commit_types = false
 
 # Template for interactive commit message generation
 # Built-in variables: {commit_number}, {commit_type}, {branch_name}, {message}, {date}, {time}, {author}, {email}
@@ -279,6 +288,18 @@ $ Branch description
 ```
 
 Generated branch name: `feat/proj-42/add-login-endpoint`
+
+**Type selector:**
+
+By default the branch type selector shows `commit_types`. Two config keys let you customize this independently:
+
+- `branch_types` - a dedicated list shown only in `rona branch`, replacing `commit_types` in that selector
+- `merge_branch_and_commit_types` - when `true` and `branch_types` is set, the selector shows `branch_types` followed by any `commit_types` not already present in it (default: `false`)
+
+```toml
+branch_types = ["feat", "fix", "hotfix", "release"]
+merge_branch_and_commit_types = true  # adds remaining commit_types after branch_types
+```
 
 **Options:**
 
@@ -694,15 +715,15 @@ rona -c -p
 
 These flags apply to all commands and are placed before the subcommand:
 
-| Flag              | Short | Description                                                  |
-| ----------------- | ----- | ------------------------------------------------------------ |
-| `--config <PATH>` |       | Load a specific TOML config file, bypassing global and project config |
-| `--verbose`       | `-v`  | Enable debug-level log output                                |
+| Flag                    | Short | Description                                                  |
+| ----------------------- | ----- | ------------------------------------------------------------ |
+| `--config-file <PATH>`  | `-f`  | Load a specific TOML config file, bypassing global and project config |
+| `--verbose`             | `-v`  | Enable debug-level log output                                |
 
 ```bash
-rona --config .rona.toml -g -i
+rona -f .rona.toml -g -i
 rona --verbose -c -p
-rona --config ~/.config/rona-work.toml sync
+rona -f ~/.config/rona-work.toml sync
 ```
 
 ## Command Reference

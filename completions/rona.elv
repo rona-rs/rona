@@ -18,7 +18,8 @@ set edit:completion:arg-completer[rona] = {|@words|
     }
     var completions = [
         &'rona'= {
-            cand --config 'Use the custom config file path instead of default'
+            cand -f 'Config file to use instead of the default global/project hierarchy'
+            cand --config-file 'Config file to use instead of the default global/project hierarchy'
             cand -v 'Verbose output - show detailed information about operations'
             cand --verbose 'Verbose output - show detailed information about operations'
             cand -h 'Print help'
@@ -39,17 +40,23 @@ set edit:completion:arg-completer[rona] = {|@words|
             cand help 'Print this message or the help of the given subcommand(s)'
         }
         &'rona;branch'= {
+            cand -f 'Config file to use instead of the default global/project hierarchy'
+            cand --config-file 'Config file to use instead of the default global/project hierarchy'
             cand --dry-run 'Show what would be created without actually creating the branch'
             cand --no-switch 'Create the branch without switching to it'
             cand -h 'Print help'
             cand --help 'Print help'
         }
         &'rona;add-with-exclude'= {
+            cand -f 'Config file to use instead of the default global/project hierarchy'
+            cand --config-file 'Config file to use instead of the default global/project hierarchy'
             cand --dry-run 'Show what would be added without actually adding files'
             cand -h 'Print help'
             cand --help 'Print help'
         }
         &'rona;commit'= {
+            cand -f 'Config file to use instead of the default global/project hierarchy'
+            cand --config-file 'Config file to use instead of the default global/project hierarchy'
             cand -p 'Whether to push the commit after committing'
             cand --push 'Whether to push the commit after committing'
             cand -d 'Show what would be committed without actually committing'
@@ -63,10 +70,14 @@ set edit:completion:arg-completer[rona] = {|@words|
             cand --help 'Print help'
         }
         &'rona;completion'= {
+            cand -f 'Config file to use instead of the default global/project hierarchy'
+            cand --config-file 'Config file to use instead of the default global/project hierarchy'
             cand -h 'Print help'
             cand --help 'Print help'
         }
         &'rona;config'= {
+            cand -f 'Config file to use instead of the default global/project hierarchy'
+            cand --config-file 'Config file to use instead of the default global/project hierarchy'
             cand -h 'Print help'
             cand --help 'Print help'
             cand create 'Create or manage a local or global configuration file'
@@ -75,6 +86,8 @@ set edit:completion:arg-completer[rona] = {|@words|
             cand help 'Print this message or the help of the given subcommand(s)'
         }
         &'rona;config;create'= {
+            cand -f 'Config file to use instead of the default global/project hierarchy'
+            cand --config-file 'Config file to use instead of the default global/project hierarchy'
             cand -e 'Add .rona.toml to .git/info/exclude (only applies to local scope)'
             cand --exclude 'Add .rona.toml to .git/info/exclude (only applies to local scope)'
             cand --dry-run 'Show what would be created without actually creating the config file'
@@ -82,12 +95,16 @@ set edit:completion:arg-completer[rona] = {|@words|
             cand --help 'Print help (see more with ''--help'')'
         }
         &'rona;config;which'= {
+            cand -f 'Config file to use instead of the default global/project hierarchy'
+            cand --config-file 'Config file to use instead of the default global/project hierarchy'
             cand -e 'Show the effective (merged) configuration values'
             cand --effective 'Show the effective (merged) configuration values'
             cand -h 'Print help'
             cand --help 'Print help'
         }
         &'rona;config;find'= {
+            cand -f 'Config file to use instead of the default global/project hierarchy'
+            cand --config-file 'Config file to use instead of the default global/project hierarchy'
             cand -e 'Show the effective (merged) configuration values'
             cand --effective 'Show the effective (merged) configuration values'
             cand -h 'Print help'
@@ -105,6 +122,8 @@ set edit:completion:arg-completer[rona] = {|@words|
         &'rona;config;help;help'= {
         }
         &'rona;generate'= {
+            cand -f 'Config file to use instead of the default global/project hierarchy'
+            cand --config-file 'Config file to use instead of the default global/project hierarchy'
             cand --dry-run 'Show what would be generated without creating files'
             cand -i 'Interactive mode - input the commit message directly in the terminal'
             cand --interactive 'Interactive mode - input the commit message directly in the terminal'
@@ -114,20 +133,28 @@ set edit:completion:arg-completer[rona] = {|@words|
             cand --help 'Print help'
         }
         &'rona;init'= {
+            cand -f 'Config file to use instead of the default global/project hierarchy'
+            cand --config-file 'Config file to use instead of the default global/project hierarchy'
             cand --dry-run 'Show what would be initialized without creating files'
             cand -h 'Print help'
             cand --help 'Print help'
         }
         &'rona;list-status'= {
+            cand -f 'Config file to use instead of the default global/project hierarchy'
+            cand --config-file 'Config file to use instead of the default global/project hierarchy'
             cand -h 'Print help'
             cand --help 'Print help'
         }
         &'rona;push'= {
+            cand -f 'Config file to use instead of the default global/project hierarchy'
+            cand --config-file 'Config file to use instead of the default global/project hierarchy'
             cand --dry-run 'Show what would be pushed without actually pushing'
             cand -h 'Print help'
             cand --help 'Print help'
         }
         &'rona;set-editor'= {
+            cand -f 'Config file to use instead of the default global/project hierarchy'
+            cand --config-file 'Config file to use instead of the default global/project hierarchy'
             cand --dry-run 'Show what would be changed without modifying config'
             cand -h 'Print help'
             cand --help 'Print help'
@@ -137,6 +164,8 @@ set edit:completion:arg-completer[rona] = {|@words|
             cand --branch 'Branch to sync from (default: main)'
             cand -n 'Create a new branch before syncing'
             cand --new-branch 'Create a new branch before syncing'
+            cand -f 'Config file to use instead of the default global/project hierarchy'
+            cand --config-file 'Config file to use instead of the default global/project hierarchy'
             cand -r 'Use rebase instead of merge'
             cand --rebase 'Use rebase instead of merge'
             cand --dry-run 'Show what would be done without actually doing it'

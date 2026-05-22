@@ -209,23 +209,37 @@ impl ProjectConfig {
             return Err(ConfigError::ConfigNotFound.into());
         }
 
+        let abs_path = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+
         let mut builder = config::Config::builder();
 
         let mut visited = HashSet::new();
-        for extended in collect_extends_chain(path, &mut visited)? {
+        for extended in collect_extends_chain(&abs_path, &mut visited)? {
             builder = builder.add_source(config::File::from(extended).required(false));
         }
-        builder = builder.add_source(config::File::from(path).required(true));
+        let file_display = abs_path.display().to_string();
+        builder = builder.add_source(config::File::from(abs_path).required(true));
 
-        let settings = builder.build().map_err(|_| ConfigError::ConfigNotFound)?;
-
-        match settings.try_deserialize() {
-            Ok(config) => Ok(config),
-            Err(e) => {
-                eprintln!("Failed to deserialize config: {e}");
-                Err(ConfigError::InvalidConfig.into())
+        let settings = builder.build().map_err(|e| -> RonaError {
+            match &e {
+                config::ConfigError::NotFound(_) | config::ConfigError::PathParse(_) => {
+                    ConfigError::ConfigNotFound.into()
+                }
+                _ => ConfigError::ParseError {
+                    file: file_display.clone(),
+                    reason: e.to_string(),
+                }
+                .into(),
             }
-        }
+        })?;
+
+        settings.try_deserialize().map_err(|e| {
+            ConfigError::ParseError {
+                file: file_display,
+                reason: e.to_string(),
+            }
+            .into()
+        })
     }
 
     /// Loads the project configuration from a specific directory.

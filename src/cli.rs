@@ -258,8 +258,8 @@ pub(crate) struct Cli {
     #[arg(short, long, default_value = "false")]
     verbose: bool,
 
-    /// Use the custom config file path instead of default
-    #[arg(long, value_name = "PATH")]
+    /// Config file to use instead of the default global/project hierarchy
+    #[arg(short = 'f', long = "config-file", value_name = "PATH", value_hint = ValueHint::FilePath, global = true)]
     config: Option<String>,
 }
 
@@ -335,12 +335,15 @@ fn print_fish_custom_completions() {
 fn prompt_branch_fields(
     extra_fields: &[ExtraField],
     field_order: &[String],
+    needs_description: bool,
 ) -> Result<(String, HashMap<String, String>)> {
     const DESCRIPTION_KEY: &str = "description";
 
     let ordered: Vec<String> = if field_order.is_empty() {
         let mut v: Vec<String> = extra_fields.iter().map(|f| f.name.clone()).collect();
-        v.push(DESCRIPTION_KEY.to_string());
+        if needs_description {
+            v.push(DESCRIPTION_KEY.to_string());
+        }
         v
     } else {
         let mut v: Vec<String> = field_order.to_vec();
@@ -349,7 +352,7 @@ fn prompt_branch_fields(
                 v.push(f.name.clone());
             }
         }
-        if !v.iter().any(|s| s == DESCRIPTION_KEY) {
+        if needs_description && !v.iter().any(|s| s == DESCRIPTION_KEY) {
             v.push(DESCRIPTION_KEY.to_string());
         }
         v
@@ -372,11 +375,31 @@ fn prompt_branch_fields(
         }
     }
 
-    let description = description.ok_or_else(|| {
-        RonaError::InvalidInput("description prompt was not executed".to_string())
-    })?;
+    Ok((description.unwrap_or_default(), extra_values))
+}
 
-    Ok((description, extra_values))
+/// Returns the effective list of types shown in the `rona branch` type selector.
+fn branch_effective_types(config: &Config) -> Vec<String> {
+    let commit: Vec<String> = config.project_config.commit_types.as_ref().map_or_else(
+        || COMMIT_TYPES.iter().map(|s| (*s).to_string()).collect(),
+        Clone::clone,
+    );
+    match &config.project_config.branch_types {
+        None => commit,
+        Some(branch) => {
+            if config.project_config.merge_branch_and_commit_types {
+                let mut merged = branch.clone();
+                for ct in &commit {
+                    if !merged.contains(ct) {
+                        merged.push(ct.clone());
+                    }
+                }
+                merged
+            } else {
+                branch.clone()
+            }
+        }
+    }
 }
 
 /// Handle the `Branch` command which creates a new branch from a template.
@@ -386,53 +409,8 @@ fn prompt_branch_fields(
 /// * If user cancels a prompt
 #[allow(clippy::literal_string_with_formatting_args)]
 fn handle_branch(no_switch: bool, config: &Config) -> Result<()> {
-    let effective_types: Vec<String> = {
-        let commit: Vec<String> = config.project_config.commit_types.as_ref().map_or_else(
-            || COMMIT_TYPES.iter().map(|s| (*s).to_string()).collect(),
-            Clone::clone,
-        );
-        match &config.project_config.branch_types {
-            None => commit,
-            Some(branch) => {
-                if config.project_config.merge_branch_and_commit_types {
-                    let mut merged = branch.clone();
-                    for ct in &commit {
-                        if !merged.contains(ct) {
-                            merged.push(ct.clone());
-                        }
-                    }
-                    merged
-                } else {
-                    branch.clone()
-                }
-            }
-        }
-    };
+    let effective_types = branch_effective_types(config);
     let types_for_branch: Vec<&str> = effective_types.iter().map(String::as_str).collect();
-
-    let type_prompt = if config.project_config.branch_types.is_some() {
-        "Select branch type"
-    } else {
-        "Select commit type"
-    };
-
-    let commit_type = Select::new(type_prompt, types_for_branch)
-        .with_starting_cursor(0)
-        .prompt()
-        .map_err(|_| RonaError::UserCancelled)?;
-
-    let (description, extra_values) = prompt_branch_fields(
-        &config.project_config.branch_extra_fields,
-        &config.project_config.branch_field_order,
-    )?;
-
-    if description.trim().is_empty() {
-        println!(
-            "{} Empty description provided. Exiting.",
-            "WARNING:".yellow().bold()
-        );
-        return Ok(());
-    }
 
     let default_template = "{commit_type}/{description}";
     let template = config
@@ -441,7 +419,24 @@ fn handle_branch(no_switch: bool, config: &Config) -> Result<()> {
         .as_deref()
         .unwrap_or(default_template);
 
-    // Warn about extra fields not referenced in the template
+    // Determine which built-in variables the template actually uses.
+    let needs_commit_type =
+        template.contains("{commit_type}") || template.contains("{?commit_type}");
+    let needs_description =
+        template.contains("{description}") || template.contains("{?description}");
+
+    // Validate template and warn about unreferenced fields before prompting the user.
+    let extra_names: Vec<&str> = config
+        .project_config
+        .branch_extra_fields
+        .iter()
+        .map(|f| f.name.as_str())
+        .collect();
+    if let Err(e) = validate_branch_template(template, &extra_names) {
+        return Err(RonaError::InvalidInput(format!(
+            "Branch template validation error: {e}"
+        )));
+    }
     for field in &config.project_config.branch_extra_fields {
         let referenced = template.contains(&format!("{{{}}}", field.name))
             || template.contains(&format!("{{?{}}}", field.name));
@@ -453,15 +448,36 @@ fn handle_branch(no_switch: bool, config: &Config) -> Result<()> {
         }
     }
 
-    let extra_names: Vec<&str> = extra_values.keys().map(String::as_str).collect();
-    if let Err(e) = validate_branch_template(template, &extra_names) {
-        return Err(RonaError::InvalidInput(format!(
-            "Branch template validation error: {e}"
-        )));
+    let commit_type = if needs_commit_type {
+        let type_prompt = if config.project_config.branch_types.is_some() {
+            "Select branch type"
+        } else {
+            "Select commit type"
+        };
+        Select::new(type_prompt, types_for_branch)
+            .with_starting_cursor(0)
+            .prompt()
+            .map_err(|_| RonaError::UserCancelled)?
+            .to_string()
+    } else {
+        String::new()
+    };
+
+    let (description, extra_values) = prompt_branch_fields(
+        &config.project_config.branch_extra_fields,
+        &config.project_config.branch_field_order,
+        needs_description,
+    )?;
+
+    if needs_description && description.trim().is_empty() {
+        println!(
+            "{} Empty description provided. Exiting.",
+            "WARNING:".yellow().bold()
+        );
+        return Ok(());
     }
 
-    let variables =
-        BranchTemplateVariables::new(commit_type.to_string(), description.trim().to_string())?;
+    let variables = BranchTemplateVariables::new(commit_type, description.trim().to_owned())?;
 
     let raw_name = process_branch_template(template, &variables, &extra_values)?;
     let branch_name = sanitize_branch_name(&raw_name);

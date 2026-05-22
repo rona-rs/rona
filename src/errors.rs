@@ -40,6 +40,9 @@ pub enum ConfigError {
     #[error("Invalid configuration format - please check your config.toml syntax")]
     InvalidConfig,
 
+    #[error("Failed to parse '{file}': {reason}")]
+    ParseError { file: String, reason: String },
+
     #[error("Could not determine home directory - please set HOME environment variable")]
     HomeDirNotFound,
 
