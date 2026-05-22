@@ -101,6 +101,31 @@ pub fn get_current_branch() -> Result<String> {
     try_get_default_branch()
 }
 
+/// Returns all local branch names.
+///
+/// The current-branch marker (`* `) is stripped so every entry is a plain name.
+/// Returns an empty `Vec` on failure rather than propagating errors, matching the
+/// soft-failure convention used elsewhere for non-critical git reads.
+///
+/// # Errors
+/// Returns an error only if the git process cannot be spawned.
+pub fn get_all_branches() -> Result<Vec<String>> {
+    let output = Command::new("git")
+        .args(["branch", "--list"])
+        .output()
+        .map_err(RonaError::Io)?;
+
+    if !output.status.success() {
+        return Ok(vec![]);
+    }
+
+    Ok(String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .map(|line| line.trim_start_matches(['*', ' ']).to_string())
+        .filter(|name| !name.is_empty())
+        .collect())
+}
+
 /// Formats a branch name by removing commit type prefixes.
 ///
 /// This function cleans up branch names that follow conventional naming patterns

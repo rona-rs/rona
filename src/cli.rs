@@ -37,7 +37,7 @@ use std::{collections::HashMap, fs::read_to_string, io, process::Command};
 use crate::{
     config::{Config, find_config_sources},
     errors::{Result, RonaError},
-    extra_fields::{ExtraField, prompt_extra_field},
+    extra_fields::{ExtraField, MessagePrefetchConfig, prompt_extra_field, run_message_prefetch},
     git::{
         COMMIT_MESSAGE_FILE_PATH, COMMIT_TYPES, add_to_git_exclude, create_needed_files,
         format_branch_name, generate_commit_message, get_current_branch, get_current_commit_nb,
@@ -630,6 +630,7 @@ fn handle_completion(shell: Shell) {
 fn prompt_interactive_fields(
     extra_fields: &[ExtraField],
     field_order: &[String],
+    message_prefetch: Option<&MessagePrefetchConfig>,
 ) -> Result<(String, HashMap<String, String>)> {
     const MESSAGE_KEY: &str = "message";
 
@@ -657,11 +658,15 @@ fn prompt_interactive_fields(
 
     for name in &ordered {
         if name == MESSAGE_KEY {
-            message = Some(
-                Text::new("Message")
-                    .prompt()
-                    .map_err(|_| RonaError::UserCancelled)?,
-            );
+            let default = message_prefetch
+                .map(run_message_prefetch)
+                .transpose()?
+                .flatten();
+            let mut prompt = Text::new("Message");
+            if let Some(ref d) = default {
+                prompt = prompt.with_default(d.as_str());
+            }
+            message = Some(prompt.prompt().map_err(|_| RonaError::UserCancelled)?);
         } else if let Some(field) = extra_fields.iter().find(|f| f.name == *name)
             && let Some(value) = prompt_extra_field(field)?
         {
@@ -713,6 +718,7 @@ fn handle_generate(interactive: bool, no_commit_number: bool, config: &Config) -
         let (message, extra_values) = prompt_interactive_fields(
             &config.project_config.commit_extra_fields,
             &config.project_config.field_order,
+            config.project_config.message_prefetch.as_ref(),
         )?;
         handle_interactive_mode(
             commit_type,
