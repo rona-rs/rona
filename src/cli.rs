@@ -449,12 +449,7 @@ fn handle_branch(no_switch: bool, config: &Config) -> Result<()> {
     }
 
     let branch_type = if needs_branch_type {
-        let type_prompt = if config.project_config.branch_types.is_some() {
-            "Select branch type"
-        } else {
-            "Select commit type"
-        };
-        Select::new(type_prompt, types_for_branch)
+        Select::new("Select branch type", types_for_branch)
             .with_starting_cursor(0)
             .prompt()
             .map_err(|_| RonaError::UserCancelled)?
@@ -716,7 +711,7 @@ fn handle_generate(interactive: bool, no_commit_number: bool, config: &Config) -
     if interactive {
         // In interactive mode, prompt all fields (including message) in configured order
         let (message, extra_values) = prompt_interactive_fields(
-            &config.project_config.extra_fields,
+            &config.project_config.commit_extra_fields,
             &config.project_config.field_order,
         )?;
         handle_interactive_mode(
@@ -768,13 +763,13 @@ fn handle_interactive_mode(
 
     let template = config
         .project_config
-        .template
+        .commit_template
         .as_deref()
         .unwrap_or(default_template);
 
     // Warn about extra fields that are configured but not referenced in the template.
     // A field is considered "used" if {name} or {?name} appears anywhere in the template.
-    for field in &config.project_config.extra_fields {
+    for field in &config.project_config.commit_extra_fields {
         let referenced = template.contains(&format!("{{{}}}", field.name))
             || template.contains(&format!("{{?{}}}", field.name));
         if !referenced {
@@ -1062,8 +1057,8 @@ fn handle_which_config(path: Option<&str>, show_effective: bool) -> Result<()> {
             if let Some(commit_types) = &cfg.commit_types {
                 println!("- commit_types = {commit_types:?}");
             }
-            if let Some(template) = &cfg.template {
-                println!("- template = \"{template}\"");
+            if let Some(template) = &cfg.commit_template {
+                println!("- commit_template = \"{template}\"");
             }
         } else {
             println!("  (using defaults)");
