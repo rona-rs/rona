@@ -172,6 +172,74 @@ pub fn format_branch_name(commit_types: &[&str], branch: &str) -> String {
     formatted_branch
 }
 
+/// Sanitizes a string into a valid git branch name segment.
+///
+/// Applies these transformations:
+/// - Lowercases all characters
+/// - Replaces spaces and unsupported characters with `-`
+/// - Collapses consecutive `-` into a single `-`
+/// - Collapses consecutive `/` into a single `/`
+/// - Removes leading/trailing `-` from each `/`-separated segment
+/// - Removes a trailing `/`
+#[must_use]
+pub fn sanitize_branch_name(name: &str) -> String {
+    let lowered: String = name
+        .to_lowercase()
+        .chars()
+        .map(|c| {
+            if matches!(c, 'a'..='z' | '0'..='9' | '/' | '_') {
+                c
+            } else {
+                '-'
+            }
+        })
+        .collect();
+
+    // Collapse consecutive dashes and slashes
+    let mut result = String::with_capacity(lowered.len());
+    let mut prev = '\0';
+    for c in lowered.chars() {
+        if c == '-' && prev == '-' {
+            continue;
+        }
+        if c == '/' && prev == '/' {
+            continue;
+        }
+        result.push(c);
+        prev = c;
+    }
+
+    // Clean each segment (between `/`) of leading/trailing `-`
+    let result: String = result
+        .split('/')
+        .map(|seg| seg.trim_matches('-'))
+        .filter(|seg| !seg.is_empty())
+        .collect::<Vec<_>>()
+        .join("/");
+
+    result
+}
+
+/// Creates a branch without switching to it using `git branch`.
+///
+/// # Arguments
+/// * `branch_name` - The name of the branch to create
+///
+/// # Errors
+/// * If a branch with that name already exists
+/// * If the operation fails
+#[tracing::instrument]
+pub fn git_branch_only(branch_name: &str) -> Result<()> {
+    tracing::debug!("Creating branch without switching: {branch_name}");
+
+    let output = Command::new("git")
+        .args(["branch", branch_name])
+        .output()
+        .map_err(RonaError::Io)?;
+
+    handle_output("branch", &output)
+}
+
 /// Switches to a different branch using `git switch`.
 ///
 /// # Arguments

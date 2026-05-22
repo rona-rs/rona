@@ -41,9 +41,13 @@ use crate::{
     git::{
         COMMIT_MESSAGE_FILE_PATH, COMMIT_TYPES, add_to_git_exclude, create_needed_files,
         format_branch_name, generate_commit_message, get_current_branch, get_current_commit_nb,
-        get_status_files, get_top_level_path, git_add_with_exclude_patterns, git_commit, git_push,
+        get_status_files, get_top_level_path, git_add_with_exclude_patterns, git_branch_only,
+        git_commit, git_create_branch, git_push, sanitize_branch_name,
     },
-    template::{TemplateVariables, process_template, validate_template},
+    template::{
+        BranchTemplateVariables, TemplateVariables, process_branch_template, process_template,
+        validate_branch_template, validate_template,
+    },
 };
 
 /// Configuration scope for config command
@@ -90,6 +94,18 @@ pub(crate) enum ConfigSubcommand {
 /// CLI's commands
 #[derive(Subcommand)]
 pub(crate) enum CliCommand {
+    /// Create a new branch interactively using a branch name template.
+    #[command(name = "branch")]
+    Branch {
+        /// Show what would be created without actually creating the branch
+        #[arg(long, default_value_t = false)]
+        dry_run: bool,
+
+        /// Create the branch without switching to it
+        #[arg(long = "no-switch", default_value_t = false)]
+        no_switch: bool,
+    },
+
     /// Add all files to the `git add` command and exclude the patterns passed as positional arguments.
     #[command(short_flag = 'a', name = "add-with-exclude")]
     AddWithExclude {
@@ -307,6 +323,174 @@ fn print_fish_custom_completions() {
     println!(
         "complete -c rona -n '__fish_seen_subcommand_from add-with-exclude -a' -xa '(__rona_status_files)'"
     );
+}
+
+/// Prompt for branch description and any configured branch extra fields in the configured order.
+///
+/// The reserved name `"description"` positions the built-in description prompt. Extra fields not
+/// listed in `field_order` are appended after all listed items.
+///
+/// # Errors
+/// Returns an error if any prompt is cancelled or a validation regex is invalid.
+fn prompt_branch_fields(
+    extra_fields: &[ExtraField],
+    field_order: &[String],
+) -> Result<(String, HashMap<String, String>)> {
+    const DESCRIPTION_KEY: &str = "description";
+
+    let ordered: Vec<String> = if field_order.is_empty() {
+        let mut v: Vec<String> = extra_fields.iter().map(|f| f.name.clone()).collect();
+        v.push(DESCRIPTION_KEY.to_string());
+        v
+    } else {
+        let mut v: Vec<String> = field_order.to_vec();
+        for f in extra_fields {
+            if !v.iter().any(|s| s == &f.name) {
+                v.push(f.name.clone());
+            }
+        }
+        if !v.iter().any(|s| s == DESCRIPTION_KEY) {
+            v.push(DESCRIPTION_KEY.to_string());
+        }
+        v
+    };
+
+    let mut description: Option<String> = None;
+    let mut extra_values: HashMap<String, String> = HashMap::new();
+
+    for name in &ordered {
+        if name == DESCRIPTION_KEY {
+            description = Some(
+                Text::new("Branch description")
+                    .prompt()
+                    .map_err(|_| RonaError::UserCancelled)?,
+            );
+        } else if let Some(field) = extra_fields.iter().find(|f| f.name == *name)
+            && let Some(value) = prompt_extra_field(field)?
+        {
+            extra_values.insert(field.name.clone(), value);
+        }
+    }
+
+    let description = description.ok_or_else(|| {
+        RonaError::InvalidInput("description prompt was not executed".to_string())
+    })?;
+
+    Ok((description, extra_values))
+}
+
+/// Handle the `Branch` command which creates a new branch from a template.
+///
+/// # Errors
+/// * If branch creation fails
+/// * If user cancels a prompt
+#[allow(clippy::literal_string_with_formatting_args)]
+fn handle_branch(no_switch: bool, config: &Config) -> Result<()> {
+    let effective_types: Vec<String> = {
+        let commit: Vec<String> = config.project_config.commit_types.as_ref().map_or_else(
+            || COMMIT_TYPES.iter().map(|s| (*s).to_string()).collect(),
+            Clone::clone,
+        );
+        match &config.project_config.branch_types {
+            None => commit,
+            Some(branch) => {
+                if config.project_config.merge_branch_and_commit_types {
+                    let mut merged = branch.clone();
+                    for ct in &commit {
+                        if !merged.contains(ct) {
+                            merged.push(ct.clone());
+                        }
+                    }
+                    merged
+                } else {
+                    branch.clone()
+                }
+            }
+        }
+    };
+    let types_for_branch: Vec<&str> = effective_types.iter().map(String::as_str).collect();
+
+    let type_prompt = if config.project_config.branch_types.is_some() {
+        "Select branch type"
+    } else {
+        "Select commit type"
+    };
+
+    let commit_type = Select::new(type_prompt, types_for_branch)
+        .with_starting_cursor(0)
+        .prompt()
+        .map_err(|_| RonaError::UserCancelled)?;
+
+    let (description, extra_values) = prompt_branch_fields(
+        &config.project_config.branch_extra_fields,
+        &config.project_config.branch_field_order,
+    )?;
+
+    if description.trim().is_empty() {
+        println!(
+            "{} Empty description provided. Exiting.",
+            "WARNING:".yellow().bold()
+        );
+        return Ok(());
+    }
+
+    let default_template = "{commit_type}/{description}";
+    let template = config
+        .project_config
+        .branch_template
+        .as_deref()
+        .unwrap_or(default_template);
+
+    // Warn about extra fields not referenced in the template
+    for field in &config.project_config.branch_extra_fields {
+        let referenced = template.contains(&format!("{{{}}}", field.name))
+            || template.contains(&format!("{{?{}}}", field.name));
+        if !referenced {
+            println!(
+                "[WARNING] Branch extra field '{}' is configured but not referenced in the template.",
+                field.name
+            );
+        }
+    }
+
+    let extra_names: Vec<&str> = extra_values.keys().map(String::as_str).collect();
+    if let Err(e) = validate_branch_template(template, &extra_names) {
+        return Err(RonaError::InvalidInput(format!(
+            "Branch template validation error: {e}"
+        )));
+    }
+
+    let variables =
+        BranchTemplateVariables::new(commit_type.to_string(), description.trim().to_string())?;
+
+    let raw_name = process_branch_template(template, &variables, &extra_values)?;
+    let branch_name = sanitize_branch_name(&raw_name);
+
+    if branch_name.is_empty() {
+        return Err(RonaError::InvalidInput(
+            "Generated branch name is empty after sanitization.".to_string(),
+        ));
+    }
+
+    if config.dry_run {
+        println!("Would create branch: {branch_name}");
+        if no_switch {
+            println!("Would not switch to the new branch.");
+        } else {
+            println!("Would switch to the new branch.");
+        }
+        return Ok(());
+    }
+
+    if no_switch {
+        git_branch_only(&branch_name)?;
+        println!("Branch created: {branch_name}");
+    } else {
+        git_create_branch(&branch_name)?;
+        println!("Switched to new branch: {branch_name}");
+    }
+
+    Ok(())
 }
 
 /// Handle the `AddWithExclude` command which adds files to git while excluding specified patterns.
@@ -998,6 +1182,11 @@ pub fn run() -> Result<()> {
     config.set_verbose(cli.verbose);
 
     match cli.command {
+        CliCommand::Branch { dry_run, no_switch } => {
+            config.set_dry_run(dry_run);
+            handle_branch(no_switch, &config)
+        }
+
         CliCommand::AddWithExclude {
             to_exclude: exclude,
             dry_run,

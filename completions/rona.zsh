@@ -31,7 +31,15 @@ _rona() {
         (( CURRENT += 1 ))
         curcontext="${curcontext%:*:*}:rona-command-$line[1]:"
         case $line[1] in
-            (add-with-exclude)
+            (branch)
+_arguments "${_arguments_options[@]}" : \
+'--dry-run[Show what would be created without actually creating the branch]' \
+'--no-switch[Create the branch without switching to it]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(add-with-exclude)
 _arguments "${_arguments_options[@]}" : \
 '--dry-run[Show what would be added without actually adding files]' \
 '-h[Print help]' \
@@ -203,7 +211,11 @@ _arguments "${_arguments_options[@]}" : \
         (( CURRENT += 1 ))
         curcontext="${curcontext%:*:*}:rona-help-command-$line[1]:"
         case $line[1] in
-            (add-with-exclude)
+            (branch)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(add-with-exclude)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
@@ -279,6 +291,7 @@ esac
 (( $+functions[_rona_commands] )) ||
 _rona_commands() {
     local commands; commands=(
+'branch:Create a new branch interactively using a branch name template' \
 'add-with-exclude:Add all files to the \`git add\` command and exclude the patterns passed as positional arguments' \
 'commit:Directly commit the file with the text in \`commit_message.md\`' \
 'completion:Generate shell completions for your shell' \
@@ -297,6 +310,11 @@ _rona_commands() {
 _rona__subcmd__add-with-exclude_commands() {
     local commands; commands=()
     _describe -t commands 'rona add-with-exclude commands' commands "$@"
+}
+(( $+functions[_rona__subcmd__branch_commands] )) ||
+_rona__subcmd__branch_commands() {
+    local commands; commands=()
+    _describe -t commands 'rona branch commands' commands "$@"
 }
 (( $+functions[_rona__subcmd__commit_commands] )) ||
 _rona__subcmd__commit_commands() {
@@ -360,6 +378,7 @@ _rona__subcmd__generate_commands() {
 (( $+functions[_rona__subcmd__help_commands] )) ||
 _rona__subcmd__help_commands() {
     local commands; commands=(
+'branch:Create a new branch interactively using a branch name template' \
 'add-with-exclude:Add all files to the \`git add\` command and exclude the patterns passed as positional arguments' \
 'commit:Directly commit the file with the text in \`commit_message.md\`' \
 'completion:Generate shell completions for your shell' \
@@ -378,6 +397,11 @@ _rona__subcmd__help_commands() {
 _rona__subcmd__help__subcmd__add-with-exclude_commands() {
     local commands; commands=()
     _describe -t commands 'rona help add-with-exclude commands' commands "$@"
+}
+(( $+functions[_rona__subcmd__help__subcmd__branch_commands] )) ||
+_rona__subcmd__help__subcmd__branch_commands() {
+    local commands; commands=()
+    _describe -t commands 'rona help branch commands' commands "$@"
 }
 (( $+functions[_rona__subcmd__help__subcmd__commit_commands] )) ||
 _rona__subcmd__help__subcmd__commit_commands() {

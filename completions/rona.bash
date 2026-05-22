@@ -19,6 +19,9 @@ _rona() {
             rona,add-with-exclude)
                 cmd="rona__subcmd__add__subcmd__with__subcmd__exclude"
                 ;;
+            rona,branch)
+                cmd="rona__subcmd__branch"
+                ;;
             rona,commit)
                 cmd="rona__subcmd__commit"
                 ;;
@@ -73,6 +76,9 @@ _rona() {
             rona__subcmd__help,add-with-exclude)
                 cmd="rona__subcmd__help__subcmd__add__subcmd__with__subcmd__exclude"
                 ;;
+            rona__subcmd__help,branch)
+                cmd="rona__subcmd__help__subcmd__branch"
+                ;;
             rona__subcmd__help,commit)
                 cmd="rona__subcmd__help__subcmd__commit"
                 ;;
@@ -116,7 +122,7 @@ _rona() {
 
     case "${cmd}" in
         rona)
-            opts="-v -h -V --verbose --config --help --version add-with-exclude commit completion config generate init list-status push set-editor sync help"
+            opts="-v -h -V --verbose --config --help --version branch add-with-exclude commit completion config generate init list-status push set-editor sync help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 1 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -135,6 +141,20 @@ _rona() {
             ;;
         rona__subcmd__add__subcmd__with__subcmd__exclude)
             opts="-h --dry-run --help [PATTERNS]..."
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        rona__subcmd__branch)
+            opts="-h --dry-run --no-switch --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -288,7 +308,7 @@ _rona() {
             return 0
             ;;
         rona__subcmd__help)
-            opts="add-with-exclude commit completion config generate init list-status push set-editor sync help"
+            opts="branch add-with-exclude commit completion config generate init list-status push set-editor sync help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -302,6 +322,20 @@ _rona() {
             return 0
             ;;
         rona__subcmd__help__subcmd__add__subcmd__with__subcmd__exclude)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        rona__subcmd__help__subcmd__branch)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )

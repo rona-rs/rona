@@ -4,8 +4,10 @@
 # Project-level settings always override global ones.
 #
 # IMPORTANT: In TOML, every key-value pair that appears after a [[extra_fields]]
-# header belongs to that array item — not to the top-level table. Always place
-# editor, commit_types, template, and field_order BEFORE any [[extra_fields]] entry.
+# or [[branch_extra_fields]] header belongs to that array item — not to the
+# top-level table. Always place editor, commit_types, template, field_order,
+# branch_template, and branch_field_order BEFORE any [[extra_fields]] or
+# [[branch_extra_fields]] entry.
 
 # ---------------------------------------------------------------------------
 # Editor
@@ -22,7 +24,7 @@ editor = "nano"
 # ---------------------------------------------------------------------------
 # Commit types
 # ---------------------------------------------------------------------------
-# The list shown in the commit-type selector.
+# The list shown in the commit-type selector (used by both `rona -g` and `rona branch`).
 # Omit this key to use the built-in default: ["feat", "fix", "docs", "test", "chore"].
 
 commit_types = [
@@ -75,7 +77,7 @@ template = "{?commit_number}[{commit_number}] {/commit_number}{commit_type}{?sco
 
 
 # ---------------------------------------------------------------------------
-# Prompt order  (interactive mode only)
+# Commit prompt order  (interactive mode only)
 # ---------------------------------------------------------------------------
 # Controls the sequence of prompts shown after the commit-type selector.
 # Use the reserved name "message" to position the built-in message prompt.
@@ -89,10 +91,58 @@ field_order = ["scope", "message", "ticket"]
 
 
 # ---------------------------------------------------------------------------
-# Extra fields
+# Branch name template
 # ---------------------------------------------------------------------------
-# Each [[extra_fields]] entry adds one interactive prompt. The value entered
-# becomes a template variable matching the field's `name`.
+# Used by `rona branch` to generate the branch name from a template.
+# After template processing the result is sanitized: lowercased, spaces and
+# unsupported characters replaced with "-", consecutive "-" and "/" collapsed.
+#
+# Built-in variables:
+#   {commit_type}     The type selected at the prompt
+#   {description}     The branch description entered by the user
+#   {date}            Today's date as YYYY-MM-DD
+#   {time}            Current time as HH:MM:SS
+#   {author}          Git author name (from git config)
+#
+# Extra field variables (defined below under [[branch_extra_fields]]):
+#   {ticket}          Issue or ticket reference
+#
+# Conditional blocks work the same way as for commit templates:
+#   {?ticket}{ticket}/{/ticket}
+#
+# Default (when key is absent): "{commit_type}/{description}"
+
+branch_template = "{commit_type}/{?ticket}{ticket}/{/ticket}{description}"
+
+# Alternative: date-prefixed branches
+# branch_template = "{date}/{commit_type}/{description}"
+
+# Alternative: include author for per-developer namespacing
+# branch_template = "{author}/{commit_type}/{description}"
+
+# Alternative: minimal — no commit type prefix
+# branch_template = "{description}"
+
+
+# ---------------------------------------------------------------------------
+# Branch prompt order
+# ---------------------------------------------------------------------------
+# Controls the sequence of prompts shown after the commit-type selector in
+# `rona branch`. Use the reserved name "description" to position the built-in
+# description prompt. Extra fields not listed here are appended after all listed
+# items. When this key is absent the default order is: extra fields, then description.
+
+branch_field_order = ["ticket", "description"]
+
+# Alternative: description first, then extra fields
+# branch_field_order = ["description", "ticket"]
+
+
+# ---------------------------------------------------------------------------
+# Commit extra fields
+# ---------------------------------------------------------------------------
+# Each [[extra_fields]] entry adds one interactive prompt to `rona -g -i`.
+# The value entered becomes a template variable matching the field's `name`.
 #
 # Available keys per entry:
 #   name              (required) Variable name used in the template.
@@ -165,3 +215,35 @@ prefetch.extract_regex = "[A-Z]+-[0-9]+"
 # kind = "text"
 # required = false
 # validation = "^.{10,}$"
+
+
+# ---------------------------------------------------------------------------
+# Branch extra fields
+# ---------------------------------------------------------------------------
+# Each [[branch_extra_fields]] entry adds one interactive prompt to `rona branch`.
+# The value entered becomes a template variable matching the field's `name`.
+# Supports the same keys as [[extra_fields]] above (name, prompt, kind, required,
+# validation, prefetch.*).
+
+# --- ticket ---
+# Ticket reference prepended to the branch name, e.g. feat/PROJ-123/add-login.
+# Default value is extracted from the current branch name when switching from an
+# existing branch, making it easy to keep the ticket reference consistent.
+[[branch_extra_fields]]
+name = "ticket"
+prompt = "Ticket reference (optional)"
+kind = "text"
+required = false
+validation = "^[A-Z]+-[0-9]+$"
+prefetch.source = "branch"
+prefetch.extract_regex = "[A-Z]+-[0-9]+"
+
+# --- scope ---
+# Optional component scope to namespace the branch further.
+# Uncomment to enable.
+#
+# [[branch_extra_fields]]
+# name = "scope"
+# prompt = "Component scope (optional)"
+# kind = "text"
+# required = false

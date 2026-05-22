@@ -25,6 +25,7 @@ set edit:completion:arg-completer[rona] = {|@words|
             cand --help 'Print help'
             cand -V 'Print version'
             cand --version 'Print version'
+            cand branch 'Create a new branch interactively using a branch name template'
             cand add-with-exclude 'Add all files to the `git add` command and exclude the patterns passed as positional arguments'
             cand commit 'Directly commit the file with the text in `commit_message.md`'
             cand completion 'Generate shell completions for your shell'
@@ -36,6 +37,12 @@ set edit:completion:arg-completer[rona] = {|@words|
             cand set-editor 'Set the editor to use for editing the commit message'
             cand sync 'Sync current branch with main (or another branch) by pulling and merging/rebasing'
             cand help 'Print this message or the help of the given subcommand(s)'
+        }
+        &'rona;branch'= {
+            cand --dry-run 'Show what would be created without actually creating the branch'
+            cand --no-switch 'Create the branch without switching to it'
+            cand -h 'Print help'
+            cand --help 'Print help'
         }
         &'rona;add-with-exclude'= {
             cand --dry-run 'Show what would be added without actually adding files'
@@ -137,6 +144,7 @@ set edit:completion:arg-completer[rona] = {|@words|
             cand --help 'Print help'
         }
         &'rona;help'= {
+            cand branch 'Create a new branch interactively using a branch name template'
             cand add-with-exclude 'Add all files to the `git add` command and exclude the patterns passed as positional arguments'
             cand commit 'Directly commit the file with the text in `commit_message.md`'
             cand completion 'Generate shell completions for your shell'
@@ -148,6 +156,8 @@ set edit:completion:arg-completer[rona] = {|@words|
             cand set-editor 'Set the editor to use for editing the commit message'
             cand sync 'Sync current branch with main (or another branch) by pulling and merging/rebasing'
             cand help 'Print this message or the help of the given subcommand(s)'
+        }
+        &'rona;help;branch'= {
         }
         &'rona;help;add-with-exclude'= {
         }

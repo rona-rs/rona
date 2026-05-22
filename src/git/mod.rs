@@ -36,8 +36,8 @@ use colored::Colorize;
 
 // Re-export commonly used functions for convenience
 pub use branch::{
-    format_branch_name, get_current_branch, git_create_branch, git_merge, git_pull, git_rebase,
-    git_switch,
+    format_branch_name, get_current_branch, git_branch_only, git_create_branch, git_merge,
+    git_pull, git_rebase, git_switch, sanitize_branch_name,
 };
 pub use commit::{
     COMMIT_MESSAGE_FILE_PATH, COMMIT_TYPES, generate_commit_message, get_current_commit_nb,

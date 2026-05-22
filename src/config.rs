@@ -89,6 +89,32 @@ pub struct ProjectConfig {
     /// When empty (the default), extra fields are shown first, then `message`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub field_order: Vec<String>,
+
+    /// Template for branch name generation.
+    /// Available variables: `{commit_type}`, `{description}`, `{date}`, `{time}`, `{author}`.
+    /// Extra field names defined in `branch_extra_fields` are also available.
+    pub branch_template: Option<String>,
+
+    /// Extra fields to prompt when generating a branch name.
+    /// Each field becomes a template variable with the field's `name`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub branch_extra_fields: Vec<crate::extra_fields::ExtraField>,
+
+    /// Controls the order of prompts for branch name generation.
+    /// Use the reserved name `"description"` to position the built-in description prompt.
+    /// Extra fields not listed are appended after all listed items.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub branch_field_order: Vec<String>,
+
+    /// Dedicated commit types shown in the `rona branch` type selector.
+    /// When absent, `commit_types` is used instead.
+    pub branch_types: Option<Vec<String>>,
+
+    /// When `true` and `branch_types` is set, the selector for `rona branch` shows
+    /// `branch_types` followed by any `commit_types` not already present in it.
+    /// When `false` (default), only `branch_types` is shown.
+    #[serde(default)]
+    pub merge_branch_and_commit_types: bool,
 }
 
 impl Default for ProjectConfig {
@@ -106,6 +132,11 @@ impl Default for ProjectConfig {
             ),
             extra_fields: vec![],
             field_order: vec![],
+            branch_template: Some("{commit_type}/{description}".to_string()),
+            branch_extra_fields: vec![],
+            branch_field_order: vec![],
+            branch_types: None,
+            merge_branch_and_commit_types: false,
         }
     }
 }
