@@ -37,13 +37,17 @@ use std::{collections::HashMap, fs::read_to_string, io, process::Command};
 use crate::{
     config::{Config, find_config_sources},
     errors::{Result, RonaError},
-    extra_fields::{ExtraField, prompt_extra_field},
+    extra_fields::{ExtraField, MessagePrefetchConfig, prompt_extra_field, run_message_prefetch},
     git::{
         COMMIT_MESSAGE_FILE_PATH, COMMIT_TYPES, add_to_git_exclude, create_needed_files,
         format_branch_name, generate_commit_message, get_current_branch, get_current_commit_nb,
-        get_status_files, get_top_level_path, git_add_with_exclude_patterns, git_commit, git_push,
+        get_status_files, get_top_level_path, git_add_with_exclude_patterns, git_branch_only,
+        git_commit, git_create_branch, git_push, sanitize_branch_name,
     },
-    template::{TemplateVariables, process_template, validate_template},
+    template::{
+        BranchTemplateVariables, TemplateVariables, process_branch_template, process_template,
+        validate_branch_template, validate_template,
+    },
 };
 
 /// Configuration scope for config command
@@ -90,6 +94,18 @@ pub(crate) enum ConfigSubcommand {
 /// CLI's commands
 #[derive(Subcommand)]
 pub(crate) enum CliCommand {
+    /// Create a new branch interactively using a branch name template.
+    #[command(name = "branch")]
+    Branch {
+        /// Show what would be created without actually creating the branch
+        #[arg(long, default_value_t = false)]
+        dry_run: bool,
+
+        /// Create the branch without switching to it
+        #[arg(long = "no-switch", default_value_t = false)]
+        no_switch: bool,
+    },
+
     /// Add all files to the `git add` command and exclude the patterns passed as positional arguments.
     #[command(short_flag = 'a', name = "add-with-exclude")]
     AddWithExclude {
@@ -242,8 +258,8 @@ pub(crate) struct Cli {
     #[arg(short, long, default_value = "false")]
     verbose: bool,
 
-    /// Use the custom config file path instead of default
-    #[arg(long, value_name = "PATH")]
+    /// Config file to use instead of the default global/project hierarchy
+    #[arg(short = 'f', long = "config-file", value_name = "PATH", value_hint = ValueHint::FilePath, global = true)]
     config: Option<String>,
 }
 
@@ -307,6 +323,185 @@ fn print_fish_custom_completions() {
     println!(
         "complete -c rona -n '__fish_seen_subcommand_from add-with-exclude -a' -xa '(__rona_status_files)'"
     );
+}
+
+/// Prompt for branch description and any configured branch extra fields in the configured order.
+///
+/// The reserved name `"description"` positions the built-in description prompt. Extra fields not
+/// listed in `field_order` are appended after all listed items.
+///
+/// # Errors
+/// Returns an error if any prompt is cancelled or a validation regex is invalid.
+fn prompt_branch_fields(
+    extra_fields: &[ExtraField],
+    field_order: &[String],
+    needs_description: bool,
+) -> Result<(String, HashMap<String, String>)> {
+    const DESCRIPTION_KEY: &str = "description";
+
+    let ordered: Vec<String> = if field_order.is_empty() {
+        let mut v: Vec<String> = extra_fields.iter().map(|f| f.name.clone()).collect();
+        if needs_description {
+            v.push(DESCRIPTION_KEY.to_string());
+        }
+        v
+    } else {
+        let mut v: Vec<String> = field_order.to_vec();
+        for f in extra_fields {
+            if !v.iter().any(|s| s == &f.name) {
+                v.push(f.name.clone());
+            }
+        }
+        if needs_description && !v.iter().any(|s| s == DESCRIPTION_KEY) {
+            v.push(DESCRIPTION_KEY.to_string());
+        }
+        v
+    };
+
+    let mut description: Option<String> = None;
+    let mut extra_values: HashMap<String, String> = HashMap::new();
+
+    for name in &ordered {
+        if name == DESCRIPTION_KEY {
+            description = Some(
+                Text::new("Branch description")
+                    .prompt()
+                    .map_err(|_| RonaError::UserCancelled)?,
+            );
+        } else if let Some(field) = extra_fields.iter().find(|f| f.name == *name)
+            && let Some(value) = prompt_extra_field(field)?
+        {
+            extra_values.insert(field.name.clone(), value);
+        }
+    }
+
+    Ok((description.unwrap_or_default(), extra_values))
+}
+
+/// Returns the effective list of types shown in the `rona branch` type selector.
+fn branch_effective_types(config: &Config) -> Vec<String> {
+    let commit: Vec<String> = config.project_config.commit_types.as_ref().map_or_else(
+        || COMMIT_TYPES.iter().map(|s| (*s).to_string()).collect(),
+        Clone::clone,
+    );
+    match &config.project_config.branch_types {
+        None => commit,
+        Some(branch) => {
+            if config.project_config.merge_branch_and_commit_types {
+                let mut merged = branch.clone();
+                for ct in &commit {
+                    if !merged.contains(ct) {
+                        merged.push(ct.clone());
+                    }
+                }
+                merged
+            } else {
+                branch.clone()
+            }
+        }
+    }
+}
+
+/// Handle the `Branch` command which creates a new branch from a template.
+///
+/// # Errors
+/// * If branch creation fails
+/// * If user cancels a prompt
+#[allow(clippy::literal_string_with_formatting_args)]
+fn handle_branch(no_switch: bool, config: &Config) -> Result<()> {
+    let effective_types = branch_effective_types(config);
+    let types_for_branch: Vec<&str> = effective_types.iter().map(String::as_str).collect();
+
+    let default_template = "{branch_type}/{description}";
+    let template = config
+        .project_config
+        .branch_template
+        .as_deref()
+        .unwrap_or(default_template);
+
+    // Determine which built-in variables the template actually uses.
+    let needs_branch_type =
+        template.contains("{branch_type}") || template.contains("{?branch_type}");
+    let needs_description =
+        template.contains("{description}") || template.contains("{?description}");
+
+    // Validate template and warn about unreferenced fields before prompting the user.
+    let extra_names: Vec<&str> = config
+        .project_config
+        .branch_extra_fields
+        .iter()
+        .map(|f| f.name.as_str())
+        .collect();
+    if let Err(e) = validate_branch_template(template, &extra_names) {
+        return Err(RonaError::InvalidInput(format!(
+            "Branch template validation error: {e}"
+        )));
+    }
+    for field in &config.project_config.branch_extra_fields {
+        let referenced = template.contains(&format!("{{{}}}", field.name))
+            || template.contains(&format!("{{?{}}}", field.name));
+        if !referenced {
+            println!(
+                "[WARNING] Branch extra field '{}' is configured but not referenced in the template.",
+                field.name
+            );
+        }
+    }
+
+    let branch_type = if needs_branch_type {
+        Select::new("Select branch type", types_for_branch)
+            .with_starting_cursor(0)
+            .prompt()
+            .map_err(|_| RonaError::UserCancelled)?
+            .to_string()
+    } else {
+        String::new()
+    };
+
+    let (description, extra_values) = prompt_branch_fields(
+        &config.project_config.branch_extra_fields,
+        &config.project_config.branch_field_order,
+        needs_description,
+    )?;
+
+    if needs_description && description.trim().is_empty() {
+        println!(
+            "{} Empty description provided. Exiting.",
+            "WARNING:".yellow().bold()
+        );
+        return Ok(());
+    }
+
+    let variables = BranchTemplateVariables::new(branch_type, description.trim().to_owned())?;
+
+    let raw_name = process_branch_template(template, &variables, &extra_values)?;
+    let branch_name = sanitize_branch_name(&raw_name);
+
+    if branch_name.is_empty() {
+        return Err(RonaError::InvalidInput(
+            "Generated branch name is empty after sanitization.".to_string(),
+        ));
+    }
+
+    if config.dry_run {
+        println!("Would create branch: {branch_name}");
+        if no_switch {
+            println!("Would not switch to the new branch.");
+        } else {
+            println!("Would switch to the new branch.");
+        }
+        return Ok(());
+    }
+
+    if no_switch {
+        git_branch_only(&branch_name)?;
+        println!("Branch created: {branch_name}");
+    } else {
+        git_create_branch(&branch_name)?;
+        println!("Switched to new branch: {branch_name}");
+    }
+
+    Ok(())
 }
 
 /// Handle the `AddWithExclude` command which adds files to git while excluding specified patterns.
@@ -435,6 +630,7 @@ fn handle_completion(shell: Shell) {
 fn prompt_interactive_fields(
     extra_fields: &[ExtraField],
     field_order: &[String],
+    message_prefetch: Option<&MessagePrefetchConfig>,
 ) -> Result<(String, HashMap<String, String>)> {
     const MESSAGE_KEY: &str = "message";
 
@@ -462,11 +658,15 @@ fn prompt_interactive_fields(
 
     for name in &ordered {
         if name == MESSAGE_KEY {
-            message = Some(
-                Text::new("Message")
-                    .prompt()
-                    .map_err(|_| RonaError::UserCancelled)?,
-            );
+            let default = message_prefetch
+                .map(run_message_prefetch)
+                .transpose()?
+                .flatten();
+            let mut prompt = Text::new("Message");
+            if let Some(ref d) = default {
+                prompt = prompt.with_default(d.as_str());
+            }
+            message = Some(prompt.prompt().map_err(|_| RonaError::UserCancelled)?);
         } else if let Some(field) = extra_fields.iter().find(|f| f.name == *name)
             && let Some(value) = prompt_extra_field(field)?
         {
@@ -516,8 +716,9 @@ fn handle_generate(interactive: bool, no_commit_number: bool, config: &Config) -
     if interactive {
         // In interactive mode, prompt all fields (including message) in configured order
         let (message, extra_values) = prompt_interactive_fields(
-            &config.project_config.extra_fields,
+            &config.project_config.commit_extra_fields,
             &config.project_config.field_order,
+            config.project_config.message_prefetch.as_ref(),
         )?;
         handle_interactive_mode(
             commit_type,
@@ -568,13 +769,13 @@ fn handle_interactive_mode(
 
     let template = config
         .project_config
-        .template
+        .commit_template
         .as_deref()
         .unwrap_or(default_template);
 
     // Warn about extra fields that are configured but not referenced in the template.
     // A field is considered "used" if {name} or {?name} appears anywhere in the template.
-    for field in &config.project_config.extra_fields {
+    for field in &config.project_config.commit_extra_fields {
         let referenced = template.contains(&format!("{{{}}}", field.name))
             || template.contains(&format!("{{?{}}}", field.name));
         if !referenced {
@@ -862,8 +1063,8 @@ fn handle_which_config(path: Option<&str>, show_effective: bool) -> Result<()> {
             if let Some(commit_types) = &cfg.commit_types {
                 println!("- commit_types = {commit_types:?}");
             }
-            if let Some(template) = &cfg.template {
-                println!("- template = \"{template}\"");
+            if let Some(template) = &cfg.commit_template {
+                println!("- commit_template = \"{template}\"");
             }
         } else {
             println!("  (using defaults)");
@@ -998,6 +1199,11 @@ pub fn run() -> Result<()> {
     config.set_verbose(cli.verbose);
 
     match cli.command {
+        CliCommand::Branch { dry_run, no_switch } => {
+            config.set_dry_run(dry_run);
+            handle_branch(no_switch, &config)
+        }
+
         CliCommand::AddWithExclude {
             to_exclude: exclude,
             dry_run,

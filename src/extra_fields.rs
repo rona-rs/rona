@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     errors::{Result, RonaError},
-    git::get_current_branch,
+    git::{get_all_branches, get_current_branch},
 };
 
 /// How the field is presented to the user.
@@ -32,8 +32,10 @@ pub enum PrefetchSource {
     /// Run a shell command and extract values from its output.
     #[default]
     Command,
-    /// Extract a value from the current git branch name.
+    /// Extract a value from the current git branch name only.
     Branch,
+    /// Extract values from all local branch names.
+    Branches,
 }
 
 /// Configuration for prefetching data to populate a prompt.
@@ -92,6 +94,15 @@ pub fn run_prefetch(prefetch: &PrefetchConfig) -> Result<Vec<String>> {
                 &re,
                 std::iter::once(branch.as_str()),
                 false,
+            ))
+        }
+
+        PrefetchSource::Branches => {
+            let branches = get_all_branches().unwrap_or_default();
+            Ok(extract_matches(
+                &re,
+                branches.iter().map(String::as_str),
+                prefetch.deduplicate,
             ))
         }
 
@@ -276,6 +287,49 @@ fn prompt_as_text(
     } else {
         Ok(Some(value))
     }
+}
+
+/// Prefetch configuration specific to the built-in message prompt.
+///
+/// Unlike `PrefetchConfig`, this supports a `template` that uses `{extract}` as a
+/// placeholder for the first extracted value. When the user submits the message prompt
+/// without typing, the rendered template is used as the value.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MessagePrefetchConfig {
+    /// Data source: `"command"` or `"branch"`.
+    pub source: PrefetchSource,
+    /// Shell command to run when `source = "command"`.
+    pub command: Option<String>,
+    /// Regex applied to the source output. Same extraction priority as `PrefetchConfig`.
+    pub extract_regex: String,
+    /// Optional template rendered into the message default.
+    /// Use `{extract}` as a placeholder for the first extracted value.
+    /// When absent, the raw extracted value is used as the default.
+    pub template: Option<String>,
+}
+
+/// Run a `MessagePrefetchConfig` and return the rendered default string, or `None` if
+/// nothing was extracted.
+///
+/// # Errors
+/// Returns an error if `extract_regex` is invalid.
+pub fn run_message_prefetch(config: &MessagePrefetchConfig) -> Result<Option<String>> {
+    let prefetch = PrefetchConfig {
+        source: config.source,
+        command: config.command.clone(),
+        extract_regex: config.extract_regex.clone(),
+        deduplicate: false,
+    };
+    let candidates = run_prefetch(&prefetch)?;
+    let Some(extract) = candidates.into_iter().next() else {
+        return Ok(None);
+    };
+    #[allow(clippy::literal_string_with_formatting_args)]
+    let default = config
+        .template
+        .as_ref()
+        .map_or_else(|| extract.clone(), |t| t.replace("{extract}", &extract));
+    Ok(Some(default))
 }
 
 /// Prompt all extra fields in order and return a map of `name → value`.

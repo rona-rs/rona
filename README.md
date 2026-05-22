@@ -41,12 +41,13 @@ Rona is a command-line interface tool designed to enhance your Git workflow with
 
 - Intelligent file staging with pattern exclusion, working correctly from any subdirectory of the repository, including filenames with spaces
 - Structured commit message generation
+- Interactive branch creation from configurable name templates (`rona branch`)
 - Streamlined push operations
 - Branch synchronization with merge/rebase support
 - Interactive commit type selection with customizable types
-- Config-driven extra prompt fields (scope, ticket, etc.) with optional prefetching, regex validation, and configurable ordering
+- Config-driven extra prompt fields (scope, ticket, etc.) with optional prefetching, regex validation, and configurable ordering — for both commit messages and branch names
 - Multi-shell completion support (Bash, Fish, Zsh, PowerShell)
-- Flexible configuration system (global, project-level, and custom file via `--config`)
+- Flexible configuration system (global, project-level, and custom file via `-f`/`--config-file`)
 - Colored interactive prompts powered by Inquire
 - Structured logging via `tracing` with `RUST_LOG` support
 
@@ -83,15 +84,15 @@ Rona supports flexible configuration through TOML files:
 
 - **Global config**: `~/.config/rona.toml` - applies to all projects
 - **Project config**: `./.rona.toml` - applies only to the current project (overrides global)
-- **Custom config**: any TOML file passed via `--config <PATH>` - bypasses the default hierarchy entirely
+- **Custom config**: any TOML file passed via `-f <PATH>` / `--config-file <PATH>` - bypasses the default hierarchy entirely
 - **Extended config**: a `.rona.toml` containing only `extends = "path/to/config.toml"` delegates all settings to another file
 
 ```bash
 # Use a custom config file instead of the default global/project one
-rona --config /path/to/my-config.toml -g -i
+rona -f /path/to/my-config.toml -g -i
 
 # Useful for testing different configs or CI environments
-rona --config .rona.ci.toml -c -p
+rona -f .rona.ci.toml -c -p
 ```
 
 ### Configuration Options
@@ -100,7 +101,7 @@ rona --config .rona.ci.toml -c -p
 # Editor for commit messages (any command-line editor)
 editor = "nano"  # Examples: "vim", "zed", "code --wait", "emacs"
 
-# Custom commit types (defaults shown below)
+# Custom commit types (used by both rona -g and rona branch)
 commit_types = [
     "feat",    # New features
     "fix",     # Bug fixes
@@ -108,6 +109,15 @@ commit_types = [
     "test",    # Adding or updating tests
     "chore"    # Maintenance tasks
 ]
+
+# Optional: dedicated types shown only in the rona branch type selector.
+# When absent, commit_types is used instead.
+# branch_types = ["feat", "fix", "hotfix", "release"]
+
+# When true and branch_types is set, the selector shows branch_types followed
+# by any commit_types not already present in it.
+# Default: false (only branch_types is shown when branch_types is set).
+# merge_branch_and_commit_types = false
 
 # Template for interactive commit message generation
 # Built-in variables: {commit_number}, {commit_type}, {branch_name}, {message}, {date}, {time}, {author}, {email}
@@ -120,9 +130,24 @@ template = "{?commit_number}[{commit_number}] {/commit_number}({commit_type} on 
 # Default (empty): extra fields first, then message.
 # field_order = ["message", "scope", "ticket"]
 
+# Template for branch name generation (rona branch).
+# Built-in variables: {commit_type}, {description}, {date}, {time}, {author}
+# Extra field names defined in [[branch_extra_fields]] are also valid.
+# The result is sanitized automatically (lowercased, spaces to "-", etc.).
+# branch_template = "{commit_type}/{description}"
+
+# Optional: control the order of prompts in rona branch.
+# Use "description" to position the built-in description prompt.
+# branch_field_order = ["ticket", "description"]
+
 # Extra prompts shown after commit type selection (see "Extra Fields" section below)
 # [[extra_fields]]
 # name = "scope"
+# ...
+
+# Extra prompts for branch name generation (see "Branch Extra Fields" section below)
+# [[branch_extra_fields]]
+# name = "ticket"
 # ...
 ```
 
@@ -207,6 +232,79 @@ template = "{?commit_number}Commit {commit_number}: {/commit_number}{commit_type
 ```
 
 **Note**: If no template is specified, Rona uses the default format: `{?commit_number}[{commit_number}] {/commit_number}({commit_type} on {branch_name}) {message}`
+
+### Branch Name Template
+
+`rona branch` uses a dedicated template to generate branch names. After template processing the result is automatically sanitized: lowercased, spaces and unsupported characters replaced with `-`, consecutive `-` and `/` collapsed, and leading/trailing `-` trimmed from each path segment.
+
+**Available Template Variables:**
+
+- `{commit_type}` - The selected commit type (feat, fix, etc.)
+- `{description}` - The branch description entered by the user
+- `{date}` - Current date (YYYY-MM-DD)
+- `{time}` - Current time (HH:MM:SS)
+- `{author}` - Git author name (from git config)
+- `{name}` - Any extra field defined under `[[branch_extra_fields]]` (e.g. `{ticket}`)
+
+Conditional blocks work exactly as they do for commit templates.
+
+**Configuration:**
+
+```toml
+# Default template (used when branch_template is absent)
+branch_template = "{commit_type}/{description}"
+
+# With optional ticket reference: feat/PROJ-123/add-login
+branch_template = "{commit_type}/{?ticket}{ticket}/{/ticket}{description}"
+
+# Date-prefixed for time-bounded branches: 2024-01-15/feat/add-login
+branch_template = "{date}/{commit_type}/{description}"
+
+# Per-developer namespace: johndoe/feat/add-login
+branch_template = "{author}/{commit_type}/{description}"
+```
+
+**Prompt order** is controlled by `branch_field_order`, using the reserved name `"description"` for the built-in description prompt:
+
+```toml
+# Show ticket prompt first, then description (default when branch_extra_fields exist)
+branch_field_order = ["ticket", "description"]
+
+# Description first, then any extra fields
+branch_field_order = ["description", "ticket"]
+```
+
+**Session example** (`rona branch` with the ticket template above):
+
+```
+$ Select commit type
+> feat
+
+$ Ticket reference (optional)
+> PROJ-42
+
+$ Branch description
+> add login endpoint
+```
+
+Generated branch name: `feat/proj-42/add-login-endpoint`
+
+**Type selector:**
+
+By default the branch type selector shows `commit_types`. Two config keys let you customize this independently:
+
+- `branch_types` - a dedicated list shown only in `rona branch`, replacing `commit_types` in that selector
+- `merge_branch_and_commit_types` - when `true` and `branch_types` is set, the selector shows `branch_types` followed by any `commit_types` not already present in it (default: `false`)
+
+```toml
+branch_types = ["feat", "fix", "hotfix", "release"]
+merge_branch_and_commit_types = true  # adds remaining commit_types after branch_types
+```
+
+**Options:**
+
+- `--no-switch` - Create the branch without switching to it
+- `--dry-run` - Preview the generated name without creating the branch
 
 ### Extra Fields
 
@@ -347,6 +445,47 @@ prefetch.extract_regex = "(.+)"
 ```
 
 For the full configuration reference including all options and edge cases, see the [Configuration wiki page](https://github.com/rona-rs/rona/wiki/Configuration).
+
+### Branch Extra Fields
+
+`[[branch_extra_fields]]` entries work exactly like `[[extra_fields]]` but are shown during `rona branch` instead of `rona -g -i`. They support the same keys (`name`, `prompt`, `kind`, `required`, `validation`, `prefetch.*`) and the values become template variables in `branch_template`.
+
+**Example: ticket reference prepended to the branch name**
+
+```toml
+branch_template = "{commit_type}/{?ticket}{ticket}/{/ticket}{description}"
+branch_field_order = ["ticket", "description"]
+
+[[branch_extra_fields]]
+name = "ticket"
+prompt = "Ticket reference (optional)"
+kind = "text"
+required = false
+validation = "^[A-Z]+-[0-9]+$"
+prefetch.source = "branch"
+prefetch.extract_regex = "[A-Z]+-[0-9]+"
+```
+
+Session on branch `feat/PROJ-42_some-work`:
+
+```
+$ Select commit type
+> feat
+
+$ Ticket reference (optional) (PROJ-42)
+> PROJ-42
+
+$ Branch description
+> add login endpoint
+```
+
+Generated: `feat/proj-42/add-login-endpoint`
+
+If the user skips the ticket (optional field), the conditional block removes it:
+
+Generated: `feat/add-login-endpoint`
+
+**TOML ordering note**: Place `branch_template` and `branch_field_order` **before** any `[[branch_extra_fields]]` entry.
 
 ### Working with Configuration
 
@@ -576,21 +715,67 @@ rona -c -p
 
 These flags apply to all commands and are placed before the subcommand:
 
-| Flag              | Short | Description                                                  |
-| ----------------- | ----- | ------------------------------------------------------------ |
-| `--config <PATH>` |       | Load a specific TOML config file, bypassing global and project config |
-| `--verbose`       | `-v`  | Enable debug-level log output                                |
+| Flag                    | Short | Description                                                  |
+| ----------------------- | ----- | ------------------------------------------------------------ |
+| `--config-file <PATH>`  | `-f`  | Load a specific TOML config file, bypassing global and project config |
+| `--verbose`             | `-v`  | Enable debug-level log output                                |
 
 ```bash
-rona --config .rona.toml -g -i
+rona -f .rona.toml -g -i
 rona --verbose -c -p
-rona --config ~/.config/rona-work.toml sync
+rona -f ~/.config/rona-work.toml sync
 ```
 
 ## Command Reference
 
 For the full command reference, see the [Command Reference wiki page](https://github.com/rona-rs/rona/wiki/Command-Reference).
 
+
+### `branch`
+
+Create a new branch interactively using a configurable branch name template.
+
+```bash
+rona branch [--no-switch] [--dry-run]
+```
+
+**What it does:**
+
+1. Shows the commit type selector (same list as `rona -g`)
+2. Shows prompts for any configured `branch_extra_fields` and the branch description, in the order defined by `branch_field_order`
+3. Processes the `branch_template` with the collected values
+4. Sanitizes the result into a valid git branch name
+5. Creates the branch and switches to it (or just creates it with `--no-switch`)
+
+**Options:**
+
+- `--no-switch` - Create the branch without switching to it (`git branch` instead of `git switch -c`)
+- `--dry-run` - Show what branch would be created without making any changes
+
+**Examples:**
+
+```bash
+# Interactive branch creation (creates and switches)
+rona branch
+
+# Create without switching
+rona branch --no-switch
+
+# Preview the generated branch name
+rona branch --dry-run
+```
+
+**Output example** (with default template `{commit_type}/{description}`):
+
+```
+$ Select commit type
+> feat
+
+$ Branch description
+> add user authentication
+
+Switched to new branch: feat/add-user-authentication
+```
 
 ### `add-with-exclude` (`-a`)
 
@@ -1103,6 +1288,7 @@ All git operations in Rona delegate to the `git` CLI binary via `std::process::C
 | Rebase                 | `git rebase <branch>`                     |
 | Switch branch          | `git switch <branch>`                     |
 | Create branch          | `git switch -c <branch>`                  |
+| Create branch (no switch) | `git branch <branch>`                  |
 
 ## Development
 

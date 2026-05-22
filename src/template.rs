@@ -80,28 +80,53 @@ impl TemplateVariables {
     }
 }
 
-/// Processes conditional blocks in a template string
-///
-/// Conditional blocks have the syntax: `{?variable_name}content{/variable_name}`
-/// The content is only included if the variable has a non-empty value
-///
-/// # Arguments
-/// * `template` - The template string containing conditional blocks
-/// * `variables` - The built-in template variables
-/// * `extra_variables` - Additional variables from configured extra fields
-///
-/// # Returns
-/// * `Result<String>` - The template with conditional blocks processed
-///
-/// # Errors
-/// * If the template contains mismatched or invalid conditional blocks
-fn process_conditional_blocks<S: BuildHasher>(
+/// Branch-specific template variables for branch name generation.
+#[derive(Debug, Clone)]
+pub struct BranchTemplateVariables {
+    pub branch_type: String,
+    pub description: String,
+    pub date: String,
+    pub time: String,
+    pub author: String,
+}
+
+impl BranchTemplateVariables {
+    /// Creates a new `BranchTemplateVariables` with current date/time and git author.
+    ///
+    /// # Errors
+    /// * If git author information cannot be retrieved
+    pub fn new(branch_type: String, description: String) -> Result<Self> {
+        let now = chrono::Local::now();
+        let date = now.format("%Y-%m-%d").to_string();
+        let time = now.format("%H:%M:%S").to_string();
+        let (author, _email) = get_git_author_info()?;
+        Ok(Self {
+            branch_type,
+            description,
+            date,
+            time,
+            author,
+        })
+    }
+
+    /// Converts the variables to a `HashMap` for template substitution.
+    #[must_use]
+    pub fn to_map(&self) -> HashMap<String, String> {
+        let mut map = HashMap::new();
+        map.insert("branch_type".to_string(), self.branch_type.clone());
+        map.insert("description".to_string(), self.description.clone());
+        map.insert("date".to_string(), self.date.clone());
+        map.insert("time".to_string(), self.time.clone());
+        map.insert("author".to_string(), self.author.clone());
+        map
+    }
+}
+
+/// Processes conditional blocks in a template string using a pre-merged variable map.
+fn process_conditional_blocks_from_map(
     template: &str,
-    variables: &TemplateVariables,
-    extra_variables: &HashMap<String, String, S>,
+    variable_map: &HashMap<String, String>,
 ) -> Result<String> {
-    let mut variable_map = variables.to_map();
-    variable_map.extend(extra_variables.iter().map(|(k, v)| (k.clone(), v.clone())));
     let mut result = template.to_string();
 
     // Regex to find opening conditional tags: {?variable_name}
@@ -150,31 +175,13 @@ fn process_conditional_blocks<S: BuildHasher>(
     Ok(result)
 }
 
-/// Processes a template string by substituting variables with their values
-///
-/// # Arguments
-/// * `template` - The template string containing variables in {`variable_name`} format
-/// * `variables` - The built-in template variables
-/// * `extra_variables` - Additional variables from configured extra fields
-///
-/// # Returns
-/// * `Result<String>` - The processed template with variables substituted
-///
-/// # Errors
-/// * If the template contains invalid variable syntax
-/// * If required variables are missing
-pub fn process_template<S: BuildHasher>(
+/// Core template substitution from a pre-merged variable map.
+fn process_template_from_map(
     template: &str,
-    variables: &TemplateVariables,
-    extra_variables: &HashMap<String, String, S>,
+    variable_map: &HashMap<String, String>,
 ) -> Result<String> {
-    // First, process conditional blocks
-    let after_conditionals = process_conditional_blocks(template, variables, extra_variables)?;
+    let after_conditionals = process_conditional_blocks_from_map(template, variable_map)?;
 
-    let mut variable_map = variables.to_map();
-    variable_map.extend(extra_variables.iter().map(|(k, v)| (k.clone(), v.clone())));
-
-    // Find all variables in the template
     let regex = Regex::new(r"\{([^}]+)\}").map_err(|e| {
         RonaError::Io(std::io::Error::other(format!(
             "Invalid template regex: {e}"
@@ -183,7 +190,6 @@ pub fn process_template<S: BuildHasher>(
 
     let mut result = after_conditionals.clone();
 
-    // Replace each variable with its value
     for capture in regex.captures_iter(&after_conditionals) {
         if let Some(variable_name) = capture.get(1) {
             let var_name = variable_name.as_str();
@@ -196,32 +202,41 @@ pub fn process_template<S: BuildHasher>(
     Ok(result)
 }
 
-/// Validates a template string to ensure it contains only valid variables
-/// and properly matched conditional blocks
-///
-/// # Arguments
-/// * `template` - The template string to validate
-/// * `extra_variable_names` - Additional variable names from configured extra fields
-///
-/// # Returns
-/// * `Result<()>` - Ok if valid, Err if invalid variables found or mismatched blocks
+/// Processes a template string by substituting variables with their values.
 ///
 /// # Errors
-/// * If the template contains unknown variables
-/// * If conditional blocks are mismatched or malformed
-pub fn validate_template(template: &str, extra_variable_names: &[&str]) -> Result<()> {
-    let mut valid_variables: Vec<&str> = vec![
-        "commit_number",
-        "commit_type",
-        "branch_name",
-        "message",
-        "date",
-        "time",
-        "author",
-        "email",
-    ];
-    valid_variables.extend_from_slice(extra_variable_names);
+/// * If the template contains invalid variable syntax or mismatched conditional blocks
+pub fn process_template<S: BuildHasher>(
+    template: &str,
+    variables: &TemplateVariables,
+    extra_variables: &HashMap<String, String, S>,
+) -> Result<String> {
+    let mut variable_map = variables.to_map();
+    variable_map.extend(extra_variables.iter().map(|(k, v)| (k.clone(), v.clone())));
+    process_template_from_map(template, &variable_map)
+}
 
+/// Processes a branch name template using `BranchTemplateVariables` and optional extra fields.
+///
+/// Available built-in variables: `branch_type`, `description`, `date`, `time`, `author`.
+///
+/// # Errors
+/// * If the template contains invalid variable syntax or mismatched conditional blocks
+pub fn process_branch_template<S: BuildHasher>(
+    template: &str,
+    variables: &BranchTemplateVariables,
+    extra_variables: &HashMap<String, String, S>,
+) -> Result<String> {
+    let mut variable_map = variables.to_map();
+    variable_map.extend(extra_variables.iter().map(|(k, v)| (k.clone(), v.clone())));
+    process_template_from_map(template, &variable_map)
+}
+
+/// Validates a template string against a provided set of valid variable names.
+///
+/// # Errors
+/// * If the template contains unknown variables or mismatched conditional blocks
+fn validate_template_with_vars(template: &str, valid_variables: &[&str]) -> Result<()> {
     // First, validate conditional blocks are properly matched
     let conditional_regex = Regex::new(r"\{\?(\w+)\}").map_err(|e| {
         RonaError::Io(std::io::Error::other(format!(
@@ -306,6 +321,41 @@ pub fn validate_template(template: &str, extra_variable_names: &[&str]) -> Resul
     }
 
     Ok(())
+}
+
+/// Validates a commit message template string.
+///
+/// Valid built-in variables: `commit_number`, `commit_type`, `branch_name`, `message`,
+/// `date`, `time`, `author`, `email`. Extra field names are also accepted.
+///
+/// # Errors
+/// * If the template contains unknown variables or mismatched conditional blocks
+pub fn validate_template(template: &str, extra_variable_names: &[&str]) -> Result<()> {
+    let mut valid: Vec<&str> = vec![
+        "commit_number",
+        "commit_type",
+        "branch_name",
+        "message",
+        "date",
+        "time",
+        "author",
+        "email",
+    ];
+    valid.extend_from_slice(extra_variable_names);
+    validate_template_with_vars(template, &valid)
+}
+
+/// Validates a branch name template string.
+///
+/// Valid built-in variables: `branch_type`, `description`, `date`, `time`, `author`.
+/// Extra field names are also accepted.
+///
+/// # Errors
+/// * If the template contains unknown variables or mismatched conditional blocks
+pub fn validate_branch_template(template: &str, extra_variable_names: &[&str]) -> Result<()> {
+    let mut valid: Vec<&str> = vec!["branch_type", "description", "date", "time", "author"];
+    valid.extend_from_slice(extra_variable_names);
+    validate_template_with_vars(template, &valid)
 }
 
 /// Gets the current git author name and email from git config.

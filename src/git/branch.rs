@@ -101,6 +101,31 @@ pub fn get_current_branch() -> Result<String> {
     try_get_default_branch()
 }
 
+/// Returns all local branch names.
+///
+/// The current-branch marker (`* `) is stripped so every entry is a plain name.
+/// Returns an empty `Vec` on failure rather than propagating errors, matching the
+/// soft-failure convention used elsewhere for non-critical git reads.
+///
+/// # Errors
+/// Returns an error only if the git process cannot be spawned.
+pub fn get_all_branches() -> Result<Vec<String>> {
+    let output = Command::new("git")
+        .args(["branch", "--list"])
+        .output()
+        .map_err(RonaError::Io)?;
+
+    if !output.status.success() {
+        return Ok(vec![]);
+    }
+
+    Ok(String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .map(|line| line.trim_start_matches(['*', ' ']).to_string())
+        .filter(|name| !name.is_empty())
+        .collect())
+}
+
 /// Formats a branch name by removing commit type prefixes.
 ///
 /// This function cleans up branch names that follow conventional naming patterns
@@ -170,6 +195,74 @@ pub fn format_branch_name(commit_types: &[&str], branch: &str) -> String {
     }
 
     formatted_branch
+}
+
+/// Sanitizes a string into a valid git branch name segment.
+///
+/// Applies these transformations:
+/// - Lowercases all characters
+/// - Replaces spaces and unsupported characters with `-`
+/// - Collapses consecutive `-` into a single `-`
+/// - Collapses consecutive `/` into a single `/`
+/// - Removes leading/trailing `-` from each `/`-separated segment
+/// - Removes a trailing `/`
+#[must_use]
+pub fn sanitize_branch_name(name: &str) -> String {
+    let lowered: String = name
+        .to_lowercase()
+        .chars()
+        .map(|c| {
+            if matches!(c, 'a'..='z' | '0'..='9' | '/' | '_') {
+                c
+            } else {
+                '-'
+            }
+        })
+        .collect();
+
+    // Collapse consecutive dashes and slashes
+    let mut result = String::with_capacity(lowered.len());
+    let mut prev = '\0';
+    for c in lowered.chars() {
+        if c == '-' && prev == '-' {
+            continue;
+        }
+        if c == '/' && prev == '/' {
+            continue;
+        }
+        result.push(c);
+        prev = c;
+    }
+
+    // Clean each segment (between `/`) of leading/trailing `-`
+    let result: String = result
+        .split('/')
+        .map(|seg| seg.trim_matches('-'))
+        .filter(|seg| !seg.is_empty())
+        .collect::<Vec<_>>()
+        .join("/");
+
+    result
+}
+
+/// Creates a branch without switching to it using `git branch`.
+///
+/// # Arguments
+/// * `branch_name` - The name of the branch to create
+///
+/// # Errors
+/// * If a branch with that name already exists
+/// * If the operation fails
+#[tracing::instrument]
+pub fn git_branch_only(branch_name: &str) -> Result<()> {
+    tracing::debug!("Creating branch without switching: {branch_name}");
+
+    let output = Command::new("git")
+        .args(["branch", branch_name])
+        .output()
+        .map_err(RonaError::Io)?;
+
+    handle_output("branch", &output)
 }
 
 /// Switches to a different branch using `git switch`.

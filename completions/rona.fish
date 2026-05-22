@@ -1,6 +1,6 @@
 # Print an optspec for argparse to handle cmd's options that are independent of any subcommand.
 function __fish_rona_global_optspecs
-	string join \n v/verbose config= h/help V/version
+	string join \n v/verbose f/config-file= h/help V/version
 end
 
 function __fish_rona_needs_command
@@ -24,10 +24,11 @@ function __fish_rona_using_subcommand
 	contains -- $cmd[1] $argv
 end
 
-complete -c rona -n "__fish_rona_needs_command" -l config -d 'Use the custom config file path instead of default' -r
+complete -c rona -n "__fish_rona_needs_command" -s f -l config-file -d 'Config file to use instead of the default global/project hierarchy' -r -F
 complete -c rona -n "__fish_rona_needs_command" -s v -l verbose -d 'Verbose output - show detailed information about operations'
 complete -c rona -n "__fish_rona_needs_command" -s h -l help -d 'Print help'
 complete -c rona -n "__fish_rona_needs_command" -s V -l version -d 'Print version'
+complete -c rona -n "__fish_rona_needs_command" -f -a "branch" -d 'Create a new branch interactively using a branch name template'
 complete -c rona -n "__fish_rona_needs_command" -f -a "add-with-exclude" -d 'Add all files to the `git add` command and exclude the patterns passed as positional arguments'
 complete -c rona -n "__fish_rona_needs_command" -f -a "commit" -d 'Directly commit the file with the text in `commit_message.md`'
 complete -c rona -n "__fish_rona_needs_command" -f -a "completion" -d 'Generate shell completions for your shell'
@@ -39,57 +40,75 @@ complete -c rona -n "__fish_rona_needs_command" -f -a "push" -d 'Push to a git r
 complete -c rona -n "__fish_rona_needs_command" -f -a "set-editor" -d 'Set the editor to use for editing the commit message'
 complete -c rona -n "__fish_rona_needs_command" -f -a "sync" -d 'Sync current branch with main (or another branch) by pulling and merging/rebasing'
 complete -c rona -n "__fish_rona_needs_command" -f -a "help" -d 'Print this message or the help of the given subcommand(s)'
+complete -c rona -n "__fish_rona_using_subcommand branch" -s f -l config-file -d 'Config file to use instead of the default global/project hierarchy' -r -F
+complete -c rona -n "__fish_rona_using_subcommand branch" -l dry-run -d 'Show what would be created without actually creating the branch'
+complete -c rona -n "__fish_rona_using_subcommand branch" -l no-switch -d 'Create the branch without switching to it'
+complete -c rona -n "__fish_rona_using_subcommand branch" -s h -l help -d 'Print help'
+complete -c rona -n "__fish_rona_using_subcommand add-with-exclude" -s f -l config-file -d 'Config file to use instead of the default global/project hierarchy' -r -F
 complete -c rona -n "__fish_rona_using_subcommand add-with-exclude" -l dry-run -d 'Show what would be added without actually adding files'
 complete -c rona -n "__fish_rona_using_subcommand add-with-exclude" -s h -l help -d 'Print help'
+complete -c rona -n "__fish_rona_using_subcommand commit" -s f -l config-file -d 'Config file to use instead of the default global/project hierarchy' -r -F
 complete -c rona -n "__fish_rona_using_subcommand commit" -s p -l push -d 'Whether to push the commit after committing'
 complete -c rona -n "__fish_rona_using_subcommand commit" -s d -l dry-run -d 'Show what would be committed without actually committing'
 complete -c rona -n "__fish_rona_using_subcommand commit" -s u -l unsigned -d 'Create unsigned commit (default is to auto-detect GPG availability and sign if possible)'
 complete -c rona -n "__fish_rona_using_subcommand commit" -s y -l yes -d 'Skip confirmation prompt and commit directly'
 complete -c rona -n "__fish_rona_using_subcommand commit" -l copy -d 'Copy commit message to clipboard instead of committing'
 complete -c rona -n "__fish_rona_using_subcommand commit" -s h -l help -d 'Print help'
+complete -c rona -n "__fish_rona_using_subcommand completion" -s f -l config-file -d 'Config file to use instead of the default global/project hierarchy' -r -F
 complete -c rona -n "__fish_rona_using_subcommand completion" -s h -l help -d 'Print help'
+complete -c rona -n "__fish_rona_using_subcommand config; and not __fish_seen_subcommand_from create which find help" -s f -l config-file -d 'Config file to use instead of the default global/project hierarchy' -r -F
 complete -c rona -n "__fish_rona_using_subcommand config; and not __fish_seen_subcommand_from create which find help" -s h -l help -d 'Print help'
 complete -c rona -n "__fish_rona_using_subcommand config; and not __fish_seen_subcommand_from create which find help" -f -a "create" -d 'Create or manage a local or global configuration file'
 complete -c rona -n "__fish_rona_using_subcommand config; and not __fish_seen_subcommand_from create which find help" -f -a "which" -d 'Show which configuration files would be used from a directory'
 complete -c rona -n "__fish_rona_using_subcommand config; and not __fish_seen_subcommand_from create which find help" -f -a "find" -d 'Show which configuration files would be used from a directory'
 complete -c rona -n "__fish_rona_using_subcommand config; and not __fish_seen_subcommand_from create which find help" -f -a "help" -d 'Print this message or the help of the given subcommand(s)'
+complete -c rona -n "__fish_rona_using_subcommand config; and __fish_seen_subcommand_from create" -s f -l config-file -d 'Config file to use instead of the default global/project hierarchy' -r -F
 complete -c rona -n "__fish_rona_using_subcommand config; and __fish_seen_subcommand_from create" -s e -l exclude -d 'Add .rona.toml to .git/info/exclude (only applies to local scope)'
 complete -c rona -n "__fish_rona_using_subcommand config; and __fish_seen_subcommand_from create" -l dry-run -d 'Show what would be created without actually creating the config file'
 complete -c rona -n "__fish_rona_using_subcommand config; and __fish_seen_subcommand_from create" -s h -l help -d 'Print help (see more with \'--help\')'
+complete -c rona -n "__fish_rona_using_subcommand config; and __fish_seen_subcommand_from which" -s f -l config-file -d 'Config file to use instead of the default global/project hierarchy' -r -F
 complete -c rona -n "__fish_rona_using_subcommand config; and __fish_seen_subcommand_from which" -s e -l effective -d 'Show the effective (merged) configuration values'
 complete -c rona -n "__fish_rona_using_subcommand config; and __fish_seen_subcommand_from which" -s h -l help -d 'Print help'
+complete -c rona -n "__fish_rona_using_subcommand config; and __fish_seen_subcommand_from find" -s f -l config-file -d 'Config file to use instead of the default global/project hierarchy' -r -F
 complete -c rona -n "__fish_rona_using_subcommand config; and __fish_seen_subcommand_from find" -s e -l effective -d 'Show the effective (merged) configuration values'
 complete -c rona -n "__fish_rona_using_subcommand config; and __fish_seen_subcommand_from find" -s h -l help -d 'Print help'
 complete -c rona -n "__fish_rona_using_subcommand config; and __fish_seen_subcommand_from help" -f -a "create" -d 'Create or manage a local or global configuration file'
 complete -c rona -n "__fish_rona_using_subcommand config; and __fish_seen_subcommand_from help" -f -a "which" -d 'Show which configuration files would be used from a directory'
 complete -c rona -n "__fish_rona_using_subcommand config; and __fish_seen_subcommand_from help" -f -a "help" -d 'Print this message or the help of the given subcommand(s)'
+complete -c rona -n "__fish_rona_using_subcommand generate" -s f -l config-file -d 'Config file to use instead of the default global/project hierarchy' -r -F
 complete -c rona -n "__fish_rona_using_subcommand generate" -l dry-run -d 'Show what would be generated without creating files'
 complete -c rona -n "__fish_rona_using_subcommand generate" -s i -l interactive -d 'Interactive mode - input the commit message directly in the terminal'
 complete -c rona -n "__fish_rona_using_subcommand generate" -s n -l no-commit-number -d 'No commit number'
 complete -c rona -n "__fish_rona_using_subcommand generate" -s h -l help -d 'Print help'
+complete -c rona -n "__fish_rona_using_subcommand init" -s f -l config-file -d 'Config file to use instead of the default global/project hierarchy' -r -F
 complete -c rona -n "__fish_rona_using_subcommand init" -l dry-run -d 'Show what would be initialized without creating files'
 complete -c rona -n "__fish_rona_using_subcommand init" -s h -l help -d 'Print help'
+complete -c rona -n "__fish_rona_using_subcommand list-status" -s f -l config-file -d 'Config file to use instead of the default global/project hierarchy' -r -F
 complete -c rona -n "__fish_rona_using_subcommand list-status" -s h -l help -d 'Print help'
+complete -c rona -n "__fish_rona_using_subcommand push" -s f -l config-file -d 'Config file to use instead of the default global/project hierarchy' -r -F
 complete -c rona -n "__fish_rona_using_subcommand push" -l dry-run -d 'Show what would be pushed without actually pushing'
 complete -c rona -n "__fish_rona_using_subcommand push" -s h -l help -d 'Print help'
+complete -c rona -n "__fish_rona_using_subcommand set-editor" -s f -l config-file -d 'Config file to use instead of the default global/project hierarchy' -r -F
 complete -c rona -n "__fish_rona_using_subcommand set-editor" -l dry-run -d 'Show what would be changed without modifying config'
 complete -c rona -n "__fish_rona_using_subcommand set-editor" -s h -l help -d 'Print help'
 complete -c rona -n "__fish_rona_using_subcommand sync" -s b -l branch -d 'Branch to sync from (default: main)' -r
 complete -c rona -n "__fish_rona_using_subcommand sync" -s n -l new-branch -d 'Create a new branch before syncing' -r
+complete -c rona -n "__fish_rona_using_subcommand sync" -s f -l config-file -d 'Config file to use instead of the default global/project hierarchy' -r -F
 complete -c rona -n "__fish_rona_using_subcommand sync" -s r -l rebase -d 'Use rebase instead of merge'
 complete -c rona -n "__fish_rona_using_subcommand sync" -l dry-run -d 'Show what would be done without actually doing it'
 complete -c rona -n "__fish_rona_using_subcommand sync" -s h -l help -d 'Print help'
-complete -c rona -n "__fish_rona_using_subcommand help; and not __fish_seen_subcommand_from add-with-exclude commit completion config generate init list-status push set-editor sync help" -f -a "add-with-exclude" -d 'Add all files to the `git add` command and exclude the patterns passed as positional arguments'
-complete -c rona -n "__fish_rona_using_subcommand help; and not __fish_seen_subcommand_from add-with-exclude commit completion config generate init list-status push set-editor sync help" -f -a "commit" -d 'Directly commit the file with the text in `commit_message.md`'
-complete -c rona -n "__fish_rona_using_subcommand help; and not __fish_seen_subcommand_from add-with-exclude commit completion config generate init list-status push set-editor sync help" -f -a "completion" -d 'Generate shell completions for your shell'
-complete -c rona -n "__fish_rona_using_subcommand help; and not __fish_seen_subcommand_from add-with-exclude commit completion config generate init list-status push set-editor sync help" -f -a "config" -d 'Manage configuration files (create or inspect)'
-complete -c rona -n "__fish_rona_using_subcommand help; and not __fish_seen_subcommand_from add-with-exclude commit completion config generate init list-status push set-editor sync help" -f -a "generate" -d 'Directly generate the `commit_message.md` file'
-complete -c rona -n "__fish_rona_using_subcommand help; and not __fish_seen_subcommand_from add-with-exclude commit completion config generate init list-status push set-editor sync help" -f -a "init" -d 'Initialize the rona configuration file'
-complete -c rona -n "__fish_rona_using_subcommand help; and not __fish_seen_subcommand_from add-with-exclude commit completion config generate init list-status push set-editor sync help" -f -a "list-status" -d 'List files from git status (for shell completion on the -a)'
-complete -c rona -n "__fish_rona_using_subcommand help; and not __fish_seen_subcommand_from add-with-exclude commit completion config generate init list-status push set-editor sync help" -f -a "push" -d 'Push to a git repository'
-complete -c rona -n "__fish_rona_using_subcommand help; and not __fish_seen_subcommand_from add-with-exclude commit completion config generate init list-status push set-editor sync help" -f -a "set-editor" -d 'Set the editor to use for editing the commit message'
-complete -c rona -n "__fish_rona_using_subcommand help; and not __fish_seen_subcommand_from add-with-exclude commit completion config generate init list-status push set-editor sync help" -f -a "sync" -d 'Sync current branch with main (or another branch) by pulling and merging/rebasing'
-complete -c rona -n "__fish_rona_using_subcommand help; and not __fish_seen_subcommand_from add-with-exclude commit completion config generate init list-status push set-editor sync help" -f -a "help" -d 'Print this message or the help of the given subcommand(s)'
+complete -c rona -n "__fish_rona_using_subcommand help; and not __fish_seen_subcommand_from branch add-with-exclude commit completion config generate init list-status push set-editor sync help" -f -a "branch" -d 'Create a new branch interactively using a branch name template'
+complete -c rona -n "__fish_rona_using_subcommand help; and not __fish_seen_subcommand_from branch add-with-exclude commit completion config generate init list-status push set-editor sync help" -f -a "add-with-exclude" -d 'Add all files to the `git add` command and exclude the patterns passed as positional arguments'
+complete -c rona -n "__fish_rona_using_subcommand help; and not __fish_seen_subcommand_from branch add-with-exclude commit completion config generate init list-status push set-editor sync help" -f -a "commit" -d 'Directly commit the file with the text in `commit_message.md`'
+complete -c rona -n "__fish_rona_using_subcommand help; and not __fish_seen_subcommand_from branch add-with-exclude commit completion config generate init list-status push set-editor sync help" -f -a "completion" -d 'Generate shell completions for your shell'
+complete -c rona -n "__fish_rona_using_subcommand help; and not __fish_seen_subcommand_from branch add-with-exclude commit completion config generate init list-status push set-editor sync help" -f -a "config" -d 'Manage configuration files (create or inspect)'
+complete -c rona -n "__fish_rona_using_subcommand help; and not __fish_seen_subcommand_from branch add-with-exclude commit completion config generate init list-status push set-editor sync help" -f -a "generate" -d 'Directly generate the `commit_message.md` file'
+complete -c rona -n "__fish_rona_using_subcommand help; and not __fish_seen_subcommand_from branch add-with-exclude commit completion config generate init list-status push set-editor sync help" -f -a "init" -d 'Initialize the rona configuration file'
+complete -c rona -n "__fish_rona_using_subcommand help; and not __fish_seen_subcommand_from branch add-with-exclude commit completion config generate init list-status push set-editor sync help" -f -a "list-status" -d 'List files from git status (for shell completion on the -a)'
+complete -c rona -n "__fish_rona_using_subcommand help; and not __fish_seen_subcommand_from branch add-with-exclude commit completion config generate init list-status push set-editor sync help" -f -a "push" -d 'Push to a git repository'
+complete -c rona -n "__fish_rona_using_subcommand help; and not __fish_seen_subcommand_from branch add-with-exclude commit completion config generate init list-status push set-editor sync help" -f -a "set-editor" -d 'Set the editor to use for editing the commit message'
+complete -c rona -n "__fish_rona_using_subcommand help; and not __fish_seen_subcommand_from branch add-with-exclude commit completion config generate init list-status push set-editor sync help" -f -a "sync" -d 'Sync current branch with main (or another branch) by pulling and merging/rebasing'
+complete -c rona -n "__fish_rona_using_subcommand help; and not __fish_seen_subcommand_from branch add-with-exclude commit completion config generate init list-status push set-editor sync help" -f -a "help" -d 'Print this message or the help of the given subcommand(s)'
 complete -c rona -n "__fish_rona_using_subcommand help; and __fish_seen_subcommand_from config" -f -a "create" -d 'Create or manage a local or global configuration file'
 complete -c rona -n "__fish_rona_using_subcommand help; and __fish_seen_subcommand_from config" -f -a "which" -d 'Show which configuration files would be used from a directory'
 

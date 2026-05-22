@@ -21,7 +21,6 @@
 //! - Invalid configuration format
 //! - Home directory not found
 
-use config;
 use inquire::Select;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -75,13 +74,13 @@ pub struct ProjectConfig {
 
     /// Template for interactive commit message generation
     /// Available variables: {`commit_number`}, {`commit_type`}, {`branch_name`}, {`message`}, {`date`}, {`time`}, {`author`}, {`email`}
-    /// Extra field names defined in `extra_fields` are also available.
-    pub template: Option<String>,
+    /// Extra field names defined in `commit_extra_fields` are also available.
+    pub commit_template: Option<String>,
 
     /// Extra fields to prompt after commit type and before the message.
     /// Each field becomes a template variable with the field's `name`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub extra_fields: Vec<crate::extra_fields::ExtraField>,
+    pub commit_extra_fields: Vec<crate::extra_fields::ExtraField>,
 
     /// Controls the order of prompts in interactive mode.
     /// Use the reserved name `"message"` to position the built-in message prompt.
@@ -89,6 +88,38 @@ pub struct ProjectConfig {
     /// When empty (the default), extra fields are shown first, then `message`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub field_order: Vec<String>,
+
+    /// Template for branch name generation.
+    /// Available variables: `{commit_type}`, `{description}`, `{date}`, `{time}`, `{author}`.
+    /// Extra field names defined in `branch_extra_fields` are also available.
+    pub branch_template: Option<String>,
+
+    /// Extra fields to prompt when generating a branch name.
+    /// Each field becomes a template variable with the field's `name`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub branch_extra_fields: Vec<crate::extra_fields::ExtraField>,
+
+    /// Controls the order of prompts for branch name generation.
+    /// Use the reserved name `"description"` to position the built-in description prompt.
+    /// Extra fields not listed are appended after all listed items.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub branch_field_order: Vec<String>,
+
+    /// Dedicated commit types shown in the `rona branch` type selector.
+    /// When absent, `commit_types` is used instead.
+    pub branch_types: Option<Vec<String>>,
+
+    /// When `true` and `branch_types` is set, the selector for `rona branch` shows
+    /// `branch_types` followed by any `commit_types` not already present in it.
+    /// When `false` (default), only `branch_types` is shown.
+    #[serde(default)]
+    pub merge_branch_and_commit_types: bool,
+
+    /// Optional prefetch configuration for the built-in message prompt.
+    /// Extracts a value from a source and optionally renders it through a template
+    /// using `{extract}` as a placeholder. The result is offered as the default;
+    /// pressing Enter without typing accepts it.
+    pub message_prefetch: Option<crate::extra_fields::MessagePrefetchConfig>,
 }
 
 impl Default for ProjectConfig {
@@ -101,13 +132,146 @@ impl Default for ProjectConfig {
                     .map(std::string::ToString::to_string)
                     .collect(),
             ),
-            template: Some(
+            commit_template: Some(
                 "{?commit_number}[{commit_number}] {/commit_number}({commit_type} on {branch_name}) {message}".to_string(),
             ),
-            extra_fields: vec![],
+            commit_extra_fields: vec![],
             field_order: vec![],
+            branch_template: Some("{branch_type}/{description}".to_string()),
+            branch_extra_fields: vec![],
+            branch_field_order: vec![],
+            branch_types: None,
+            merge_branch_and_commit_types: false,
+            message_prefetch: None,
         }
     }
+}
+
+/// Intermediate deserialization target that accepts both current and legacy field names.
+/// All array and bool fields are `Option` so absent keys are distinguishable from explicit
+/// empty values, enabling name-keyed merging across config files.
+#[derive(serde::Deserialize, Default)]
+struct RawProjectConfig {
+    editor: Option<String>,
+    commit_types: Option<Vec<String>>,
+    commit_template: Option<String>,
+    template: Option<String>,
+    commit_extra_fields: Option<Vec<crate::extra_fields::ExtraField>>,
+    extra_fields: Option<Vec<crate::extra_fields::ExtraField>>,
+    field_order: Option<Vec<String>>,
+    branch_template: Option<String>,
+    branch_extra_fields: Option<Vec<crate::extra_fields::ExtraField>>,
+    branch_field_order: Option<Vec<String>>,
+    branch_types: Option<Vec<String>>,
+    merge_branch_and_commit_types: Option<bool>,
+    message_prefetch: Option<crate::extra_fields::MessagePrefetchConfig>,
+}
+
+impl From<RawProjectConfig> for ProjectConfig {
+    fn from(raw: RawProjectConfig) -> Self {
+        Self {
+            editor: raw.editor,
+            commit_types: raw.commit_types,
+            commit_template: raw.commit_template,
+            commit_extra_fields: raw.commit_extra_fields.unwrap_or_default(),
+            field_order: raw.field_order.unwrap_or_default(),
+            branch_template: raw.branch_template,
+            branch_extra_fields: raw.branch_extra_fields.unwrap_or_default(),
+            branch_field_order: raw.branch_field_order.unwrap_or_default(),
+            branch_types: raw.branch_types,
+            merge_branch_and_commit_types: raw.merge_branch_and_commit_types.unwrap_or(false),
+            message_prefetch: raw.message_prefetch,
+        }
+    }
+}
+
+/// Resolves backward-compat aliases within a single raw config.
+/// `template` → `commit_template` and `extra_fields` → `commit_extra_fields`.
+fn normalize_raw(mut raw: RawProjectConfig) -> RawProjectConfig {
+    if raw.commit_template.is_none() {
+        raw.commit_template = raw.template.take();
+    }
+    raw.template = None;
+    if raw.commit_extra_fields.is_none() {
+        raw.commit_extra_fields = raw.extra_fields.take();
+    }
+    raw.extra_fields = None;
+    raw
+}
+
+/// Merges two `Option<Vec<ExtraField>>` by field name.
+/// Child entries override same-named base entries; new child entries are appended.
+fn merge_named_fields(
+    base: Option<Vec<crate::extra_fields::ExtraField>>,
+    child: Option<Vec<crate::extra_fields::ExtraField>>,
+) -> Option<Vec<crate::extra_fields::ExtraField>> {
+    match (base, child) {
+        (None, c) => c,
+        (b, None) => b,
+        (Some(mut base_fields), Some(child_fields)) => {
+            for child_field in child_fields {
+                if let Some(existing) = base_fields.iter_mut().find(|f| f.name == child_field.name)
+                {
+                    *existing = child_field;
+                } else {
+                    base_fields.push(child_field);
+                }
+            }
+            Some(base_fields)
+        }
+    }
+}
+
+/// Merges two raw configs: scalars use last-wins (child overrides base),
+/// array fields (`commit_extra_fields`, `branch_extra_fields`) are merged by name.
+fn merge_raw(base: RawProjectConfig, child: RawProjectConfig) -> RawProjectConfig {
+    RawProjectConfig {
+        editor: child.editor.or(base.editor),
+        commit_types: child.commit_types.or(base.commit_types),
+        commit_template: child.commit_template.or(base.commit_template),
+        template: None,
+        commit_extra_fields: merge_named_fields(
+            base.commit_extra_fields,
+            child.commit_extra_fields,
+        ),
+        extra_fields: None,
+        field_order: child.field_order.or(base.field_order),
+        branch_template: child.branch_template.or(base.branch_template),
+        branch_extra_fields: merge_named_fields(
+            base.branch_extra_fields,
+            child.branch_extra_fields,
+        ),
+        branch_field_order: child.branch_field_order.or(base.branch_field_order),
+        branch_types: child.branch_types.or(base.branch_types),
+        merge_branch_and_commit_types: child
+            .merge_branch_and_commit_types
+            .or(base.merge_branch_and_commit_types),
+        message_prefetch: child.message_prefetch.or(base.message_prefetch),
+    }
+}
+
+/// Parses a single TOML config file into a `RawProjectConfig`.
+fn load_single_raw_file(path: &Path) -> Result<RawProjectConfig> {
+    let content = std::fs::read_to_string(path)?;
+    toml::from_str(&content).map_err(|e| {
+        RonaError::Config(ConfigError::ParseError {
+            file: path.display().to_string(),
+            reason: e.to_string(),
+        })
+    })
+}
+
+/// Loads an ordered list of config files (base-first) and folds them with `merge_raw`.
+/// Files that do not exist are silently skipped.
+fn load_and_merge_files(paths: &[PathBuf]) -> Result<RawProjectConfig> {
+    let mut result = RawProjectConfig::default();
+    for path in paths {
+        if path.exists() {
+            let raw = normalize_raw(load_single_raw_file(path)?);
+            result = merge_raw(result, raw);
+        }
+    }
+    Ok(result)
 }
 
 impl ProjectConfig {
@@ -125,43 +289,29 @@ impl ProjectConfig {
             return Ok(Self::default());
         }
 
-        let settings = {
-            let mut builder = config::Config::builder();
+        let home = dirs::home_dir().ok_or(ConfigError::ConfigNotFound)?;
+        let old_global = home.join(".config/rona/config.toml");
+        let new_global = home.join(".config/rona.toml");
 
-            // Support both old and new global config paths
-            let home = dirs::home_dir().ok_or(ConfigError::ConfigNotFound)?;
-            let old_global = home.join(".config/rona/config.toml");
-            let new_global = home.join(".config/rona.toml");
-
-            if old_global.exists() {
-                builder = builder.add_source(config::File::from(old_global).required(false));
-            }
-
-            if new_global.exists() {
-                builder = builder.add_source(config::File::from(new_global).required(false));
-            }
-
-            // Add project config (and any extends chain) if it exists
-            let project_config_path = env::current_dir()?.join(".rona.toml");
-            if project_config_path.exists() {
-                let mut visited = HashSet::new();
-                for extended in collect_extends_chain(&project_config_path, &mut visited)? {
-                    builder = builder.add_source(config::File::from(extended).required(false));
-                }
-                builder =
-                    builder.add_source(config::File::from(project_config_path).required(false));
-            }
-
-            builder.build().map_err(|_| ConfigError::ConfigNotFound)?
-        };
-
-        match settings.try_deserialize() {
-            Ok(config) => Ok(config),
-            Err(e) => {
-                eprintln!("Failed to deserialize config: {e}");
-                Err(ConfigError::InvalidConfig.into())
-            }
+        let mut paths: Vec<PathBuf> = Vec::new();
+        if old_global.exists() {
+            paths.push(old_global);
         }
+        if new_global.exists() {
+            paths.push(new_global);
+        }
+
+        let project_config_path = env::current_dir()?.join(".rona.toml");
+        if project_config_path.exists() {
+            let mut visited = HashSet::new();
+            paths.extend(collect_extends_chain(&project_config_path, &mut visited)?);
+            paths.push(project_config_path);
+        }
+
+        load_and_merge_files(&paths).map(Into::into).map_err(|e| {
+            eprintln!("Failed to deserialize config: {e}");
+            e
+        })
     }
 
     /// Loads the project configuration from a specific file path, bypassing the default
@@ -178,23 +328,13 @@ impl ProjectConfig {
             return Err(ConfigError::ConfigNotFound.into());
         }
 
-        let mut builder = config::Config::builder();
+        let abs_path = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
 
         let mut visited = HashSet::new();
-        for extended in collect_extends_chain(path, &mut visited)? {
-            builder = builder.add_source(config::File::from(extended).required(false));
-        }
-        builder = builder.add_source(config::File::from(path).required(true));
+        let mut paths: Vec<PathBuf> = collect_extends_chain(&abs_path, &mut visited)?;
+        paths.push(abs_path);
 
-        let settings = builder.build().map_err(|_| ConfigError::ConfigNotFound)?;
-
-        match settings.try_deserialize() {
-            Ok(config) => Ok(config),
-            Err(e) => {
-                eprintln!("Failed to deserialize config: {e}");
-                Err(ConfigError::InvalidConfig.into())
-            }
-        }
+        load_and_merge_files(&paths).map(Into::into)
     }
 
     /// Loads the project configuration from a specific directory.
@@ -206,43 +346,29 @@ impl ProjectConfig {
     /// Returns `ConfigError::ConfigNotFound` if the config files cannot be found or read.
     /// Returns `ConfigError::InvalidConfig` if deserialization fails.
     pub fn load_from_dir(from_dir: &std::path::Path) -> Result<Self> {
-        let settings = {
-            let mut builder = config::Config::builder();
+        let home = dirs::home_dir().ok_or(ConfigError::ConfigNotFound)?;
+        let old_global = home.join(".config/rona/config.toml");
+        let new_global = home.join(".config/rona.toml");
 
-            // Support both old and new global config paths
-            let home = dirs::home_dir().ok_or(ConfigError::ConfigNotFound)?;
-            let old_global = home.join(".config/rona/config.toml");
-            let new_global = home.join(".config/rona.toml");
-
-            if old_global.exists() {
-                builder = builder.add_source(config::File::from(old_global).required(false));
-            }
-
-            if new_global.exists() {
-                builder = builder.add_source(config::File::from(new_global).required(false));
-            }
-
-            // Add project config (and any extends chain) from specified directory if it exists
-            let project_config_path = from_dir.join(".rona.toml");
-            if project_config_path.exists() {
-                let mut visited = HashSet::new();
-                for extended in collect_extends_chain(&project_config_path, &mut visited)? {
-                    builder = builder.add_source(config::File::from(extended).required(false));
-                }
-                builder =
-                    builder.add_source(config::File::from(project_config_path).required(false));
-            }
-
-            builder.build().map_err(|_| ConfigError::ConfigNotFound)?
-        };
-
-        match settings.try_deserialize() {
-            Ok(config) => Ok(config),
-            Err(e) => {
-                eprintln!("Failed to deserialize config: {e}");
-                Err(ConfigError::InvalidConfig.into())
-            }
+        let mut paths: Vec<PathBuf> = Vec::new();
+        if old_global.exists() {
+            paths.push(old_global);
         }
+        if new_global.exists() {
+            paths.push(new_global);
+        }
+
+        let project_config_path = from_dir.join(".rona.toml");
+        if project_config_path.exists() {
+            let mut visited = HashSet::new();
+            paths.extend(collect_extends_chain(&project_config_path, &mut visited)?);
+            paths.push(project_config_path);
+        }
+
+        load_and_merge_files(&paths).map(Into::into).map_err(|e| {
+            eprintln!("Failed to deserialize config: {e}");
+            e
+        })
     }
 }
 
@@ -915,6 +1041,110 @@ mod tests {
             ),
             "expected CircularExtends, got {result:?}"
         );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_extra_fields_merged_by_name() -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let temp_dir = TempDir::new()?;
+        let base = temp_dir.path().join("base.toml");
+        let project = temp_dir.path().join(".rona.toml");
+
+        std::fs::write(
+            &base,
+            r#"
+[[commit_extra_fields]]
+name = "scope"
+prompt = "Scope (base)"
+
+[[commit_extra_fields]]
+name = "ticket"
+prompt = "Ticket"
+"#,
+        )?;
+
+        std::fs::write(
+            &project,
+            r#"
+extends = "base.toml"
+
+[[commit_extra_fields]]
+name = "scope"
+prompt = "Scope (project)"
+"#,
+        )?;
+
+        let cfg = ProjectConfig::load_from_file(&project)?;
+        assert_eq!(
+            cfg.commit_extra_fields.len(),
+            2,
+            "both fields should be present"
+        );
+
+        let scope_prompt = cfg
+            .commit_extra_fields
+            .iter()
+            .find(|f| f.name == "scope")
+            .and_then(|f| f.prompt.as_deref());
+        let ticket = cfg.commit_extra_fields.iter().find(|f| f.name == "ticket");
+
+        assert!(
+            ticket.is_some(),
+            "ticket field should be preserved from base"
+        );
+        assert_eq!(
+            scope_prompt,
+            Some("Scope (project)"),
+            "scope prompt should be overridden by child"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_branch_extra_fields_merged_by_name()
+    -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let temp_dir = TempDir::new()?;
+        let base = temp_dir.path().join("base.toml");
+        let project = temp_dir.path().join(".rona.toml");
+
+        std::fs::write(
+            &base,
+            r#"
+[[branch_extra_fields]]
+name = "service"
+prompt = "Service"
+
+[[branch_extra_fields]]
+name = "version"
+prompt = "Version (base)"
+"#,
+        )?;
+
+        std::fs::write(
+            &project,
+            r#"
+extends = "base.toml"
+
+[[branch_extra_fields]]
+name = "version"
+prompt = "Version (project)"
+"#,
+        )?;
+
+        let cfg = ProjectConfig::load_from_file(&project)?;
+        assert_eq!(cfg.branch_extra_fields.len(), 2);
+
+        let version_prompt = cfg
+            .branch_extra_fields
+            .iter()
+            .find(|f| f.name == "version")
+            .and_then(|f| f.prompt.as_deref());
+        assert_eq!(version_prompt, Some("Version (project)"));
+
+        let service = cfg.branch_extra_fields.iter().find(|f| f.name == "service");
+        assert!(service.is_some(), "service should be preserved from base");
 
         Ok(())
     }
