@@ -85,6 +85,43 @@ fn pattern_matches_file(
     false
 }
 
+/// Unstages a list of files from the index, restoring them to their HEAD state.
+///
+/// Uses `git restore --staged` when a HEAD commit exists (the correct way to
+/// unstage modifications on tracked files), and falls back to `git rm --cached`
+/// in a repo with no commits yet, where all staged entries are brand-new.
+fn unstage_files(repo_root: &std::path::Path, files: &[String]) -> Result<()> {
+    // `git restore --staged` requires HEAD; fall back for initial-commit repos.
+    let head_exists = Command::new("git")
+        .current_dir(repo_root)
+        .args(["rev-parse", "--verify", "HEAD"])
+        .output()
+        .is_ok_and(|o| o.status.success());
+
+    let (unstage_args, cmd_label): (&[&str], &str) = if head_exists {
+        (&["restore", "--staged", "--"], "git restore --staged")
+    } else {
+        (&["rm", "--cached", "--"], "git rm --cached")
+    };
+
+    let output = Command::new("git")
+        .current_dir(repo_root)
+        .args(unstage_args)
+        .args(files)
+        .output()
+        .map_err(RonaError::Io)?;
+
+    if output.status.success() {
+        return Ok(());
+    }
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    Err(RonaError::Git(GitError::CommandFailed {
+        command: cmd_label.to_string(),
+        output: stderr.trim().to_string(),
+    }))
+}
+
 /// Adds files to the git index.
 ///
 /// # Errors
@@ -238,24 +275,13 @@ pub fn git_add_with_exclude_patterns(
         })
         .collect();
 
-    if !files_to_unstage.is_empty() {
-        let output = Command::new("git")
-            .current_dir(&repo_root)
-            .args(["rm", "--cached", "--"])
-            .args(&files_to_unstage)
-            .output()
-            .map_err(RonaError::Io)?;
-
-        if !output.status.success() {
-            if let Some(bar) = &pb {
-                bar.finish_and_clear();
-            }
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(RonaError::Git(GitError::CommandFailed {
-                command: "git rm --cached".to_string(),
-                output: stderr.trim().to_string(),
-            }));
+    if !files_to_unstage.is_empty()
+        && let Err(e) = unstage_files(&repo_root, &files_to_unstage)
+    {
+        if let Some(bar) = &pb {
+            bar.finish_and_clear();
         }
+        return Err(e);
     }
 
     if let Some(bar) = pb {
