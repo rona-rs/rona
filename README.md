@@ -12,12 +12,14 @@
 > Created and maintained by [Tom Planche](https://github.com/TomPlanche). The GitHub organization exists solely to host the Homebrew tap alongside the main repository.
 
 <p align="center">
-  <a href="https://crates.io/crates/rona"><img src="https://img.shields.io/crates/v/rona.svg" alt="Crates.io Version"></a>
+  <a href="https://crates.io/crates/rona"><img src="https://shieldcn.dev/crates/v/rona.svg?variant=secondary&variant=secondary&theme=slate" alt="Crates.io Version"></a>
+  <a href="https://https://github.com/rona-rs/homebrew-rona"><img alt="Brew/GitHub Release" src="https://shieldcn.dev/github/release/rona-rs/rona.svg?variant=secondary&theme=slate"></a>
+  <a href="https://github.com/rona-rs/rona/blob/main/LICENSE"><img src="https://shieldcn.dev/github/rona-rs/rona/license.svg?variant=secondary&theme=slate" alt="License"></a>
+  <a href="https://github.com/rona-rs/rona/actions/workflows/rust.yaml"><img src="https://shieldcn.dev/github/rona-rs/rona/ci.svg?variant=secondary&theme=slate" alt="Build Status"></a>
+  <br>
   <a href="https://sonarcloud.io/summary/new_code?id=TomPlanche_rona"><img src="https://sonarcloud.io/api/project_badges/measure?project=TomPlanche_rona&metric=alert_status" alt="SonarCloud Status"></a>
   <a href="https://sonarcloud.io/summary/new_code?id=TomPlanche_rona"><img src="https://sonarcloud.io/api/project_badges/measure?project=TomPlanche_rona&metric=sqale_rating" alt="SonarCloud SQALE Rating"></a>
   <a href="https://sonarcloud.io/summary/new_code?id=TomPlanche_rona"><img src="https://sonarcloud.io/api/project_badges/measure?project=TomPlanche_rona&metric=security_rating" alt="SonarCloud Security Rating"></a>
-  <a href="https://github.com/rona-rs/rona/blob/main/LICENSE"><img src="https://img.shields.io/crates/l/rona" alt="License"></a>
-  <a href="https://github.com/rona-rs/rona/actions/workflows/rust.yaml"><img src="https://github.com/rona-rs/rona/actions/workflows/rust.yaml/badge.svg" alt="Build Status"></a>
 </p>
 
 
