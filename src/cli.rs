@@ -37,7 +37,10 @@ use std::{collections::HashMap, fs::read_to_string, io, process::Command};
 use crate::{
     config::{Config, find_config_sources},
     errors::{Result, RonaError},
-    extra_fields::{ExtraField, MessagePrefetchConfig, prompt_extra_field, run_message_prefetch},
+    extra_fields::{
+        BuiltInFieldConfig, ExtraField, MessagePrefetchConfig, prompt_extra_field,
+        run_message_prefetch,
+    },
     git::{
         COMMIT_MESSAGE_FILE_PATH, COMMIT_TYPES, add_to_git_exclude, create_needed_files,
         format_branch_name, generate_commit_message, get_current_branch, get_current_commit_nb,
@@ -336,12 +339,18 @@ fn prompt_branch_fields(
     extra_fields: &[ExtraField],
     field_order: &[String],
     needs_description: bool,
+    description_config: Option<&BuiltInFieldConfig>,
 ) -> Result<(String, HashMap<String, String>)> {
+    use inquire::validator::Validation;
+
     const DESCRIPTION_KEY: &str = "description";
+
+    let description_disabled = description_config.is_some_and(|c| c.disabled);
+    let effective_needs_description = needs_description && !description_disabled;
 
     let ordered: Vec<String> = if field_order.is_empty() {
         let mut v: Vec<String> = extra_fields.iter().map(|f| f.name.clone()).collect();
-        if needs_description {
+        if effective_needs_description {
             v.push(DESCRIPTION_KEY.to_string());
         }
         v
@@ -352,7 +361,7 @@ fn prompt_branch_fields(
                 v.push(f.name.clone());
             }
         }
-        if needs_description && !v.iter().any(|s| s == DESCRIPTION_KEY) {
+        if effective_needs_description && !v.iter().any(|s| s == DESCRIPTION_KEY) {
             v.push(DESCRIPTION_KEY.to_string());
         }
         v
@@ -363,11 +372,34 @@ fn prompt_branch_fields(
 
     for name in &ordered {
         if name == DESCRIPTION_KEY {
-            description = Some(
-                Text::new("Branch description")
+            let prompt_text = description_config
+                .and_then(|c| c.prompt.as_deref())
+                .unwrap_or("Branch description");
+            let validator_pattern = description_config.and_then(|c| c.validation.as_deref());
+            let value = if let Some(pattern) = validator_pattern {
+                let re = regex::Regex::new(pattern).map_err(|e| {
+                    RonaError::InvalidInput(format!(
+                        "Invalid validation regex for branch description: {e}"
+                    ))
+                })?;
+                let pattern_owned = pattern.to_string();
+                Text::new(prompt_text)
+                    .with_validator(move |input: &str| {
+                        if !re.is_match(input) {
+                            return Ok(Validation::Invalid(
+                                format!("Must match pattern: {pattern_owned}").into(),
+                            ));
+                        }
+                        Ok(Validation::Valid)
+                    })
                     .prompt()
-                    .map_err(|_| RonaError::UserCancelled)?,
-            );
+                    .map_err(|_| RonaError::UserCancelled)?
+            } else {
+                Text::new(prompt_text)
+                    .prompt()
+                    .map_err(|_| RonaError::UserCancelled)?
+            };
+            description = Some(value);
         } else if let Some(field) = extra_fields.iter().find(|f| f.name == *name)
             && let Some(value) = prompt_extra_field(field)?
         {
@@ -425,10 +457,24 @@ fn handle_branch(no_switch: bool, config: &Config) -> Result<()> {
     let needs_description =
         template.contains("{description}") || template.contains("{?description}");
 
+    // Build the effective field list for branch prompts: start with branch_extra_fields, then
+    // pull in any commit_extra_fields whose names are referenced in the template but not already
+    // covered by a branch_extra_field with the same name.
+    let mut effective_branch_fields: Vec<ExtraField> =
+        config.project_config.branch_extra_fields.clone();
+    for commit_field in &config.project_config.commit_extra_fields {
+        let in_template = template.contains(&format!("{{{}}}", commit_field.name))
+            || template.contains(&format!("{{?{}}}", commit_field.name));
+        let already_present = effective_branch_fields
+            .iter()
+            .any(|f| f.name == commit_field.name);
+        if in_template && !already_present {
+            effective_branch_fields.push(commit_field.clone());
+        }
+    }
+
     // Validate template and warn about unreferenced fields before prompting the user.
-    let extra_names: Vec<&str> = config
-        .project_config
-        .branch_extra_fields
+    let extra_names: Vec<&str> = effective_branch_fields
         .iter()
         .map(|f| f.name.as_str())
         .collect();
@@ -459,9 +505,10 @@ fn handle_branch(no_switch: bool, config: &Config) -> Result<()> {
     };
 
     let (description, extra_values) = prompt_branch_fields(
-        &config.project_config.branch_extra_fields,
+        &effective_branch_fields,
         &config.project_config.branch_field_order,
         needs_description,
+        config.project_config.branch_description.as_ref(),
     )?;
 
     if needs_description && description.trim().is_empty() {
@@ -631,12 +678,19 @@ fn prompt_interactive_fields(
     extra_fields: &[ExtraField],
     field_order: &[String],
     message_prefetch: Option<&MessagePrefetchConfig>,
+    message_config: Option<&BuiltInFieldConfig>,
 ) -> Result<(String, HashMap<String, String>)> {
+    use inquire::validator::Validation;
+
     const MESSAGE_KEY: &str = "message";
+
+    let message_disabled = message_config.is_some_and(|c| c.disabled);
 
     let ordered: Vec<String> = if field_order.is_empty() {
         let mut v: Vec<String> = extra_fields.iter().map(|f| f.name.clone()).collect();
-        v.push(MESSAGE_KEY.to_string());
+        if !message_disabled {
+            v.push(MESSAGE_KEY.to_string());
+        }
         v
     } else {
         let mut v: Vec<String> = field_order.to_vec();
@@ -646,8 +700,8 @@ fn prompt_interactive_fields(
                 v.push(f.name.clone());
             }
         }
-        // Guarantee message is always prompted
-        if !v.iter().any(|s| s == MESSAGE_KEY) {
+        // Guarantee message is always prompted unless disabled
+        if !message_disabled && !v.iter().any(|s| s == MESSAGE_KEY) {
             v.push(MESSAGE_KEY.to_string());
         }
         v
@@ -658,15 +712,42 @@ fn prompt_interactive_fields(
 
     for name in &ordered {
         if name == MESSAGE_KEY {
+            let prompt_text = message_config
+                .and_then(|c| c.prompt.as_deref())
+                .unwrap_or("Message");
             let default = message_prefetch
                 .map(run_message_prefetch)
                 .transpose()?
                 .flatten();
-            let mut prompt = Text::new("Message");
-            if let Some(ref d) = default {
-                prompt = prompt.with_default(d.as_str());
-            }
-            message = Some(prompt.prompt().map_err(|_| RonaError::UserCancelled)?);
+            let validator_pattern = message_config.and_then(|c| c.validation.as_deref());
+            let value = if let Some(pattern) = validator_pattern {
+                let re = regex::Regex::new(pattern).map_err(|e| {
+                    RonaError::InvalidInput(format!("Invalid validation regex for message: {e}"))
+                })?;
+                let pattern_owned = pattern.to_string();
+                let mut text_prompt = Text::new(prompt_text);
+                if let Some(ref d) = default {
+                    text_prompt = text_prompt.with_default(d.as_str());
+                }
+                text_prompt
+                    .with_validator(move |input: &str| {
+                        if !re.is_match(input) {
+                            return Ok(Validation::Invalid(
+                                format!("Must match pattern: {pattern_owned}").into(),
+                            ));
+                        }
+                        Ok(Validation::Valid)
+                    })
+                    .prompt()
+                    .map_err(|_| RonaError::UserCancelled)?
+            } else {
+                let mut text_prompt = Text::new(prompt_text);
+                if let Some(ref d) = default {
+                    text_prompt = text_prompt.with_default(d.as_str());
+                }
+                text_prompt.prompt().map_err(|_| RonaError::UserCancelled)?
+            };
+            message = Some(value);
         } else if let Some(field) = extra_fields.iter().find(|f| f.name == *name)
             && let Some(value) = prompt_extra_field(field)?
         {
@@ -717,8 +798,9 @@ fn handle_generate(interactive: bool, no_commit_number: bool, config: &Config) -
         // In interactive mode, prompt all fields (including message) in configured order
         let (message, extra_values) = prompt_interactive_fields(
             &config.project_config.commit_extra_fields,
-            &config.project_config.field_order,
+            &config.project_config.commit_fields_order,
             config.project_config.message_prefetch.as_ref(),
+            config.project_config.commit_message.as_ref(),
         )?;
         handle_interactive_mode(
             commit_type,
@@ -1076,6 +1158,106 @@ fn handle_which_config(path: Option<&str>, show_effective: bool) -> Result<()> {
 
 /// Handle the Config command which creates or manages configuration files.
 ///
+/// Generates a commented TOML config file content with all supported options documented.
+fn generate_commented_config() -> String {
+    let default_commit_types = r#"["feat", "fix", "perf", "revert", "docs", "quality", "style", "chore", "refactor", "test", "build", "ci"]"#;
+    format!(
+        r#"# Editor used to open commit_message.md in non-interactive mode.
+editor = "nano"
+
+# Commit types shown in the selector.
+commit_types = {default_commit_types}
+
+##########
+# COMMIT #
+##########
+
+# Template applied to the final commit message.
+# Built-in variables:
+#   {{commit_number}}  - sequential commit count on the current branch
+#   {{commit_type}}    - the type chosen in the selector
+#   {{branch_name}}    - current branch (prefix stripped, e.g. feat/x -> x)
+#   {{message}}        - the message entered by the user
+#   {{date}}           - YYYY-MM-DD
+#   {{time}}           - HH:MM:SS
+#   {{author}}         - git user.name
+#   {{email}}          - git user.email
+# Conditional blocks: {{?var}}...{{/var}} renders only when var has a value.
+# Extra variables: add with [[commit_extra_fields]].
+commit_template = "{{?commit_number}}[{{commit_number}}] {{/commit_number}}({{commit_type}} on {{branch_name}}) {{message}}"
+
+# Order of prompts in interactive mode (-i).
+# Use the reserved name "message" to position the built-in message prompt.
+# Fields not listed are appended after all listed items.
+# commit_fields_order = ["scope", "message", "ticket"]
+
+# Overrides for the built-in message prompt (uncomment to customise or disable).
+# [commit_message]
+# prompt = "Commit message"
+# validation = ""
+# disabled = false
+
+# [[commit_extra_fields]]
+# name = "scope"
+# prompt = "Select scope"
+# kind = "select"
+# required = false
+# prefetch.source = "command"
+# prefetch.command = "git log -50 --pretty=format:%s"
+# prefetch.extract_regex = "\\w+\\((?P<value>[^)]*)\\):"
+# prefetch.deduplicate = true
+
+# [[commit_extra_fields]]
+# name = "ticket"
+# prompt = "Ticket:"
+# kind = "text"
+# required = false
+# validation = "^[A-Z]+-[0-9]+$"
+# prefetch.source = "branch"
+# prefetch.extract_regex = "[A-Z]+-[0-9]+"
+
+##########
+# BRANCH #
+##########
+
+# Template applied to the generated branch name.
+# Built-in variables:
+#   {{branch_type}}   - the type chosen in the selector
+#   {{description}}   - the description entered by the user
+#   {{date}}          - YYYY-MM-DD
+#   {{time}}          - HH:MM:SS
+#   {{author}}        - git user.name
+# Conditional blocks: {{?var}}...{{/var}} renders only when var has a value.
+# Extra variables: add with [[branch_extra_fields]].
+# Commit extra fields (from [[commit_extra_fields]]) can also be referenced here.
+branch_template = "{{branch_type}}/{{description}}"
+
+# Dedicated branch types (when absent, commit_types is used).
+# branch_types = ["feat", "fix", "chore"]
+
+# When true, branch_types and commit_types are merged in the selector.
+# merge_branch_and_commit_types = false
+
+# Order of prompts for branch creation.
+# Use the reserved name "description" to position the built-in description prompt.
+# branch_field_order = ["description", "ticket"]
+
+# Overrides for the built-in description prompt (uncomment to customise or disable).
+# [branch_description]
+# prompt = "Branch description"
+# validation = ""
+# disabled = false
+
+# [[branch_extra_fields]]
+# name = "description"
+# prompt = "Small description in kebab-case"
+# kind = "text"
+# required = true
+# validation = "^[a-z][a-z0-9-]+$"
+"#
+    )
+}
+
 /// # Arguments
 /// * `scope` - Whether to create local (.rona.toml) or global (~/.config/rona.toml) config
 /// * `config` - Global configuration including verbose and dry-run settings
@@ -1134,10 +1316,7 @@ fn handle_config_command(scope: ConfigScope, exclude: bool, config: &Config) -> 
             std::fs::create_dir_all(parent)?;
         }
 
-        // Get default config and serialize to TOML
-        let default_config = crate::config::ProjectConfig::default();
-        let toml_content = toml::to_string_pretty(&default_config)
-            .map_err(|_| crate::errors::ConfigError::InvalidConfig)?;
+        let toml_content = generate_commented_config();
 
         // Write the config file
         let mut file = std::fs::File::create(&config_path)?;

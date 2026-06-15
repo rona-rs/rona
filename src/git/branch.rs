@@ -208,11 +208,10 @@ pub fn format_branch_name(commit_types: &[&str], branch: &str) -> String {
 /// - Removes a trailing `/`
 #[must_use]
 pub fn sanitize_branch_name(name: &str) -> String {
-    let lowered: String = name
-        .to_lowercase()
+    let sanitized: String = name
         .chars()
         .map(|c| {
-            if matches!(c, 'a'..='z' | '0'..='9' | '/' | '_') {
+            if matches!(c, 'a'..='z' | 'A'..='Z' | '0'..='9' | '/' | '_' | '-') {
                 c
             } else {
                 '-'
@@ -221,9 +220,9 @@ pub fn sanitize_branch_name(name: &str) -> String {
         .collect();
 
     // Collapse consecutive dashes and slashes
-    let mut result = String::with_capacity(lowered.len());
+    let mut result = String::with_capacity(sanitized.len());
     let mut prev = '\0';
-    for c in lowered.chars() {
+    for c in sanitized.chars() {
         if c == '-' && prev == '-' {
             continue;
         }

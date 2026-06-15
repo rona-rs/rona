@@ -87,7 +87,7 @@ pub struct ProjectConfig {
     /// Extra fields not listed are appended after all listed items.
     /// When empty (the default), extra fields are shown first, then `message`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub field_order: Vec<String>,
+    pub commit_fields_order: Vec<String>,
 
     /// Template for branch name generation.
     /// Available variables: `{commit_type}`, `{description}`, `{date}`, `{time}`, `{author}`.
@@ -120,6 +120,14 @@ pub struct ProjectConfig {
     /// using `{extract}` as a placeholder. The result is offered as the default;
     /// pressing Enter without typing accepts it.
     pub message_prefetch: Option<crate::extra_fields::MessagePrefetchConfig>,
+
+    /// Optional overrides for the built-in commit message prompt.
+    /// Set `disabled = true` to skip the prompt (the `{message}` variable will be empty).
+    pub commit_message: Option<crate::extra_fields::BuiltInFieldConfig>,
+
+    /// Optional overrides for the built-in branch description prompt.
+    /// Set `disabled = true` to skip the prompt (the `{description}` variable will be empty).
+    pub branch_description: Option<crate::extra_fields::BuiltInFieldConfig>,
 }
 
 impl Default for ProjectConfig {
@@ -136,13 +144,15 @@ impl Default for ProjectConfig {
                 "{?commit_number}[{commit_number}] {/commit_number}({commit_type} on {branch_name}) {message}".to_string(),
             ),
             commit_extra_fields: vec![],
-            field_order: vec![],
+            commit_fields_order: vec![],
             branch_template: Some("{branch_type}/{description}".to_string()),
             branch_extra_fields: vec![],
             branch_field_order: vec![],
             branch_types: None,
             merge_branch_and_commit_types: false,
             message_prefetch: None,
+            commit_message: None,
+            branch_description: None,
         }
     }
 }
@@ -158,6 +168,9 @@ struct RawProjectConfig {
     template: Option<String>,
     commit_extra_fields: Option<Vec<crate::extra_fields::ExtraField>>,
     extra_fields: Option<Vec<crate::extra_fields::ExtraField>>,
+    /// Current name.
+    commit_fields_order: Option<Vec<String>>,
+    /// Legacy alias for `commit_fields_order`.
     field_order: Option<Vec<String>>,
     branch_template: Option<String>,
     branch_extra_fields: Option<Vec<crate::extra_fields::ExtraField>>,
@@ -165,6 +178,8 @@ struct RawProjectConfig {
     branch_types: Option<Vec<String>>,
     merge_branch_and_commit_types: Option<bool>,
     message_prefetch: Option<crate::extra_fields::MessagePrefetchConfig>,
+    commit_message: Option<crate::extra_fields::BuiltInFieldConfig>,
+    branch_description: Option<crate::extra_fields::BuiltInFieldConfig>,
 }
 
 impl From<RawProjectConfig> for ProjectConfig {
@@ -174,19 +189,22 @@ impl From<RawProjectConfig> for ProjectConfig {
             commit_types: raw.commit_types,
             commit_template: raw.commit_template,
             commit_extra_fields: raw.commit_extra_fields.unwrap_or_default(),
-            field_order: raw.field_order.unwrap_or_default(),
+            commit_fields_order: raw.commit_fields_order.unwrap_or_default(),
             branch_template: raw.branch_template,
             branch_extra_fields: raw.branch_extra_fields.unwrap_or_default(),
             branch_field_order: raw.branch_field_order.unwrap_or_default(),
             branch_types: raw.branch_types,
             merge_branch_and_commit_types: raw.merge_branch_and_commit_types.unwrap_or(false),
             message_prefetch: raw.message_prefetch,
+            commit_message: raw.commit_message,
+            branch_description: raw.branch_description,
         }
     }
 }
 
 /// Resolves backward-compat aliases within a single raw config.
-/// `template` → `commit_template` and `extra_fields` → `commit_extra_fields`.
+/// `template` → `commit_template`, `extra_fields` → `commit_extra_fields`,
+/// `field_order` → `commit_fields_order`.
 fn normalize_raw(mut raw: RawProjectConfig) -> RawProjectConfig {
     if raw.commit_template.is_none() {
         raw.commit_template = raw.template.take();
@@ -196,6 +214,10 @@ fn normalize_raw(mut raw: RawProjectConfig) -> RawProjectConfig {
         raw.commit_extra_fields = raw.extra_fields.take();
     }
     raw.extra_fields = None;
+    if raw.commit_fields_order.is_none() {
+        raw.commit_fields_order = raw.field_order.take();
+    }
+    raw.field_order = None;
     raw
 }
 
@@ -235,7 +257,8 @@ fn merge_raw(base: RawProjectConfig, child: RawProjectConfig) -> RawProjectConfi
             child.commit_extra_fields,
         ),
         extra_fields: None,
-        field_order: child.field_order.or(base.field_order),
+        commit_fields_order: child.commit_fields_order.or(base.commit_fields_order),
+        field_order: None,
         branch_template: child.branch_template.or(base.branch_template),
         branch_extra_fields: merge_named_fields(
             base.branch_extra_fields,
@@ -247,6 +270,8 @@ fn merge_raw(base: RawProjectConfig, child: RawProjectConfig) -> RawProjectConfi
             .merge_branch_and_commit_types
             .or(base.merge_branch_and_commit_types),
         message_prefetch: child.message_prefetch.or(base.message_prefetch),
+        commit_message: child.commit_message.or(base.commit_message),
+        branch_description: child.branch_description.or(base.branch_description),
     }
 }
 

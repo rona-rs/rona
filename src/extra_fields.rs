@@ -289,6 +289,21 @@ fn prompt_as_text(
     }
 }
 
+/// Configuration overrides for a built-in prompt field (e.g., the branch `description` or
+/// commit `message`).
+///
+/// All fields are optional; omitted fields fall back to the built-in defaults.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct BuiltInFieldConfig {
+    /// Custom prompt text shown to the user.
+    pub prompt: Option<String>,
+    /// Optional regex the entered value must match.
+    pub validation: Option<String>,
+    /// When `true`, skip this prompt entirely (the template variable will be empty).
+    #[serde(default)]
+    pub disabled: bool,
+}
+
 /// Prefetch configuration specific to the built-in message prompt.
 ///
 /// Unlike `PrefetchConfig`, this supports a `template` that uses `{extract}` as a
