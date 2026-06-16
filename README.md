@@ -557,6 +557,9 @@ rona -a "target/" "node_modules/"
 
 # Exclude files with specific patterns
 rona -a "test_*.rs" "*.test.js"
+
+# Or pick files interactively from a checklist
+rona -a -i
 ```
 
 3. Generate and edit commit message:
@@ -789,6 +792,11 @@ rona add-with-exclude <pattern(s)>
 rona -a <pattern(s)>
 ```
 
+**Options:**
+
+- `-i, --interactive` - Pick files to stage from a checklist instead of using exclude patterns
+- `--dry-run` - Preview what would be staged without staging anything
+
 **Example:**
 
 ```bash
@@ -798,6 +806,16 @@ rona -a "*.rs" "*.tmp"  # Exclude Rust and temporary files
 cd packages/preview/my-pkg/1.0
 rona -a  # Correctly stages files relative to the repo root
 ```
+
+**Interactive mode (`-i`):**
+
+Instead of describing what to leave out with exclude patterns, pick exactly what to stage from a checklist of changed files (similar to `git add -p` or the lazygit file selector). Use the arrow keys to move, space to toggle a file, and enter to confirm. Untracked, modified, type-changed and deleted files are all listed with a short status label.
+
+```bash
+rona -a -i  # Open a MultiSelect of changed files and stage the selected ones
+```
+
+When `-i` is used, any exclude patterns are ignored.
 
 ### `commit` (`-c`)
 

@@ -31,7 +31,7 @@ use clap_complete::{Shell, generate};
 use colored::Colorize;
 use glob::Pattern;
 use inquire::ui::{Attributes, Color, RenderConfig, StyleSheet, Styled};
-use inquire::{Confirm, Select, Text};
+use inquire::{Confirm, MultiSelect, Select, Text};
 use std::{collections::HashMap, fs::read_to_string, io, process::Command};
 
 use crate::{
@@ -44,8 +44,9 @@ use crate::{
     git::{
         COMMIT_MESSAGE_FILE_PATH, COMMIT_TYPES, add_to_git_exclude, create_needed_files,
         format_branch_name, generate_commit_message, get_current_branch, get_current_commit_nb,
-        get_status_files, get_top_level_path, git_add_with_exclude_patterns, git_branch_only,
-        git_commit, git_create_branch, git_push, sanitize_branch_name,
+        get_stageable_files, get_status_files, get_top_level_path, git_add_files,
+        git_add_with_exclude_patterns, git_branch_only, git_commit, git_create_branch, git_push,
+        sanitize_branch_name,
     },
     template::{
         BranchTemplateVariables, TemplateVariables, process_branch_template, process_template,
@@ -115,6 +116,10 @@ pub(crate) enum CliCommand {
         /// Patterns of files to exclude (supports glob patterns like `"node_modules/*"`)
         #[arg(value_name = "PATTERNS", value_hint = ValueHint::AnyPath)]
         to_exclude: Vec<String>,
+
+        /// Interactively pick which changed files to stage (`MultiSelect` of git status)
+        #[arg(short = 'i', long = "interactive", default_value_t = false)]
+        interactive: bool,
 
         /// Show what would be added without actually adding files
         #[arg(long, default_value_t = false)]
@@ -561,7 +566,11 @@ fn handle_branch(no_switch: bool, config: &Config) -> Result<()> {
 /// * If any glob pattern is invalid
 /// * If git add operation fails
 /// * If reading git status fails
-fn handle_add_with_exclude(exclude: &[String], config: &Config) -> Result<()> {
+fn handle_add_with_exclude(exclude: &[String], interactive: bool, config: &Config) -> Result<()> {
+    if interactive {
+        return handle_add_interactive(exclude, config);
+    }
+
     let patterns: Vec<Pattern> = exclude
         .iter()
         .map(|p| {
@@ -571,6 +580,42 @@ fn handle_add_with_exclude(exclude: &[String], config: &Config) -> Result<()> {
         .collect::<Result<Vec<Pattern>>>()?;
 
     git_add_with_exclude_patterns(&patterns, config.verbose, config.dry_run)?;
+    Ok(())
+}
+
+/// Handle the interactive variant of the add command (`rona -a -i`).
+///
+/// Presents a `MultiSelect` of every file with unstaged changes and stages only
+/// the ones the user selects. Exclude patterns are not used in this mode.
+///
+/// # Arguments
+/// * `exclude` - Patterns passed on the command line (ignored, only used to warn)
+/// * `config` - Global configuration including dry-run settings
+///
+/// # Errors
+/// * If reading git status fails
+/// * If the user cancels the prompt
+/// * If staging the selected files fails
+fn handle_add_interactive(exclude: &[String], config: &Config) -> Result<()> {
+    if !exclude.is_empty() {
+        println!(
+            "{} Exclude patterns are ignored in interactive mode (-i).",
+            "WARNING:".yellow().bold()
+        );
+    }
+
+    let entries = get_stageable_files()?;
+    if entries.is_empty() {
+        println!("No changes to stage.");
+        return Ok(());
+    }
+
+    let selected = MultiSelect::new("Select files to stage", entries)
+        .prompt()
+        .map_err(|_| RonaError::UserCancelled)?;
+
+    let paths: Vec<String> = selected.into_iter().map(|entry| entry.path).collect();
+    git_add_files(&paths, config.dry_run)?;
     Ok(())
 }
 
@@ -1385,10 +1430,11 @@ pub fn run() -> Result<()> {
 
         CliCommand::AddWithExclude {
             to_exclude: exclude,
+            interactive,
             dry_run,
         } => {
             config.set_dry_run(dry_run);
-            handle_add_with_exclude(&exclude, &config)
+            handle_add_with_exclude(&exclude, interactive, &config)
         }
 
         CliCommand::Commit {
@@ -1477,12 +1523,14 @@ mod cli_tests {
 
         let CliCommand::AddWithExclude {
             to_exclude: exclude,
+            interactive,
             dry_run,
         } = cli.command
         else {
             return Err("Wrong command parsed".into());
         };
         assert!(exclude.is_empty());
+        assert!(!interactive);
         assert!(!dry_run);
         Ok(())
     }
@@ -1494,12 +1542,14 @@ mod cli_tests {
 
         let CliCommand::AddWithExclude {
             to_exclude: exclude,
+            interactive,
             dry_run,
         } = cli.command
         else {
             return Err("Wrong command parsed".into());
         };
         assert_eq!(exclude, vec!["*.txt"]);
+        assert!(!interactive);
         assert!(!dry_run);
         Ok(())
     }
@@ -1511,12 +1561,14 @@ mod cli_tests {
 
         let CliCommand::AddWithExclude {
             to_exclude: exclude,
+            interactive,
             dry_run,
         } = cli.command
         else {
             return Err("Wrong command parsed".into());
         };
         assert_eq!(exclude, vec!["*.txt", "*.log", "target/*"]);
+        assert!(!interactive);
         assert!(!dry_run);
         Ok(())
     }
@@ -1528,13 +1580,46 @@ mod cli_tests {
 
         let CliCommand::AddWithExclude {
             to_exclude: exclude,
+            interactive,
             dry_run,
         } = cli.command
         else {
             return Err("Wrong command parsed".into());
         };
         assert_eq!(exclude, vec!["*.txt"]);
+        assert!(!interactive);
         assert!(!dry_run);
+        Ok(())
+    }
+
+    #[test]
+    fn test_add_interactive() -> TestResult {
+        let args = vec!["rona", "-a", "-i"];
+        let cli = Cli::try_parse_from(args)?;
+
+        let CliCommand::AddWithExclude {
+            to_exclude: exclude,
+            interactive,
+            dry_run,
+        } = cli.command
+        else {
+            return Err("Wrong command parsed".into());
+        };
+        assert!(exclude.is_empty());
+        assert!(interactive);
+        assert!(!dry_run);
+        Ok(())
+    }
+
+    #[test]
+    fn test_add_interactive_long_flag() -> TestResult {
+        let args = vec!["rona", "-a", "--interactive"];
+        let cli = Cli::try_parse_from(args)?;
+
+        let CliCommand::AddWithExclude { interactive, .. } = cli.command else {
+            return Err("Wrong command parsed".into());
+        };
+        assert!(interactive);
         Ok(())
     }
 

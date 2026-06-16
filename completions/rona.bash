@@ -166,7 +166,7 @@ _rona() {
             return 0
             ;;
         rona__subcmd__add__subcmd__with__subcmd__exclude)
-            opts="-f -h --dry-run --config-file --help [PATTERNS]..."
+            opts="-i -f -h --interactive --dry-run --config-file --help [PATTERNS]..."
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0

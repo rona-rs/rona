@@ -46,6 +46,8 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 '-f+[Config file to use instead of the default global/project hierarchy]:PATH:_files' \
 '--config-file=[Config file to use instead of the default global/project hierarchy]:PATH:_files' \
+'-i[Interactively pick which changed files to stage (\`MultiSelect\` of git status)]' \
+'--interactive[Interactively pick which changed files to stage (\`MultiSelect\` of git status)]' \
 '--dry-run[Show what would be added without actually adding files]' \
 '-h[Print help]' \
 '--help[Print help]' \

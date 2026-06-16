@@ -55,6 +55,8 @@ Register-ArgumentCompleter -Native -CommandName 'rona' -ScriptBlock {
         'rona;add-with-exclude' {
             [CompletionResult]::new('-f', '-f', [CompletionResultType]::ParameterName, 'Config file to use instead of the default global/project hierarchy')
             [CompletionResult]::new('--config-file', '--config-file', [CompletionResultType]::ParameterName, 'Config file to use instead of the default global/project hierarchy')
+            [CompletionResult]::new('-i', '-i', [CompletionResultType]::ParameterName, 'Interactively pick which changed files to stage (`MultiSelect` of git status)')
+            [CompletionResult]::new('--interactive', '--interactive', [CompletionResultType]::ParameterName, 'Interactively pick which changed files to stage (`MultiSelect` of git status)')
             [CompletionResult]::new('--dry-run', '--dry-run', [CompletionResultType]::ParameterName, 'Show what would be added without actually adding files')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')

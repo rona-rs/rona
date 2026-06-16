@@ -170,6 +170,77 @@ pub fn get_status_files() -> Result<Vec<String>> {
     Ok(files.into_iter().collect())
 }
 
+/// A single entry from `git status` that has unstaged changes and can be staged.
+///
+/// Used by the interactive add mode (`rona -a -i`) to present a `MultiSelect` of
+/// changed files. The [`Display`] implementation renders a human-readable status
+/// label followed by the path, e.g. `modified    src/main.rs`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StatusEntry {
+    /// Path to the file, relative to the repository root.
+    pub path: String,
+    /// Short, human-readable status label (e.g. "modified", "untracked").
+    pub status: &'static str,
+}
+
+impl std::fmt::Display for StatusEntry {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:<11} {}", self.status, self.path)
+    }
+}
+
+/// Returns the files that currently have unstaged changes and can be staged.
+///
+/// This includes untracked files and files with working-tree modifications,
+/// deletions or type changes. Fully staged files with no remaining working-tree
+/// changes are omitted, since there is nothing left to stage for them.
+///
+/// The list is sorted by path for stable, predictable ordering in the selector.
+///
+/// # Errors
+/// * If reading git status fails
+///
+/// # Returns
+/// * `Vec<StatusEntry>` - The stageable files with their status labels
+pub fn get_stageable_files() -> Result<Vec<StatusEntry>> {
+    let lines = run_git_status()?;
+    let mut entries = Vec::new();
+
+    for line in &lines {
+        if line.len() < 4 {
+            continue;
+        }
+
+        let mut chars = line.chars();
+        let index_char = chars.next().unwrap_or(' ');
+        let wt_char = chars.next().unwrap_or(' ');
+
+        let is_untracked = index_char == '?' && wt_char == '?';
+
+        // Skip files whose working tree matches the index (nothing left to stage).
+        if wt_char == ' ' && !is_untracked {
+            continue;
+        }
+
+        // For renamed-and-modified entries the path is "old -> new"; stage the new path.
+        let raw_path = &line[3..];
+        let path_part = raw_path.rsplit(" -> ").next().unwrap_or(raw_path);
+        let path = unquote_git_path(path_part);
+
+        let status = match wt_char {
+            'D' => "deleted",
+            'T' => "type change",
+            '?' => "untracked",
+            _ => "modified",
+        };
+
+        entries.push(StatusEntry { path, status });
+    }
+
+    entries.sort_by(|a, b| a.path.cmp(&b.path));
+    Ok(entries)
+}
+
 /// Processes deleted files that need to be staged for deletion.
 /// Only returns files that are deleted in the working directory but not yet staged.
 ///

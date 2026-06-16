@@ -46,8 +46,8 @@ pub use commit::{
 pub use files::{add_to_git_exclude, create_needed_files};
 pub use remote::git_push;
 pub use repository::{find_git_root, get_top_level_path};
-pub use staging::git_add_with_exclude_patterns;
-pub use status::{get_all_staged_file_paths, get_status_files};
+pub use staging::{git_add_files, git_add_with_exclude_patterns};
+pub use status::{StatusEntry, get_all_staged_file_paths, get_stageable_files, get_status_files};
 
 /// Handles the output of `Command`-based git operations (push, pull, merge, rebase).
 ///
