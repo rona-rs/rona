@@ -284,8 +284,8 @@ fn get_render_config() -> RenderConfig<'static> {
     render_config.prompt_prefix = Styled::new("$").with_fg(Color::LightRed);
     render_config.answered_prompt_prefix = Styled::new("✔").with_fg(Color::LightGreen);
     render_config.highlighted_option_prefix = Styled::new("➠").with_fg(Color::LightBlue);
-    render_config.selected_checkbox = Styled::new("☑").with_fg(Color::LightGreen);
-    render_config.unselected_checkbox = Styled::new("☐").with_fg(Color::Black);
+    render_config.selected_checkbox = Styled::new("[x]").with_fg(Color::LightGreen);
+    render_config.unselected_checkbox = Styled::new("[ ]").with_fg(Color::Black);
     render_config.scroll_up_prefix = Styled::new("⇞").with_fg(Color::Black);
     render_config.scroll_down_prefix = Styled::new("⇟").with_fg(Color::Black);
 
