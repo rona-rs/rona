@@ -50,6 +50,8 @@ set edit:completion:arg-completer[rona] = {|@words|
         &'rona;add-with-exclude'= {
             cand -f 'Config file to use instead of the default global/project hierarchy'
             cand --config-file 'Config file to use instead of the default global/project hierarchy'
+            cand -i 'Interactively pick which changed files to stage (`MultiSelect` of git status)'
+            cand --interactive 'Interactively pick which changed files to stage (`MultiSelect` of git status)'
             cand --dry-run 'Show what would be added without actually adding files'
             cand -h 'Print help'
             cand --help 'Print help'

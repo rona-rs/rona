@@ -299,6 +299,53 @@ pub fn git_add_with_exclude_patterns(
     Ok(())
 }
 
+/// Stages an explicit list of files via `git add -- <files>`.
+///
+/// Used by the interactive add mode (`rona -a -i`) after the user has selected
+/// which files to stage. Deletions are staged correctly because `git add`
+/// records the removal of a tracked file that no longer exists.
+///
+/// # Arguments
+/// * `files` - Paths (relative to the repository root) to stage
+/// * `dry_run` - If true, only print what would be staged without staging anything
+///
+/// # Errors
+/// * If locating the repository root fails
+/// * If the `git add` command fails
+pub fn git_add_files(files: &[String], dry_run: bool) -> Result<()> {
+    if files.is_empty() {
+        println!("No files selected.");
+        return Ok(());
+    }
+
+    if dry_run {
+        println!("Would stage {} files:", files.len());
+        for file in files {
+            println!("  + {file}");
+        }
+        return Ok(());
+    }
+
+    let repo_root = get_top_level_path()?;
+    let output = Command::new("git")
+        .current_dir(&repo_root)
+        .args(["add", "--"])
+        .args(files)
+        .output()
+        .map_err(RonaError::Io)?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(RonaError::Git(GitError::CommandFailed {
+            command: "git add --".to_string(),
+            output: stderr.trim().to_string(),
+        }));
+    }
+
+    println!("Staged {} files for commit.", files.len());
+    Ok(())
+}
+
 /// Prints a detailed summary of files that would be affected by a git add operation in dry run mode.
 ///
 /// This function provides a clear overview of:

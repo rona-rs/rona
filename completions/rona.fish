@@ -45,6 +45,7 @@ complete -c rona -n "__fish_rona_using_subcommand branch" -l dry-run -d 'Show wh
 complete -c rona -n "__fish_rona_using_subcommand branch" -l no-switch -d 'Create the branch without switching to it'
 complete -c rona -n "__fish_rona_using_subcommand branch" -s h -l help -d 'Print help'
 complete -c rona -n "__fish_rona_using_subcommand add-with-exclude" -s f -l config-file -d 'Config file to use instead of the default global/project hierarchy' -r -F
+complete -c rona -n "__fish_rona_using_subcommand add-with-exclude" -s i -l interactive -d 'Interactively pick which changed files to stage (`MultiSelect` of git status)'
 complete -c rona -n "__fish_rona_using_subcommand add-with-exclude" -l dry-run -d 'Show what would be added without actually adding files'
 complete -c rona -n "__fish_rona_using_subcommand add-with-exclude" -s h -l help -d 'Print help'
 complete -c rona -n "__fish_rona_using_subcommand commit" -s f -l config-file -d 'Config file to use instead of the default global/project hierarchy' -r -F
