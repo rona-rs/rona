@@ -346,6 +346,87 @@ pub fn git_add_files(files: &[String], dry_run: bool) -> Result<()> {
     Ok(())
 }
 
+/// Unstages an explicit list of files from the index (`rona reset`).
+///
+/// Restores the given paths to their `HEAD` state in the index while leaving the
+/// working tree untouched, so no local edits are lost. This is the inverse of
+/// [`git_add_files`].
+///
+/// # Arguments
+/// * `files` - Paths (relative to the repository root) to unstage
+/// * `dry_run` - If true, only print what would be unstaged without staging anything
+///
+/// # Errors
+/// * If locating the repository root fails
+/// * If the underlying git command fails
+pub fn git_unstage_files(files: &[String], dry_run: bool) -> Result<()> {
+    if files.is_empty() {
+        println!("No staged files to unstage.");
+        return Ok(());
+    }
+
+    if dry_run {
+        println!("Would unstage {} files:", files.len());
+        for file in files {
+            println!("  - {file}");
+        }
+        return Ok(());
+    }
+
+    let repo_root = get_top_level_path()?;
+    unstage_files(&repo_root, files)?;
+
+    println!("Unstaged {} files.", files.len());
+    Ok(())
+}
+
+/// Discards working-tree changes for an explicit list of files (`rona restore`).
+///
+/// Runs `git restore -- <files>`, reverting each file to its staged (or `HEAD`)
+/// state. This is destructive: uncommitted, unstaged edits to the listed files
+/// are lost. Callers are expected to confirm with the user beforehand.
+///
+/// # Arguments
+/// * `files` - Paths (relative to the repository root) to restore
+/// * `dry_run` - If true, only print what would be restored without changing anything
+///
+/// # Errors
+/// * If locating the repository root fails
+/// * If the `git restore` command fails
+pub fn git_restore_files(files: &[String], dry_run: bool) -> Result<()> {
+    if files.is_empty() {
+        println!("No files to restore.");
+        return Ok(());
+    }
+
+    if dry_run {
+        println!("Would restore {} files:", files.len());
+        for file in files {
+            println!("  - {file}");
+        }
+        return Ok(());
+    }
+
+    let repo_root = get_top_level_path()?;
+    let output = Command::new("git")
+        .current_dir(&repo_root)
+        .args(["restore", "--"])
+        .args(files)
+        .output()
+        .map_err(RonaError::Io)?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(RonaError::Git(GitError::CommandFailed {
+            command: "git restore --".to_string(),
+            output: stderr.trim().to_string(),
+        }));
+    }
+
+    println!("Restored {} files.", files.len());
+    Ok(())
+}
+
 /// Prints a detailed summary of files that would be affected by a git add operation in dry run mode.
 ///
 /// This function provides a clear overview of:

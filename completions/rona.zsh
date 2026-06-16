@@ -205,6 +205,32 @@ _arguments "${_arguments_options[@]}" : \
 '*::args -- Additional arguments to pass to the push command:_default' \
 && ret=0
 ;;
+(reset)
+_arguments "${_arguments_options[@]}" : \
+'-f+[Config file to use instead of the default global/project hierarchy]:PATH:_files' \
+'--config-file=[Config file to use instead of the default global/project hierarchy]:PATH:_files' \
+'-i[Interactively pick which staged files to unstage (\`MultiSelect\` of staged files)]' \
+'--interactive[Interactively pick which staged files to unstage (\`MultiSelect\` of staged files)]' \
+'--dry-run[Show what would be unstaged without actually unstaging files]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'*::files -- Specific files to unstage (relative to the repo root). Unstages all staged files when omitted:_files' \
+&& ret=0
+;;
+(restore)
+_arguments "${_arguments_options[@]}" : \
+'-f+[Config file to use instead of the default global/project hierarchy]:PATH:_files' \
+'--config-file=[Config file to use instead of the default global/project hierarchy]:PATH:_files' \
+'-i[Interactively pick which modified files to discard (\`MultiSelect\` of changed files)]' \
+'--interactive[Interactively pick which modified files to discard (\`MultiSelect\` of changed files)]' \
+'-y[Skip the confirmation prompt before discarding changes]' \
+'--yes[Skip the confirmation prompt before discarding changes]' \
+'--dry-run[Show what would be restored without actually discarding changes]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'*::files -- Specific files to restore (relative to the repo root). Required unless `--interactive` is used:_files' \
+&& ret=0
+;;
 (set-editor)
 _arguments "${_arguments_options[@]}" : \
 '-f+[Config file to use instead of the default global/project hierarchy]:PATH:_files' \
@@ -298,6 +324,14 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
+(reset)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(restore)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
 (set-editor)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
@@ -331,6 +365,8 @@ _rona_commands() {
 'init:Initialize the rona configuration file' \
 'list-status:List files from git status (for shell completion on the -a)' \
 'push:Push to a git repository' \
+'reset:Unstage files, moving them out of the staging area without losing changes' \
+'restore:Discard working-tree changes, restoring files to their staged or committed state' \
 'set-editor:Set the editor to use for editing the commit message' \
 'sync:Sync current branch with main (or another branch) by pulling and merging/rebasing' \
 'help:Print this message or the help of the given subcommand(s)' \
@@ -418,6 +454,8 @@ _rona__subcmd__help_commands() {
 'init:Initialize the rona configuration file' \
 'list-status:List files from git status (for shell completion on the -a)' \
 'push:Push to a git repository' \
+'reset:Unstage files, moving them out of the staging area without losing changes' \
+'restore:Discard working-tree changes, restoring files to their staged or committed state' \
 'set-editor:Set the editor to use for editing the commit message' \
 'sync:Sync current branch with main (or another branch) by pulling and merging/rebasing' \
 'help:Print this message or the help of the given subcommand(s)' \
@@ -487,6 +525,16 @@ _rona__subcmd__help__subcmd__push_commands() {
     local commands; commands=()
     _describe -t commands 'rona help push commands' commands "$@"
 }
+(( $+functions[_rona__subcmd__help__subcmd__reset_commands] )) ||
+_rona__subcmd__help__subcmd__reset_commands() {
+    local commands; commands=()
+    _describe -t commands 'rona help reset commands' commands "$@"
+}
+(( $+functions[_rona__subcmd__help__subcmd__restore_commands] )) ||
+_rona__subcmd__help__subcmd__restore_commands() {
+    local commands; commands=()
+    _describe -t commands 'rona help restore commands' commands "$@"
+}
 (( $+functions[_rona__subcmd__help__subcmd__set-editor_commands] )) ||
 _rona__subcmd__help__subcmd__set-editor_commands() {
     local commands; commands=()
@@ -511,6 +559,16 @@ _rona__subcmd__list-status_commands() {
 _rona__subcmd__push_commands() {
     local commands; commands=()
     _describe -t commands 'rona push commands' commands "$@"
+}
+(( $+functions[_rona__subcmd__reset_commands] )) ||
+_rona__subcmd__reset_commands() {
+    local commands; commands=()
+    _describe -t commands 'rona reset commands' commands "$@"
+}
+(( $+functions[_rona__subcmd__restore_commands] )) ||
+_rona__subcmd__restore_commands() {
+    local commands; commands=()
+    _describe -t commands 'rona restore commands' commands "$@"
 }
 (( $+functions[_rona__subcmd__set-editor_commands] )) ||
 _rona__subcmd__set-editor_commands() {

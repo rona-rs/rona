@@ -35,6 +35,8 @@ set edit:completion:arg-completer[rona] = {|@words|
             cand init 'Initialize the rona configuration file'
             cand list-status 'List files from git status (for shell completion on the -a)'
             cand push 'Push to a git repository'
+            cand reset 'Unstage files, moving them out of the staging area without losing changes'
+            cand restore 'Discard working-tree changes, restoring files to their staged or committed state'
             cand set-editor 'Set the editor to use for editing the commit message'
             cand sync 'Sync current branch with main (or another branch) by pulling and merging/rebasing'
             cand help 'Print this message or the help of the given subcommand(s)'
@@ -154,6 +156,26 @@ set edit:completion:arg-completer[rona] = {|@words|
             cand -h 'Print help'
             cand --help 'Print help'
         }
+        &'rona;reset'= {
+            cand -f 'Config file to use instead of the default global/project hierarchy'
+            cand --config-file 'Config file to use instead of the default global/project hierarchy'
+            cand -i 'Interactively pick which staged files to unstage (`MultiSelect` of staged files)'
+            cand --interactive 'Interactively pick which staged files to unstage (`MultiSelect` of staged files)'
+            cand --dry-run 'Show what would be unstaged without actually unstaging files'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'rona;restore'= {
+            cand -f 'Config file to use instead of the default global/project hierarchy'
+            cand --config-file 'Config file to use instead of the default global/project hierarchy'
+            cand -i 'Interactively pick which modified files to discard (`MultiSelect` of changed files)'
+            cand --interactive 'Interactively pick which modified files to discard (`MultiSelect` of changed files)'
+            cand -y 'Skip the confirmation prompt before discarding changes'
+            cand --yes 'Skip the confirmation prompt before discarding changes'
+            cand --dry-run 'Show what would be restored without actually discarding changes'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
         &'rona;set-editor'= {
             cand -f 'Config file to use instead of the default global/project hierarchy'
             cand --config-file 'Config file to use instead of the default global/project hierarchy'
@@ -184,6 +206,8 @@ set edit:completion:arg-completer[rona] = {|@words|
             cand init 'Initialize the rona configuration file'
             cand list-status 'List files from git status (for shell completion on the -a)'
             cand push 'Push to a git repository'
+            cand reset 'Unstage files, moving them out of the staging area without losing changes'
+            cand restore 'Discard working-tree changes, restoring files to their staged or committed state'
             cand set-editor 'Set the editor to use for editing the commit message'
             cand sync 'Sync current branch with main (or another branch) by pulling and merging/rebasing'
             cand help 'Print this message or the help of the given subcommand(s)'
@@ -211,6 +235,10 @@ set edit:completion:arg-completer[rona] = {|@words|
         &'rona;help;list-status'= {
         }
         &'rona;help;push'= {
+        }
+        &'rona;help;reset'= {
+        }
+        &'rona;help;restore'= {
         }
         &'rona;help;set-editor'= {
         }

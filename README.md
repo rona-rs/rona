@@ -42,6 +42,7 @@ Rona is a command-line interface tool designed to enhance your Git workflow with
 ## Features
 
 - Intelligent file staging with pattern exclusion, working correctly from any subdirectory of the repository, including filenames with spaces
+- Interactive unstage and discard with checklists (`rona reset`, `rona restore`)
 - Structured commit message generation
 - Interactive branch creation from configurable name templates (`rona branch`)
 - Streamlined push operations
@@ -1044,6 +1045,63 @@ Push committed changes to remote repository.
 rona push [extra args]
 # or
 rona -p [extra args]
+```
+
+### `reset`
+
+Unstage files, moving them out of the staging area without losing any changes. This is the inverse of `add` and is a safe, non-destructive operation: your working-tree edits are preserved.
+
+```bash
+rona reset [FILES...]
+```
+
+**Options:**
+
+- `-i, --interactive` - Pick which staged files to unstage from a checklist
+- `--dry-run` - Preview what would be unstaged without changing anything
+
+**Behavior:**
+
+- With explicit `FILES`, only those files are unstaged.
+- With no arguments, every staged file is unstaged (like `git reset`).
+- With `-i`, a `MultiSelect` of staged files is shown and only the selected ones are unstaged.
+
+**Examples:**
+
+```bash
+rona reset                 # Unstage everything currently staged
+rona reset src/main.rs     # Unstage a single file
+rona reset -i              # Pick staged files to unstage from a checklist
+rona reset --dry-run       # Preview which files would be unstaged
+```
+
+### `restore`
+
+Discard working-tree changes, restoring files to their staged (or committed) state. This is **destructive**: unstaged edits to the affected files are lost, so a confirmation prompt is shown before anything is discarded (unless `--yes` or `--dry-run` is used). Untracked files are never touched.
+
+```bash
+rona restore [FILES...]
+```
+
+**Options:**
+
+- `-i, --interactive` - Pick which changed files to discard from a checklist
+- `-y, --yes` - Skip the confirmation prompt
+- `--dry-run` - Preview what would be restored without discarding anything
+
+**Behavior:**
+
+- With explicit `FILES`, those files are restored after confirmation.
+- With `-i`, a `MultiSelect` of changed (tracked) files is shown and only the selected ones are discarded.
+- With neither `FILES` nor `-i`, the command is a no-op and prints a hint, since discarding every change at once is rarely intended.
+
+**Examples:**
+
+```bash
+rona restore src/main.rs   # Discard changes to a single file (with confirmation)
+rona restore -i            # Pick changed files to discard from a checklist
+rona restore -y src/main.rs  # Discard without the confirmation prompt
+rona restore --dry-run src/main.rs  # Preview which files would be restored
 ```
 
 ### `set-editor` (`-s`)

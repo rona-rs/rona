@@ -241,6 +241,106 @@ pub fn get_stageable_files() -> Result<Vec<StatusEntry>> {
     Ok(entries)
 }
 
+/// Returns the files that currently have staged changes in the index.
+///
+/// Used by the interactive reset mode (`rona reset -i`) to present a `MultiSelect`
+/// of staged files that can be unstaged. The status label reflects the staged
+/// (index-side) change, e.g. "new file", "modified" or "deleted".
+///
+/// The list is sorted by path for stable, predictable ordering in the selector.
+///
+/// # Errors
+/// * If reading git status fails
+///
+/// # Returns
+/// * `Vec<StatusEntry>` - The staged files with their status labels
+pub fn get_staged_files() -> Result<Vec<StatusEntry>> {
+    let lines = run_git_status()?;
+    let mut entries = Vec::new();
+
+    for line in &lines {
+        if line.len() < 4 {
+            continue;
+        }
+
+        let index_char = line.chars().next().unwrap_or(' ');
+
+        // Skip entries with no staged change (unmodified or untracked index side).
+        if index_char == ' ' || index_char == '?' {
+            continue;
+        }
+
+        // For renamed/copied entries the path is "old -> new"; unstage the new path.
+        let raw_path = &line[3..];
+        let path_part = raw_path.rsplit(" -> ").next().unwrap_or(raw_path);
+        let path = unquote_git_path(path_part);
+
+        let status = match index_char {
+            'A' => "new file",
+            'D' => "deleted",
+            'R' => "renamed",
+            'C' => "copied",
+            'T' => "type change",
+            _ => "modified",
+        };
+
+        entries.push(StatusEntry { path, status });
+    }
+
+    entries.sort_by(|a, b| a.path.cmp(&b.path));
+    Ok(entries)
+}
+
+/// Returns the tracked files that have working-tree changes which can be discarded.
+///
+/// Used by the interactive restore mode (`rona restore -i`) to present a
+/// `MultiSelect` of files whose working-tree modifications, deletions or type
+/// changes can be reverted with `git restore`. Untracked files are excluded
+/// because `git restore` cannot act on them.
+///
+/// The list is sorted by path for stable, predictable ordering in the selector.
+///
+/// # Errors
+/// * If reading git status fails
+///
+/// # Returns
+/// * `Vec<StatusEntry>` - The restorable files with their status labels
+pub fn get_restorable_files() -> Result<Vec<StatusEntry>> {
+    let lines = run_git_status()?;
+    let mut entries = Vec::new();
+
+    for line in &lines {
+        if line.len() < 4 {
+            continue;
+        }
+
+        let mut chars = line.chars();
+        let index_char = chars.next().unwrap_or(' ');
+        let wt_char = chars.next().unwrap_or(' ');
+
+        // Only tracked files with working-tree changes can be restored.
+        if index_char == '?' || !matches!(wt_char, 'M' | 'D' | 'T') {
+            continue;
+        }
+
+        // For renamed-and-modified entries the path is "old -> new"; restore the new path.
+        let raw_path = &line[3..];
+        let path_part = raw_path.rsplit(" -> ").next().unwrap_or(raw_path);
+        let path = unquote_git_path(path_part);
+
+        let status = match wt_char {
+            'D' => "deleted",
+            'T' => "type change",
+            _ => "modified",
+        };
+
+        entries.push(StatusEntry { path, status });
+    }
+
+    entries.sort_by(|a, b| a.path.cmp(&b.path));
+    Ok(entries)
+}
+
 /// Processes deleted files that need to be staged for deletion.
 /// Only returns files that are deleted in the working directory but not yet staged.
 ///
