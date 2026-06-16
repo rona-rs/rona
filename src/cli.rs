@@ -44,8 +44,9 @@ use crate::{
     git::{
         COMMIT_MESSAGE_FILE_PATH, COMMIT_TYPES, add_to_git_exclude, create_needed_files,
         format_branch_name, generate_commit_message, get_current_branch, get_current_commit_nb,
-        get_stageable_files, get_status_files, get_top_level_path, git_add_files,
-        git_add_with_exclude_patterns, git_branch_only, git_commit, git_create_branch, git_push,
+        get_restorable_files, get_stageable_files, get_staged_files, get_status_files,
+        get_top_level_path, git_add_files, git_add_with_exclude_patterns, git_branch_only,
+        git_commit, git_create_branch, git_push, git_restore_files, git_unstage_files,
         sanitize_branch_name,
     },
     template::{
@@ -213,6 +214,42 @@ pub(crate) enum CliCommand {
         args: Vec<String>,
     },
 
+    /// Unstage files, moving them out of the staging area without losing changes.
+    #[command(name = "reset")]
+    Reset {
+        /// Specific files to unstage (relative to the repo root). Unstages all staged files when omitted.
+        #[arg(value_name = "FILES", value_hint = ValueHint::AnyPath)]
+        files: Vec<String>,
+
+        /// Interactively pick which staged files to unstage (`MultiSelect` of staged files)
+        #[arg(short = 'i', long = "interactive", default_value_t = false)]
+        interactive: bool,
+
+        /// Show what would be unstaged without actually unstaging files
+        #[arg(long, default_value_t = false)]
+        dry_run: bool,
+    },
+
+    /// Discard working-tree changes, restoring files to their staged or committed state.
+    #[command(name = "restore")]
+    Restore {
+        /// Specific files to restore (relative to the repo root). Required unless `--interactive` is used.
+        #[arg(value_name = "FILES", value_hint = ValueHint::AnyPath)]
+        files: Vec<String>,
+
+        /// Interactively pick which modified files to discard (`MultiSelect` of changed files)
+        #[arg(short = 'i', long = "interactive", default_value_t = false)]
+        interactive: bool,
+
+        /// Skip the confirmation prompt before discarding changes
+        #[arg(short = 'y', long = "yes", default_value_t = false)]
+        yes: bool,
+
+        /// Show what would be restored without actually discarding changes
+        #[arg(long, default_value_t = false)]
+        dry_run: bool,
+    },
+
     /// Set the editor to use for editing the commit message.
     #[command(short_flag = 's', name = "set-editor")]
     Set {
@@ -330,6 +367,11 @@ fn print_fish_custom_completions() {
     println!("# add-with-exclude: Complete with git status files");
     println!(
         "complete -c rona -n '__fish_seen_subcommand_from add-with-exclude -a' -xa '(__rona_status_files)'"
+    );
+    println!("# reset / restore: Complete with git status files");
+    println!("complete -c rona -n '__fish_seen_subcommand_from reset' -xa '(__rona_status_files)'");
+    println!(
+        "complete -c rona -n '__fish_seen_subcommand_from restore' -xa '(__rona_status_files)'"
     );
 }
 
@@ -617,6 +659,133 @@ fn handle_add_interactive(exclude: &[String], config: &Config) -> Result<()> {
     let paths: Vec<String> = selected.into_iter().map(|entry| entry.path).collect();
     git_add_files(&paths, config.dry_run)?;
     Ok(())
+}
+
+/// Handle the Reset command (`rona reset`), unstaging files from the index.
+///
+/// In interactive mode (`-i`) a `MultiSelect` of staged files is shown and only
+/// the selected files are unstaged. Otherwise the explicitly listed files are
+/// unstaged, or every staged file when none are given. Unstaging never touches
+/// the working tree, so local edits are preserved.
+///
+/// # Arguments
+/// * `files` - Explicit files to unstage (ignored in interactive mode)
+/// * `interactive` - Whether to pick files from a checklist
+/// * `config` - Global configuration including dry-run settings
+///
+/// # Errors
+/// * If reading git status fails
+/// * If the user cancels the prompt
+/// * If unstaging the files fails
+fn handle_reset(files: &[String], interactive: bool, config: &Config) -> Result<()> {
+    if interactive {
+        return handle_reset_interactive(config);
+    }
+
+    if !files.is_empty() {
+        return git_unstage_files(files, config.dry_run);
+    }
+
+    // No files given: unstage everything currently staged.
+    let staged: Vec<String> = get_staged_files()?
+        .into_iter()
+        .map(|entry| entry.path)
+        .collect();
+    git_unstage_files(&staged, config.dry_run)
+}
+
+/// Handle the interactive variant of the reset command (`rona reset -i`).
+///
+/// Presents a `MultiSelect` of every staged file and unstages only the ones the
+/// user selects.
+///
+/// # Arguments
+/// * `config` - Global configuration including dry-run settings
+///
+/// # Errors
+/// * If reading git status fails
+/// * If the user cancels the prompt
+/// * If unstaging the selected files fails
+fn handle_reset_interactive(config: &Config) -> Result<()> {
+    let entries = get_staged_files()?;
+    if entries.is_empty() {
+        println!("No staged files to unstage.");
+        return Ok(());
+    }
+
+    let selected = MultiSelect::new("Select files to unstage", entries)
+        .prompt()
+        .map_err(|_| RonaError::UserCancelled)?;
+
+    let paths: Vec<String> = selected.into_iter().map(|entry| entry.path).collect();
+    git_unstage_files(&paths, config.dry_run)
+}
+
+/// Handle the Restore command (`rona restore`), discarding working-tree changes.
+///
+/// This is destructive: unstaged edits to the affected files are lost. A
+/// confirmation prompt is shown before anything is discarded unless `--yes` or
+/// `--dry-run` is set. In interactive mode (`-i`) the files are chosen from a
+/// `MultiSelect` of changed files; otherwise the explicitly listed files are used.
+/// Running it with neither files nor `-i` is a no-op, since discarding every
+/// change at once is rarely intended.
+///
+/// # Arguments
+/// * `files` - Explicit files to restore (ignored in interactive mode)
+/// * `interactive` - Whether to pick files from a checklist
+/// * `yes` - Whether to skip the confirmation prompt
+/// * `config` - Global configuration including dry-run settings
+///
+/// # Errors
+/// * If reading git status fails
+/// * If the user cancels the prompt
+/// * If restoring the files fails
+fn handle_restore(files: &[String], interactive: bool, yes: bool, config: &Config) -> Result<()> {
+    let paths: Vec<String> = if interactive {
+        let entries = get_restorable_files()?;
+        if entries.is_empty() {
+            println!("No changes to restore.");
+            return Ok(());
+        }
+
+        let selected = MultiSelect::new("Select files to restore", entries)
+            .prompt()
+            .map_err(|_| RonaError::UserCancelled)?;
+
+        selected.into_iter().map(|entry| entry.path).collect()
+    } else if files.is_empty() {
+        println!(
+            "{} Specify files to restore or use -i/--interactive to pick them.",
+            "WARNING:".yellow().bold()
+        );
+        return Ok(());
+    } else {
+        files.to_vec()
+    };
+
+    if paths.is_empty() {
+        println!("No files selected.");
+        return Ok(());
+    }
+
+    // Discarding changes is irreversible: confirm unless explicitly skipped.
+    if !yes && !config.dry_run {
+        let message = format!(
+            "Discard working-tree changes to {} file(s)? This cannot be undone.",
+            paths.len()
+        );
+        let confirmed = Confirm::new(&message)
+            .with_default(false)
+            .prompt()
+            .unwrap_or(false);
+
+        if !confirmed {
+            println!("Restore cancelled.");
+            return Ok(());
+        }
+    }
+
+    git_restore_files(&paths, config.dry_run)
 }
 
 /// Handle the Commit command which commits changes using the message from `commit_message.md`.
@@ -1386,6 +1555,22 @@ fn handle_config_command(scope: ConfigScope, exclude: bool, config: &Config) -> 
     Ok(())
 }
 
+/// Initializes structured logging for the CLI.
+///
+/// Respects the `RUST_LOG` environment variable; falls back to `debug` when
+/// `--verbose` is set and `warn` otherwise. Safe to call once at startup.
+fn init_logging(verbose: bool) {
+    let log_level = if verbose { "debug" } else { "warn" };
+    let filter = tracing_subscriber::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new(log_level));
+    tracing_subscriber::fmt()
+        .with_env_filter(filter)
+        .with_target(false)
+        .compact()
+        .try_init()
+        .ok();
+}
+
 /// Runs the program by parsing command line arguments and executing the appropriate command.
 ///
 /// # Errors
@@ -1400,18 +1585,7 @@ pub fn run() -> Result<()> {
     inquire::set_global_render_config(get_render_config());
 
     let cli = Cli::parse();
-
-    // Initialize structured logging. Respects RUST_LOG env var; falls back to
-    // "debug" when --verbose is set, "warn" otherwise.
-    let log_level = if cli.verbose { "debug" } else { "warn" };
-    let filter = tracing_subscriber::EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new(log_level));
-    tracing_subscriber::fmt()
-        .with_env_filter(filter)
-        .with_target(false)
-        .compact()
-        .try_init()
-        .ok();
+    init_logging(cli.verbose);
 
     let mut config = if let Some(ref config_path) = cli.config {
         Config::new_with_config_file(std::path::Path::new(config_path))?
@@ -1488,6 +1662,25 @@ pub fn run() -> Result<()> {
         CliCommand::Push { args, dry_run } => {
             config.set_dry_run(dry_run);
             handle_push(&args, &config)
+        }
+
+        CliCommand::Reset {
+            files,
+            interactive,
+            dry_run,
+        } => {
+            config.set_dry_run(dry_run);
+            handle_reset(&files, interactive, &config)
+        }
+
+        CliCommand::Restore {
+            files,
+            interactive,
+            yes,
+            dry_run,
+        } => {
+            config.set_dry_run(dry_run);
+            handle_restore(&files, interactive, yes, &config)
         }
 
         CliCommand::Set { editor, dry_run } => {
@@ -1620,6 +1813,107 @@ mod cli_tests {
             return Err("Wrong command parsed".into());
         };
         assert!(interactive);
+        Ok(())
+    }
+
+    // === RESET COMMAND TESTS ===
+
+    #[test]
+    fn test_reset_basic() -> TestResult {
+        let cli = Cli::try_parse_from(["rona", "reset"])?;
+
+        let CliCommand::Reset {
+            files,
+            interactive,
+            dry_run,
+        } = cli.command
+        else {
+            return Err("Wrong command parsed".into());
+        };
+        assert!(files.is_empty());
+        assert!(!interactive);
+        assert!(!dry_run);
+        Ok(())
+    }
+
+    #[test]
+    fn test_reset_with_files() -> TestResult {
+        let cli = Cli::try_parse_from(["rona", "reset", "src/main.rs", "README.md"])?;
+
+        let CliCommand::Reset { files, .. } = cli.command else {
+            return Err("Wrong command parsed".into());
+        };
+        assert_eq!(files, vec!["src/main.rs", "README.md"]);
+        Ok(())
+    }
+
+    #[test]
+    fn test_reset_interactive() -> TestResult {
+        let cli = Cli::try_parse_from(["rona", "reset", "-i"])?;
+
+        let CliCommand::Reset { interactive, .. } = cli.command else {
+            return Err("Wrong command parsed".into());
+        };
+        assert!(interactive);
+        Ok(())
+    }
+
+    #[test]
+    fn test_reset_dry_run() -> TestResult {
+        let cli = Cli::try_parse_from(["rona", "reset", "--dry-run"])?;
+
+        let CliCommand::Reset { dry_run, .. } = cli.command else {
+            return Err("Wrong command parsed".into());
+        };
+        assert!(dry_run);
+        Ok(())
+    }
+
+    // === RESTORE COMMAND TESTS ===
+
+    #[test]
+    fn test_restore_basic() -> TestResult {
+        let cli = Cli::try_parse_from(["rona", "restore"])?;
+
+        let CliCommand::Restore {
+            files,
+            interactive,
+            yes,
+            dry_run,
+        } = cli.command
+        else {
+            return Err("Wrong command parsed".into());
+        };
+        assert!(files.is_empty());
+        assert!(!interactive);
+        assert!(!yes);
+        assert!(!dry_run);
+        Ok(())
+    }
+
+    #[test]
+    fn test_restore_with_files() -> TestResult {
+        let cli = Cli::try_parse_from(["rona", "restore", "src/main.rs"])?;
+
+        let CliCommand::Restore { files, .. } = cli.command else {
+            return Err("Wrong command parsed".into());
+        };
+        assert_eq!(files, vec!["src/main.rs"]);
+        Ok(())
+    }
+
+    #[test]
+    fn test_restore_interactive_and_yes() -> TestResult {
+        let cli = Cli::try_parse_from(["rona", "restore", "-i", "-y"])?;
+
+        let CliCommand::Restore {
+            interactive, yes, ..
+        } = cli.command
+        else {
+            return Err("Wrong command parsed".into());
+        };
+        assert!(interactive);
+        assert!(yes);
         Ok(())
     }
 

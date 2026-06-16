@@ -38,6 +38,8 @@ Register-ArgumentCompleter -Native -CommandName 'rona' -ScriptBlock {
             [CompletionResult]::new('init', 'init', [CompletionResultType]::ParameterValue, 'Initialize the rona configuration file')
             [CompletionResult]::new('list-status', 'list-status', [CompletionResultType]::ParameterValue, 'List files from git status (for shell completion on the -a)')
             [CompletionResult]::new('push', 'push', [CompletionResultType]::ParameterValue, 'Push to a git repository')
+            [CompletionResult]::new('reset', 'reset', [CompletionResultType]::ParameterValue, 'Unstage files, moving them out of the staging area without losing changes')
+            [CompletionResult]::new('restore', 'restore', [CompletionResultType]::ParameterValue, 'Discard working-tree changes, restoring files to their staged or committed state')
             [CompletionResult]::new('set-editor', 'set-editor', [CompletionResultType]::ParameterValue, 'Set the editor to use for editing the commit message')
             [CompletionResult]::new('sync', 'sync', [CompletionResultType]::ParameterValue, 'Sync current branch with main (or another branch) by pulling and merging/rebasing')
             [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
@@ -174,6 +176,28 @@ Register-ArgumentCompleter -Native -CommandName 'rona' -ScriptBlock {
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
+        'rona;reset' {
+            [CompletionResult]::new('-f', '-f', [CompletionResultType]::ParameterName, 'Config file to use instead of the default global/project hierarchy')
+            [CompletionResult]::new('--config-file', '--config-file', [CompletionResultType]::ParameterName, 'Config file to use instead of the default global/project hierarchy')
+            [CompletionResult]::new('-i', '-i', [CompletionResultType]::ParameterName, 'Interactively pick which staged files to unstage (`MultiSelect` of staged files)')
+            [CompletionResult]::new('--interactive', '--interactive', [CompletionResultType]::ParameterName, 'Interactively pick which staged files to unstage (`MultiSelect` of staged files)')
+            [CompletionResult]::new('--dry-run', '--dry-run', [CompletionResultType]::ParameterName, 'Show what would be unstaged without actually unstaging files')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'rona;restore' {
+            [CompletionResult]::new('-f', '-f', [CompletionResultType]::ParameterName, 'Config file to use instead of the default global/project hierarchy')
+            [CompletionResult]::new('--config-file', '--config-file', [CompletionResultType]::ParameterName, 'Config file to use instead of the default global/project hierarchy')
+            [CompletionResult]::new('-i', '-i', [CompletionResultType]::ParameterName, 'Interactively pick which modified files to discard (`MultiSelect` of changed files)')
+            [CompletionResult]::new('--interactive', '--interactive', [CompletionResultType]::ParameterName, 'Interactively pick which modified files to discard (`MultiSelect` of changed files)')
+            [CompletionResult]::new('-y', '-y', [CompletionResultType]::ParameterName, 'Skip the confirmation prompt before discarding changes')
+            [CompletionResult]::new('--yes', '--yes', [CompletionResultType]::ParameterName, 'Skip the confirmation prompt before discarding changes')
+            [CompletionResult]::new('--dry-run', '--dry-run', [CompletionResultType]::ParameterName, 'Show what would be restored without actually discarding changes')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
         'rona;set-editor' {
             [CompletionResult]::new('-f', '-f', [CompletionResultType]::ParameterName, 'Config file to use instead of the default global/project hierarchy')
             [CompletionResult]::new('--config-file', '--config-file', [CompletionResultType]::ParameterName, 'Config file to use instead of the default global/project hierarchy')
@@ -206,6 +230,8 @@ Register-ArgumentCompleter -Native -CommandName 'rona' -ScriptBlock {
             [CompletionResult]::new('init', 'init', [CompletionResultType]::ParameterValue, 'Initialize the rona configuration file')
             [CompletionResult]::new('list-status', 'list-status', [CompletionResultType]::ParameterValue, 'List files from git status (for shell completion on the -a)')
             [CompletionResult]::new('push', 'push', [CompletionResultType]::ParameterValue, 'Push to a git repository')
+            [CompletionResult]::new('reset', 'reset', [CompletionResultType]::ParameterValue, 'Unstage files, moving them out of the staging area without losing changes')
+            [CompletionResult]::new('restore', 'restore', [CompletionResultType]::ParameterValue, 'Discard working-tree changes, restoring files to their staged or committed state')
             [CompletionResult]::new('set-editor', 'set-editor', [CompletionResultType]::ParameterValue, 'Set the editor to use for editing the commit message')
             [CompletionResult]::new('sync', 'sync', [CompletionResultType]::ParameterValue, 'Sync current branch with main (or another branch) by pulling and merging/rebasing')
             [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
@@ -244,6 +270,12 @@ Register-ArgumentCompleter -Native -CommandName 'rona' -ScriptBlock {
             break
         }
         'rona;help;push' {
+            break
+        }
+        'rona;help;reset' {
+            break
+        }
+        'rona;help;restore' {
             break
         }
         'rona;help;set-editor' {
