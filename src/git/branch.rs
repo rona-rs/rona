@@ -199,19 +199,22 @@ pub fn format_branch_name(commit_types: &[&str], branch: &str) -> String {
 
 /// Sanitizes a string into a valid git branch name segment.
 ///
+/// The result is guaranteed to pass `git check-ref-format`. `.` is preserved so
+/// version-like descriptions such as `1.2.3` survive (yielding `release/1.2.3`),
+/// while git's ref-name restrictions on dots are enforced.
+///
 /// Applies these transformations:
-/// - Lowercases all characters
-/// - Replaces spaces and unsupported characters with `-`
-/// - Collapses consecutive `-` into a single `-`
-/// - Collapses consecutive `/` into a single `/`
-/// - Removes leading/trailing `-` from each `/`-separated segment
-/// - Removes a trailing `/`
+/// - Replaces spaces and unsupported characters with `-` (keeps `A-Za-z0-9/_-.`)
+/// - Collapses consecutive `-`, `.`, and `/` into a single character
+/// - Removes leading/trailing `-` and `.` from each `/`-separated segment
+/// - Strips a trailing `.lock` suffix from each segment
+/// - Drops empty segments (also removing leading/trailing `/`)
 #[must_use]
 pub fn sanitize_branch_name(name: &str) -> String {
     let sanitized: String = name
         .chars()
         .map(|c| {
-            if matches!(c, 'a'..='z' | 'A'..='Z' | '0'..='9' | '/' | '_' | '-') {
+            if matches!(c, 'a'..='z' | 'A'..='Z' | '0'..='9' | '/' | '_' | '-' | '.') {
                 c
             } else {
                 '-'
@@ -219,29 +222,40 @@ pub fn sanitize_branch_name(name: &str) -> String {
         })
         .collect();
 
-    // Collapse consecutive dashes and slashes
+    // Collapse consecutive dashes, dots, and slashes. `..` is forbidden by git,
+    // so collapsing dots keeps interior separators (e.g. `1.2.3`) while removing
+    // runs.
     let mut result = String::with_capacity(sanitized.len());
     let mut prev = '\0';
     for c in sanitized.chars() {
-        if c == '-' && prev == '-' {
-            continue;
-        }
-        if c == '/' && prev == '/' {
+        if matches!(c, '-' | '.' | '/') && c == prev {
             continue;
         }
         result.push(c);
         prev = c;
     }
 
-    // Clean each segment (between `/`) of leading/trailing `-`
+    // Clean each segment (between `/`): git forbids segments that start or end
+    // with `.`, so trim leading/trailing `-` and `.` and strip a trailing
+    // `.lock` suffix.
     let result: String = result
         .split('/')
-        .map(|seg| seg.trim_matches('-'))
+        .map(clean_branch_segment)
         .filter(|seg| !seg.is_empty())
         .collect::<Vec<_>>()
         .join("/");
 
     result
+}
+
+/// Cleans a single `/`-separated branch-name segment so it is a valid git ref
+/// component: no leading/trailing `-` or `.`, and no trailing `.lock` suffix.
+fn clean_branch_segment(seg: &str) -> &str {
+    let mut seg = seg.trim_matches(['-', '.']);
+    while let Some(stripped) = seg.strip_suffix(".lock") {
+        seg = stripped.trim_matches(['-', '.']);
+    }
+    seg
 }
 
 /// Creates a branch without switching to it using `git branch`.
@@ -421,4 +435,42 @@ pub fn git_rebase(branch_name: &str, verbose: bool) -> Result<()> {
     };
 
     handle_output("rebase", &output)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::sanitize_branch_name;
+
+    #[test]
+    fn preserves_dotted_version() {
+        assert_eq!(sanitize_branch_name("1.2.3"), "1.2.3");
+        assert_eq!(sanitize_branch_name("release/1.2.3"), "release/1.2.3");
+    }
+
+    #[test]
+    fn replaces_unsupported_chars_with_dash() {
+        assert_eq!(sanitize_branch_name("my feature"), "my-feature");
+        assert_eq!(sanitize_branch_name("a@b#c"), "a-b-c");
+    }
+
+    #[test]
+    fn collapses_runs() {
+        assert_eq!(sanitize_branch_name("a--b"), "a-b");
+        assert_eq!(sanitize_branch_name("1..2"), "1.2");
+        assert_eq!(sanitize_branch_name("a//b"), "a/b");
+    }
+
+    #[test]
+    fn trims_leading_and_trailing_separators_per_segment() {
+        assert_eq!(sanitize_branch_name(".hidden"), "hidden");
+        assert_eq!(sanitize_branch_name("ends."), "ends");
+        assert_eq!(sanitize_branch_name("-dash-/-x-"), "dash/x");
+        assert_eq!(sanitize_branch_name("/leading/"), "leading");
+    }
+
+    #[test]
+    fn strips_lock_suffix() {
+        assert_eq!(sanitize_branch_name("feature.lock"), "feature");
+        assert_eq!(sanitize_branch_name("release/1.2.3.lock"), "release/1.2.3");
+    }
 }
