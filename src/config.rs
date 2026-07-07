@@ -21,7 +21,7 @@
 //! - Invalid configuration format
 //! - Home directory not found
 
-use inquire::Select;
+use dialoguer::Select;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashSet,
@@ -701,12 +701,15 @@ impl Config {
 
         let options = vec!["Project (./.rona.toml)", "Global (~/.config/rona.toml)"];
 
-        let selection = Select::new("Where do you want to set the editor?", options)
-            .with_starting_cursor(0)
-            .prompt()
-            .map_err(|_| ConfigError::InvalidConfig)?;
+        let index = Select::with_theme(&crate::theme::prompt_theme())
+            .with_prompt("Where do you want to set the editor?")
+            .items(&options)
+            .default(0)
+            .interact_opt()
+            .map_err(|_| ConfigError::InvalidConfig)?
+            .ok_or(ConfigError::InvalidConfig)?;
 
-        let config_path = match selection {
+        let config_path = match options[index] {
             "Project (./.rona.toml)" => get_top_level_path().map(|root| root.join(".rona.toml"))?,
             "Global (~/.config/rona.toml)" => {
                 let home = dirs::home_dir().ok_or(ConfigError::ConfigNotFound)?;
@@ -759,12 +762,15 @@ impl Config {
         }
 
         let options = vec!["Project (.rona.toml)", "Global (~/.config/rona.toml)"];
-        let selection = Select::new("Where do you want to initialize the config?", options)
-            .with_starting_cursor(0)
-            .prompt()
-            .map_err(|_| ConfigError::InvalidConfig)?;
+        let index = Select::with_theme(&crate::theme::prompt_theme())
+            .with_prompt("Where do you want to initialize the config?")
+            .items(&options)
+            .default(0)
+            .interact_opt()
+            .map_err(|_| ConfigError::InvalidConfig)?
+            .ok_or(ConfigError::InvalidConfig)?;
 
-        let config_path = match selection {
+        let config_path = match options[index] {
             "Project (.rona.toml)" => env::current_dir()?.join(".rona.toml"),
             "Global (~/.config/rona.toml)" => {
                 let home = dirs::home_dir().ok_or(ConfigError::ConfigNotFound)?;

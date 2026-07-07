@@ -5,7 +5,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use inquire::{Select, Text, validator::Validation};
+use dialoguer::{Input, Select};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 
@@ -227,11 +227,15 @@ fn prompt_as_select(
     }
     options.push(OTHER_OPTION.to_string());
 
-    let selected = Select::new(prompt_text, options)
-        .prompt()
-        .map_err(|_| RonaError::UserCancelled)?;
+    let index = Select::with_theme(&crate::theme::prompt_theme())
+        .with_prompt(prompt_text)
+        .items(&options)
+        .default(0)
+        .interact_opt()
+        .map_err(|_| RonaError::UserCancelled)?
+        .ok_or(RonaError::UserCancelled)?;
 
-    match selected.as_str() {
+    match options[index].as_str() {
         s if s == NONE_OPTION => Ok(None),
         s if s == OTHER_OPTION => prompt_as_text(field, prompt_text, None::<&str>, validator_regex),
         value => Ok(Some(value.to_string())),
@@ -248,38 +252,42 @@ fn prompt_as_text(
     let pattern_str = field.validation.clone();
     let needs_validator = required || validator_regex.is_some();
 
+    let theme = crate::theme::prompt_theme();
     let value = if needs_validator {
-        let mut text_prompt = Text::new(prompt_text);
+        let mut text_prompt = Input::<String>::with_theme(&theme)
+            .with_prompt(prompt_text)
+            .allow_empty(true);
         if let Some(d) = default {
-            text_prompt = text_prompt.with_default(d);
+            text_prompt = text_prompt.default(d.to_string());
         }
         text_prompt
-            .with_validator(move |input: &str| {
+            .validate_with(move |input: &String| -> std::result::Result<(), String> {
                 if required && input.trim().is_empty() {
-                    return Ok(Validation::Invalid("This field is required.".into()));
+                    return Err("This field is required.".to_string());
                 }
                 if let Some(ref re) = validator_regex
                     && !input.is_empty()
                     && !re.is_match(input)
                 {
-                    return Ok(Validation::Invalid(
-                        format!(
-                            "Must match pattern: {}",
-                            pattern_str.as_deref().unwrap_or("")
-                        )
-                        .into(),
+                    return Err(format!(
+                        "Must match pattern: {}",
+                        pattern_str.as_deref().unwrap_or("")
                     ));
                 }
-                Ok(Validation::Valid)
+                Ok(())
             })
-            .prompt()
+            .interact_text()
             .map_err(|_| RonaError::UserCancelled)?
     } else {
-        let mut text_prompt = Text::new(prompt_text);
+        let mut text_prompt = Input::<String>::with_theme(&theme)
+            .with_prompt(prompt_text)
+            .allow_empty(true);
         if let Some(d) = default {
-            text_prompt = text_prompt.with_default(d);
+            text_prompt = text_prompt.default(d.to_string());
         }
-        text_prompt.prompt().map_err(|_| RonaError::UserCancelled)?
+        text_prompt
+            .interact_text()
+            .map_err(|_| RonaError::UserCancelled)?
     };
 
     if value.is_empty() && !required {
