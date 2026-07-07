@@ -29,9 +29,8 @@
 use clap::{Command as ClapCommand, CommandFactory, Parser, Subcommand, ValueEnum, ValueHint};
 use clap_complete::{Shell, generate};
 use colored::Colorize;
+use dialoguer::{Confirm, Input, MultiSelect, Select};
 use glob::Pattern;
-use inquire::ui::{Attributes, Color, RenderConfig, StyleSheet, Styled};
-use inquire::{Confirm, MultiSelect, Select, Text};
 use std::{collections::HashMap, fs::read_to_string, io, process::Command};
 
 use crate::{
@@ -53,6 +52,7 @@ use crate::{
         BranchTemplateVariables, TemplateVariables, process_branch_template, process_template,
         validate_branch_template, validate_template,
     },
+    theme::prompt_theme,
 };
 
 /// Configuration scope for config command
@@ -314,45 +314,6 @@ fn build_cli() -> ClapCommand {
     Cli::command()
 }
 
-fn get_render_config() -> RenderConfig<'static> {
-    let mut render_config = RenderConfig::default();
-
-    // Prefix/icons
-    render_config.prompt_prefix = Styled::new("$").with_fg(Color::LightRed);
-    render_config.answered_prompt_prefix = Styled::new("✔").with_fg(Color::LightGreen);
-    render_config.highlighted_option_prefix = Styled::new("➠").with_fg(Color::LightBlue);
-    render_config.selected_checkbox = Styled::new("[x]").with_fg(Color::LightGreen);
-    render_config.unselected_checkbox = Styled::new("[ ]").with_fg(Color::Black);
-    render_config.scroll_up_prefix = Styled::new("⇞").with_fg(Color::Black);
-    render_config.scroll_down_prefix = Styled::new("⇟").with_fg(Color::Black);
-
-    // Input prompt label
-    render_config.prompt = StyleSheet::new()
-        .with_fg(Color::LightCyan)
-        .with_attr(Attributes::BOLD);
-
-    // Help under the input
-    render_config.help_message = StyleSheet::new()
-        .with_fg(Color::DarkYellow)
-        .with_attr(Attributes::ITALIC);
-
-    // Validation error
-    render_config.error_message = render_config
-        .error_message
-        .with_prefix(Styled::new("✗").with_fg(Color::LightRed));
-
-    // Shown after submit (echoed answer)
-    render_config.answer = StyleSheet::new()
-        .with_fg(Color::LightMagenta)
-        .with_attr(Attributes::BOLD);
-
-    // Optional: default/placeholder styles
-    render_config.default_value = StyleSheet::new().with_fg(Color::LightBlue);
-    render_config.placeholder = StyleSheet::new().with_fg(Color::Black);
-
-    render_config
-}
-
 /// Print custom fish shell completions that enhance the auto-generated ones
 #[doc(hidden)]
 fn print_fish_custom_completions() {
@@ -388,8 +349,6 @@ fn prompt_branch_fields(
     needs_description: bool,
     description_config: Option<&BuiltInFieldConfig>,
 ) -> Result<(String, HashMap<String, String>)> {
-    use inquire::validator::Validation;
-
     const DESCRIPTION_KEY: &str = "description";
 
     let description_disabled = description_config.is_some_and(|c| c.disabled);
@@ -430,20 +389,23 @@ fn prompt_branch_fields(
                     ))
                 })?;
                 let pattern_owned = pattern.to_string();
-                Text::new(prompt_text)
-                    .with_validator(move |input: &str| {
-                        if !re.is_match(input) {
-                            return Ok(Validation::Invalid(
-                                format!("Must match pattern: {pattern_owned}").into(),
-                            ));
+                Input::<String>::with_theme(&prompt_theme())
+                    .with_prompt(prompt_text)
+                    .allow_empty(true)
+                    .validate_with(move |input: &String| -> std::result::Result<(), String> {
+                        if re.is_match(input) {
+                            Ok(())
+                        } else {
+                            Err(format!("Must match pattern: {pattern_owned}"))
                         }
-                        Ok(Validation::Valid)
                     })
-                    .prompt()
+                    .interact_text()
                     .map_err(|_| RonaError::UserCancelled)?
             } else {
-                Text::new(prompt_text)
-                    .prompt()
+                Input::<String>::with_theme(&prompt_theme())
+                    .with_prompt(prompt_text)
+                    .allow_empty(true)
+                    .interact_text()
                     .map_err(|_| RonaError::UserCancelled)?
             };
             description = Some(value);
@@ -542,11 +504,14 @@ fn handle_branch(no_switch: bool, config: &Config) -> Result<()> {
     }
 
     let branch_type = if needs_branch_type {
-        Select::new("Select branch type", types_for_branch)
-            .with_starting_cursor(0)
-            .prompt()
+        let index = Select::with_theme(&prompt_theme())
+            .with_prompt("Select branch type")
+            .items(&types_for_branch)
+            .default(0)
+            .interact_opt()
             .map_err(|_| RonaError::UserCancelled)?
-            .to_string()
+            .ok_or(RonaError::UserCancelled)?;
+        types_for_branch[index].to_string()
     } else {
         String::new()
     };
@@ -652,11 +617,17 @@ fn handle_add_interactive(exclude: &[String], config: &Config) -> Result<()> {
         return Ok(());
     }
 
-    let selected = MultiSelect::new("Select files to stage", entries)
-        .prompt()
-        .map_err(|_| RonaError::UserCancelled)?;
+    let selected = MultiSelect::with_theme(&prompt_theme())
+        .with_prompt("Select files to stage")
+        .items(&entries)
+        .interact_opt()
+        .map_err(|_| RonaError::UserCancelled)?
+        .ok_or(RonaError::UserCancelled)?;
 
-    let paths: Vec<String> = selected.into_iter().map(|entry| entry.path).collect();
+    let paths: Vec<String> = selected
+        .into_iter()
+        .map(|index| entries[index].path.clone())
+        .collect();
     git_add_files(&paths, config.dry_run)?;
     Ok(())
 }
@@ -713,11 +684,17 @@ fn handle_reset_interactive(config: &Config) -> Result<()> {
         return Ok(());
     }
 
-    let selected = MultiSelect::new("Select files to unstage", entries)
-        .prompt()
-        .map_err(|_| RonaError::UserCancelled)?;
+    let selected = MultiSelect::with_theme(&prompt_theme())
+        .with_prompt("Select files to unstage")
+        .items(&entries)
+        .interact_opt()
+        .map_err(|_| RonaError::UserCancelled)?
+        .ok_or(RonaError::UserCancelled)?;
 
-    let paths: Vec<String> = selected.into_iter().map(|entry| entry.path).collect();
+    let paths: Vec<String> = selected
+        .into_iter()
+        .map(|index| entries[index].path.clone())
+        .collect();
     git_unstage_files(&paths, config.dry_run)
 }
 
@@ -748,11 +725,17 @@ fn handle_restore(files: &[String], interactive: bool, yes: bool, config: &Confi
             return Ok(());
         }
 
-        let selected = MultiSelect::new("Select files to restore", entries)
-            .prompt()
-            .map_err(|_| RonaError::UserCancelled)?;
+        let selected = MultiSelect::with_theme(&prompt_theme())
+            .with_prompt("Select files to restore")
+            .items(&entries)
+            .interact_opt()
+            .map_err(|_| RonaError::UserCancelled)?
+            .ok_or(RonaError::UserCancelled)?;
 
-        selected.into_iter().map(|entry| entry.path).collect()
+        selected
+            .into_iter()
+            .map(|index| entries[index].path.clone())
+            .collect()
     } else if files.is_empty() {
         println!(
             "{} Specify files to restore or use -i/--interactive to pick them.",
@@ -774,9 +757,10 @@ fn handle_restore(files: &[String], interactive: bool, yes: bool, config: &Confi
             "Discard working-tree changes to {} file(s)? This cannot be undone.",
             paths.len()
         );
-        let confirmed = Confirm::new(&message)
-            .with_default(false)
-            .prompt()
+        let confirmed = Confirm::with_theme(&prompt_theme())
+            .with_prompt(&message)
+            .default(false)
+            .interact()
             .unwrap_or(false);
 
         if !confirmed {
@@ -848,9 +832,10 @@ fn handle_commit(
     if !yes && !config.dry_run {
         // Show confirmation prompt
         let confirmation_message = format!("Commit with message:\n{}", commit_message.trim());
-        let confirm = Confirm::new(&confirmation_message)
-            .with_default(true)
-            .prompt()
+        let confirm = Confirm::with_theme(&prompt_theme())
+            .with_prompt(&confirmation_message)
+            .default(true)
+            .interact()
             .unwrap_or(false);
 
         if !confirm {
@@ -894,8 +879,6 @@ fn prompt_interactive_fields(
     message_prefetch: Option<&MessagePrefetchConfig>,
     message_config: Option<&BuiltInFieldConfig>,
 ) -> Result<(String, HashMap<String, String>)> {
-    use inquire::validator::Validation;
-
     const MESSAGE_KEY: &str = "message";
 
     let message_disabled = message_config.is_some_and(|c| c.disabled);
@@ -934,32 +917,38 @@ fn prompt_interactive_fields(
                 .transpose()?
                 .flatten();
             let validator_pattern = message_config.and_then(|c| c.validation.as_deref());
+            let theme = prompt_theme();
             let value = if let Some(pattern) = validator_pattern {
                 let re = regex::Regex::new(pattern).map_err(|e| {
                     RonaError::InvalidInput(format!("Invalid validation regex for message: {e}"))
                 })?;
                 let pattern_owned = pattern.to_string();
-                let mut text_prompt = Text::new(prompt_text);
+                let mut text_prompt = Input::<String>::with_theme(&theme)
+                    .with_prompt(prompt_text)
+                    .allow_empty(true);
                 if let Some(ref d) = default {
-                    text_prompt = text_prompt.with_default(d.as_str());
+                    text_prompt = text_prompt.default(d.clone());
                 }
                 text_prompt
-                    .with_validator(move |input: &str| {
-                        if !re.is_match(input) {
-                            return Ok(Validation::Invalid(
-                                format!("Must match pattern: {pattern_owned}").into(),
-                            ));
+                    .validate_with(move |input: &String| -> std::result::Result<(), String> {
+                        if re.is_match(input) {
+                            Ok(())
+                        } else {
+                            Err(format!("Must match pattern: {pattern_owned}"))
                         }
-                        Ok(Validation::Valid)
                     })
-                    .prompt()
+                    .interact_text()
                     .map_err(|_| RonaError::UserCancelled)?
             } else {
-                let mut text_prompt = Text::new(prompt_text);
+                let mut text_prompt = Input::<String>::with_theme(&theme)
+                    .with_prompt(prompt_text)
+                    .allow_empty(true);
                 if let Some(ref d) = default {
-                    text_prompt = text_prompt.with_default(d.as_str());
+                    text_prompt = text_prompt.default(d.clone());
                 }
-                text_prompt.prompt().map_err(|_| RonaError::UserCancelled)?
+                text_prompt
+                    .interact_text()
+                    .map_err(|_| RonaError::UserCancelled)?
             };
             message = Some(value);
         } else if let Some(field) = extra_fields.iter().find(|f| f.name == *name)
@@ -1002,10 +991,14 @@ fn handle_generate(interactive: bool, no_commit_number: bool, config: &Config) -
             |v| v.iter().map(String::as_str).collect::<Vec<&str>>(),
         );
 
-        Select::new("Select commit type", commit_types_vec)
-            .with_starting_cursor(0)
-            .prompt()
+        let index = Select::with_theme(&prompt_theme())
+            .with_prompt("Select commit type")
+            .items(&commit_types_vec)
+            .default(0)
+            .interact_opt()
             .map_err(|_| RonaError::UserCancelled)?
+            .ok_or(RonaError::UserCancelled)?;
+        commit_types_vec[index]
     };
 
     if interactive {
@@ -1102,7 +1095,7 @@ fn handle_interactive_mode(
             )
         };
         fs::write(&commit_file_path, &formatted_message)?;
-        println!("\n{} Commit message created!", "✔".green());
+        println!("\n{} Commit message created!", "✓".green());
         println!("Message: {formatted_message}");
         return Ok(());
     }
@@ -1121,7 +1114,7 @@ fn handle_interactive_mode(
     // Write the formatted message to commit_message.md
     fs::write(&commit_file_path, &formatted_message)?;
 
-    println!("\n{} Commit message created!", "✔".green());
+    println!("\n{} Commit message created!", "✓".green());
     println!("Message: {formatted_message}");
     Ok(())
 }
@@ -1581,9 +1574,6 @@ fn init_logging(verbose: bool) {
 /// # Returns
 /// * `Result<()>` - Ok if all operations succeed, Err with error details otherwise
 pub fn run() -> Result<()> {
-    // Apply global colors/styles for all inquire prompts
-    inquire::set_global_render_config(get_render_config());
-
     let cli = Cli::parse();
     init_logging(cli.verbose);
 
