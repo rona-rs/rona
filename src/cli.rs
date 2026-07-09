@@ -29,7 +29,7 @@
 use clap::{Command as ClapCommand, CommandFactory, Parser, Subcommand, ValueEnum, ValueHint};
 use clap_complete::{Shell, generate};
 use colored::Colorize;
-use dialoguer::{Confirm, Input, MultiSelect, Select};
+use dialoguer::{Confirm, FuzzySelect, Input, MultiSelect};
 use glob::Pattern;
 use std::{collections::HashMap, fs::read_to_string, io, process::Command};
 
@@ -504,7 +504,7 @@ fn handle_branch(no_switch: bool, config: &Config) -> Result<()> {
     }
 
     let branch_type = if needs_branch_type {
-        let index = Select::with_theme(&prompt_theme())
+        let index = FuzzySelect::with_theme(&prompt_theme())
             .with_prompt("Select branch type")
             .items(&types_for_branch)
             .default(0)
@@ -991,7 +991,7 @@ fn handle_generate(interactive: bool, no_commit_number: bool, config: &Config) -
             |v| v.iter().map(String::as_str).collect::<Vec<&str>>(),
         );
 
-        let index = Select::with_theme(&prompt_theme())
+        let index = FuzzySelect::with_theme(&prompt_theme())
             .with_prompt("Select commit type")
             .items(&commit_types_vec)
             .default(0)
