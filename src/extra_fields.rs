@@ -5,7 +5,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use dialoguer::{Input, Select};
+use dialoguer::{FuzzySelect, Input};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 
@@ -227,7 +227,7 @@ fn prompt_as_select(
     }
     options.push(OTHER_OPTION.to_string());
 
-    let index = Select::with_theme(&crate::theme::prompt_theme())
+    let index = FuzzySelect::with_theme(&crate::theme::prompt_theme())
         .with_prompt(prompt_text)
         .items(&options)
         .default(0)

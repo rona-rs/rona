@@ -21,7 +21,7 @@
 //! - Invalid configuration format
 //! - Home directory not found
 
-use dialoguer::Select;
+use dialoguer::FuzzySelect;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashSet,
@@ -701,7 +701,7 @@ impl Config {
 
         let options = vec!["Project (./.rona.toml)", "Global (~/.config/rona.toml)"];
 
-        let index = Select::with_theme(&crate::theme::prompt_theme())
+        let index = FuzzySelect::with_theme(&crate::theme::prompt_theme())
             .with_prompt("Where do you want to set the editor?")
             .items(&options)
             .default(0)
@@ -762,7 +762,7 @@ impl Config {
         }
 
         let options = vec!["Project (.rona.toml)", "Global (~/.config/rona.toml)"];
-        let index = Select::with_theme(&crate::theme::prompt_theme())
+        let index = FuzzySelect::with_theme(&crate::theme::prompt_theme())
             .with_prompt("Where do you want to initialize the config?")
             .items(&options)
             .default(0)
