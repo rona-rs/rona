@@ -466,23 +466,37 @@ fn handle_branch(no_switch: bool, config: &Config) -> Result<()> {
     let needs_description =
         template.contains("{description}") || template.contains("{?description}");
 
-    // Build the effective field list for branch prompts: start with branch_extra_fields, then
-    // pull in any commit_extra_fields whose names are referenced in the template but not already
+    // A field is "referenced" when {name} or {?name} appears anywhere in the template.
+    let is_referenced = |name: &str| {
+        template.contains(&format!("{{{name}}}")) || template.contains(&format!("{{?{name}}}"))
+    };
+
+    // Build the effective field list for branch prompts. Only fields referenced in the template
+    // are prompted: fields inherited from an extended config (or otherwise configured) but unused
+    // by this template are skipped rather than prompted for a value that would be discarded.
+    let mut effective_branch_fields: Vec<ExtraField> = Vec::new();
+    for field in &config.project_config.branch_extra_fields {
+        if is_referenced(&field.name) {
+            effective_branch_fields.push(field.clone());
+        } else {
+            println!(
+                "[NOTE] Branch extra field '{}' is not referenced in the template; skipping.",
+                field.name
+            );
+        }
+    }
+    // Pull in any commit_extra_fields whose names are referenced in the template but not already
     // covered by a branch_extra_field with the same name.
-    let mut effective_branch_fields: Vec<ExtraField> =
-        config.project_config.branch_extra_fields.clone();
     for commit_field in &config.project_config.commit_extra_fields {
-        let in_template = template.contains(&format!("{{{}}}", commit_field.name))
-            || template.contains(&format!("{{?{}}}", commit_field.name));
         let already_present = effective_branch_fields
             .iter()
             .any(|f| f.name == commit_field.name);
-        if in_template && !already_present {
+        if is_referenced(&commit_field.name) && !already_present {
             effective_branch_fields.push(commit_field.clone());
         }
     }
 
-    // Validate template and warn about unreferenced fields before prompting the user.
+    // Validate template before prompting the user.
     let extra_names: Vec<&str> = effective_branch_fields
         .iter()
         .map(|f| f.name.as_str())
@@ -491,16 +505,6 @@ fn handle_branch(no_switch: bool, config: &Config) -> Result<()> {
         return Err(RonaError::InvalidInput(format!(
             "Branch template validation error: {e}"
         )));
-    }
-    for field in &config.project_config.branch_extra_fields {
-        let referenced = template.contains(&format!("{{{}}}", field.name))
-            || template.contains(&format!("{{?{}}}", field.name));
-        if !referenced {
-            println!(
-                "[WARNING] Branch extra field '{}' is configured but not referenced in the template.",
-                field.name
-            );
-        }
     }
 
     let branch_type = if needs_branch_type {
@@ -964,6 +968,13 @@ fn prompt_interactive_fields(
     Ok((message, extra_values))
 }
 
+/// The default commit-message template used when none is configured.
+///
+/// The conditional block `{?commit_number}...{/commit_number}` is only included when
+/// `commit_number` has a value.
+const DEFAULT_COMMIT_TEMPLATE: &str =
+    "{?commit_number}[{commit_number}] {/commit_number}({commit_type} on {branch_name}) {message}";
+
 /// Handle the Generate command which creates a new commit message file.
 ///
 /// # Arguments
@@ -1002,9 +1013,35 @@ fn handle_generate(interactive: bool, no_commit_number: bool, config: &Config) -
     };
 
     if interactive {
+        // Only prompt for extra fields referenced in the commit template. Fields inherited from
+        // an extended config (or otherwise configured) but unused by this template are skipped
+        // rather than prompted for a value that would be discarded.
+        let commit_template = config
+            .project_config
+            .commit_template
+            .as_deref()
+            .unwrap_or(DEFAULT_COMMIT_TEMPLATE);
+        let referenced_fields: Vec<ExtraField> = config
+            .project_config
+            .commit_extra_fields
+            .iter()
+            .filter(|f| {
+                let referenced = commit_template.contains(&format!("{{{}}}", f.name))
+                    || commit_template.contains(&format!("{{?{}}}", f.name));
+                if !referenced {
+                    println!(
+                        "[NOTE] Extra field '{}' is not referenced in the template; skipping.",
+                        f.name
+                    );
+                }
+                referenced
+            })
+            .cloned()
+            .collect();
+
         // In interactive mode, prompt all fields (including message) in configured order
         let (message, extra_values) = prompt_interactive_fields(
-            &config.project_config.commit_extra_fields,
+            &referenced_fields,
             &config.project_config.commit_fields_order,
             config.project_config.message_prefetch.as_ref(),
             config.project_config.commit_message.as_ref(),
@@ -1053,27 +1090,11 @@ fn handle_interactive_mode(
     };
 
     // Get template from config or use default with conditional syntax
-    // The conditional block {?commit_number}...{/commit_number} is only included if commit_number has a value
-    let default_template = "{?commit_number}[{commit_number}] {/commit_number}({commit_type} on {branch_name}) {message}";
-
     let template = config
         .project_config
         .commit_template
         .as_deref()
-        .unwrap_or(default_template);
-
-    // Warn about extra fields that are configured but not referenced in the template.
-    // A field is considered "used" if {name} or {?name} appears anywhere in the template.
-    for field in &config.project_config.commit_extra_fields {
-        let referenced = template.contains(&format!("{{{}}}", field.name))
-            || template.contains(&format!("{{?{}}}", field.name));
-        if !referenced {
-            println!(
-                "[WARNING] Extra field '{}' is configured but not referenced in the template.",
-                field.name
-            );
-        }
-    }
+        .unwrap_or(DEFAULT_COMMIT_TEMPLATE);
 
     // Validate template (including any extra field variable names)
     let extra_names: Vec<&str> = extra_values.keys().map(String::as_str).collect();

@@ -174,6 +174,56 @@ editor = "vim"  # overrides whatever editor is set in the base
 
 The path is resolved relative to the `.rona.toml` file that declares it. Absolute paths are also supported. If the referenced file does not exist, Rona exits with a clear error.
 
+#### Unreferenced extra fields are skipped
+
+When a config extends another, extra fields are merged by `name`: same-name fields are overridden by the child, and fields the child does not redefine are inherited from the base. Rona only prompts for an extra field that the active template actually references (as `{name}` or `{?name}`). If an inherited field is not referenced by your template, it is skipped with a `[NOTE]` line instead of asking you for a value that would be discarded. This applies independently to `rona branch` (checked against `branch_template`) and `rona -g -i` (checked against `commit_template`).
+
+For example, given a base config that defines a `ticket` field and uses it in both templates:
+
+```toml
+# ~/configs/rona-base.toml
+branch_template = "{branch_type}/{?ticket}{ticket}_{/ticket}{description}"
+commit_template = "{commit_type}({scope}): {message} {ticket}"
+
+[[branch_extra_fields]]
+name = "ticket"
+kind = "text"
+
+[[commit_extra_fields]]
+name = "scope"
+kind = "select"
+
+[[commit_extra_fields]]
+name = "ticket"
+kind = "text"
+```
+
+And a project config that overrides `branch_template` (dropping `{ticket}`) but leaves `commit_template` inherited:
+
+```toml
+# .rona.toml
+extends = "~/configs/rona-base.toml"
+branch_template = "{branch_type}/{service}/{version}"
+
+[[branch_extra_fields]]
+name = "service"
+kind = "select"
+
+[[branch_extra_fields]]
+name = "version"
+kind = "text"
+```
+
+Then:
+
+- `rona branch` prompts for `service` and `version` only. The inherited `ticket` field is not in `branch_template`, so it is skipped:
+
+  ```text
+  [NOTE] Branch extra field 'ticket' is not referenced in the template; skipping.
+  ```
+
+- `rona -g -i` still prompts for both `scope` and `ticket`, because the inherited `commit_template` references `{scope}` and `{ticket}`. Nothing is skipped on the commit side.
+
 ### Template Configuration
 
 Rona supports customizable templates for interactive commit message generation. You can define how your commit messages are formatted using variables:
@@ -1004,6 +1054,8 @@ Rona uses the `dialoguer` crate for interactive prompts with a custom color sche
 - Answer text: light magenta + bold
 
 If you prefer different colors, you can fork and adjust the shared theme in `src/theme.rs` (function `prompt_theme`), which every prompt receives via `with_theme(...)`.
+
+Single-choice prompts (commit type, branch type, and other selection fields) use a fuzzy `FuzzySelect`: start typing to filter the list instead of scrolling through it with the arrow keys. File pickers remain multi-select checkboxes.
 
 **Commit Types:**
 
