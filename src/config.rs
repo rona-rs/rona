@@ -63,6 +63,153 @@ pub struct ConfigInfo {
 // Define your default commit types
 const DEFAULT_COMMIT_TYPES: &[&str] = &["feat", "fix", "docs", "test", "chore"];
 
+/// A path-conditional config layer, declared as `[[overrides]]` in a config file.
+///
+/// When rona runs from a directory matching `path`, the config file referenced by
+/// `config` is layered in above the global config and below the project `.rona.toml`.
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct ConfigOverride {
+    /// Glob pattern matched against the directory rona runs from.
+    /// A leading `~/` is expanded to the user's home directory.
+    /// A pattern with no wildcard matches that directory and every descendant.
+    pub path: String,
+
+    /// Path to the config file to layer in when `path` matches.
+    /// Relative paths resolve against the config file declaring the override,
+    /// and a leading `~/` is expanded to the user's home directory.
+    pub config: String,
+}
+
+/// Expands a leading `~/` to the user's home directory.
+fn expand_tilde(value: &str) -> String {
+    value.strip_prefix("~/").map_or_else(
+        || value.to_string(),
+        |rest| {
+            dirs::home_dir().map_or_else(
+                || value.to_string(),
+                |home| home.join(rest).display().to_string(),
+            )
+        },
+    )
+}
+
+/// Returns `true` when `dir` is covered by an override's `path` pattern.
+///
+/// Matching is intentionally forgiving:
+/// 1. The pattern is matched as a glob against the full directory path.
+/// 2. A trailing `/**` or `/*` also matches the base directory itself.
+/// 3. A wildcard-free pattern matches that directory and all of its descendants.
+fn override_pattern_matches(pattern: &str, dir: &Path) -> bool {
+    let expanded = expand_tilde(pattern);
+
+    if glob::Pattern::new(&expanded).is_ok_and(|p| p.matches_path(dir)) {
+        return true;
+    }
+
+    if let Some(base) = expanded
+        .strip_suffix("/**")
+        .or_else(|| expanded.strip_suffix("/*"))
+        && glob::Pattern::new(base).is_ok_and(|p| p.matches_path(dir))
+    {
+        return true;
+    }
+
+    !expanded.contains(['*', '?', '[']) && dir.starts_with(&expanded)
+}
+
+/// Peeks at the `overrides` key of a TOML config file without full deserialization.
+#[derive(Deserialize)]
+struct OverridesOnly {
+    #[serde(default)]
+    overrides: Vec<ConfigOverride>,
+}
+
+/// A config file pulled in by a matching `[[overrides]]` entry, paired with the
+/// `path` pattern that selected it (so it can be reported to the user).
+#[derive(Debug, Clone)]
+struct OverrideSource {
+    path: PathBuf,
+    /// The override's `path` glob that matched the current directory.
+    pattern: String,
+}
+
+/// Collects the config files pulled in by `[[overrides]]` entries that match `dir`.
+///
+/// `declaring_paths` are the config files to read overrides from (the global configs),
+/// in loading order. Returned paths are base-first and include each override target's
+/// own `extends` chain, each tagged with the pattern that pulled it in. Override
+/// targets that do not exist are skipped.
+fn collect_override_sources(
+    declaring_paths: &[PathBuf],
+    dir: &Path,
+) -> Result<Vec<OverrideSource>> {
+    let mut collected: Vec<OverrideSource> = Vec::new();
+
+    for declaring in declaring_paths {
+        let Ok(content) = std::fs::read_to_string(declaring) else {
+            continue;
+        };
+        let Ok(parsed) = toml::from_str::<OverridesOnly>(&content) else {
+            continue;
+        };
+
+        for entry in parsed.overrides {
+            if !override_pattern_matches(&entry.path, dir) {
+                continue;
+            }
+
+            let target = resolve_extends_path(&entry.config, declaring);
+            if !target.exists() {
+                continue;
+            }
+
+            let mut visited = HashSet::new();
+            let chain = collect_extends_chain(&target, &mut visited)?;
+            collected.extend(
+                chain
+                    .into_iter()
+                    .chain(std::iter::once(target))
+                    .map(|path| OverrideSource {
+                        path,
+                        pattern: entry.path.clone(),
+                    }),
+            );
+        }
+    }
+
+    Ok(collected)
+}
+
+/// Builds the ordered list of config files to merge for `dir`, base-first.
+/// Global configs come first, then any matching `[[overrides]]` targets,
+/// then the project `.rona.toml` with its `extends` chain.
+fn config_paths_for_dir(dir: &Path) -> Result<Vec<PathBuf>> {
+    let home = dirs::home_dir().ok_or(ConfigError::ConfigNotFound)?;
+    let old_global = home.join(".config/rona/config.toml");
+    let new_global = home.join(".config/rona.toml");
+
+    let globals: Vec<PathBuf> = [old_global, new_global]
+        .into_iter()
+        .filter(|p| p.exists())
+        .collect();
+
+    let mut paths = globals.clone();
+    paths.extend(
+        collect_override_sources(&globals, dir)?
+            .into_iter()
+            .map(|source| source.path),
+    );
+
+    let project_config_path = dir.join(".rona.toml");
+    if project_config_path.exists() {
+        let mut visited = HashSet::new();
+        paths.extend(collect_extends_chain(&project_config_path, &mut visited)?);
+        paths.push(project_config_path);
+    }
+
+    Ok(paths)
+}
+
 /// Project-specific configuration that can be defined in rona.toml
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct ProjectConfig {
@@ -128,6 +275,12 @@ pub struct ProjectConfig {
     /// Optional overrides for the built-in branch description prompt.
     /// Set `disabled = true` to skip the prompt (the `{description}` variable will be empty).
     pub branch_description: Option<crate::extra_fields::BuiltInFieldConfig>,
+
+    /// Path-conditional config layers. Declared as `[[overrides]]`, typically in the
+    /// global config, so that running rona under a given directory tree layers in
+    /// another config file.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub overrides: Vec<ConfigOverride>,
 }
 
 impl Default for ProjectConfig {
@@ -153,6 +306,7 @@ impl Default for ProjectConfig {
             message_prefetch: None,
             commit_message: None,
             branch_description: None,
+            overrides: vec![],
         }
     }
 }
@@ -180,6 +334,7 @@ struct RawProjectConfig {
     message_prefetch: Option<crate::extra_fields::MessagePrefetchConfig>,
     commit_message: Option<crate::extra_fields::BuiltInFieldConfig>,
     branch_description: Option<crate::extra_fields::BuiltInFieldConfig>,
+    overrides: Option<Vec<ConfigOverride>>,
 }
 
 impl From<RawProjectConfig> for ProjectConfig {
@@ -198,6 +353,7 @@ impl From<RawProjectConfig> for ProjectConfig {
             message_prefetch: raw.message_prefetch,
             commit_message: raw.commit_message,
             branch_description: raw.branch_description,
+            overrides: raw.overrides.unwrap_or_default(),
         }
     }
 }
@@ -272,6 +428,7 @@ fn merge_raw(base: RawProjectConfig, child: RawProjectConfig) -> RawProjectConfi
         message_prefetch: child.message_prefetch.or(base.message_prefetch),
         commit_message: child.commit_message.or(base.commit_message),
         branch_description: child.branch_description.or(base.branch_description),
+        overrides: child.overrides.or(base.overrides),
     }
 }
 
@@ -314,24 +471,7 @@ impl ProjectConfig {
             return Ok(Self::default());
         }
 
-        let home = dirs::home_dir().ok_or(ConfigError::ConfigNotFound)?;
-        let old_global = home.join(".config/rona/config.toml");
-        let new_global = home.join(".config/rona.toml");
-
-        let mut paths: Vec<PathBuf> = Vec::new();
-        if old_global.exists() {
-            paths.push(old_global);
-        }
-        if new_global.exists() {
-            paths.push(new_global);
-        }
-
-        let project_config_path = env::current_dir()?.join(".rona.toml");
-        if project_config_path.exists() {
-            let mut visited = HashSet::new();
-            paths.extend(collect_extends_chain(&project_config_path, &mut visited)?);
-            paths.push(project_config_path);
-        }
+        let paths = config_paths_for_dir(&env::current_dir()?)?;
 
         load_and_merge_files(&paths).map(Into::into).map_err(|e| {
             eprintln!("Failed to deserialize config: {e}");
@@ -371,24 +511,7 @@ impl ProjectConfig {
     /// Returns `ConfigError::ConfigNotFound` if the config files cannot be found or read.
     /// Returns `ConfigError::InvalidConfig` if deserialization fails.
     pub fn load_from_dir(from_dir: &std::path::Path) -> Result<Self> {
-        let home = dirs::home_dir().ok_or(ConfigError::ConfigNotFound)?;
-        let old_global = home.join(".config/rona/config.toml");
-        let new_global = home.join(".config/rona.toml");
-
-        let mut paths: Vec<PathBuf> = Vec::new();
-        if old_global.exists() {
-            paths.push(old_global);
-        }
-        if new_global.exists() {
-            paths.push(new_global);
-        }
-
-        let project_config_path = from_dir.join(".rona.toml");
-        if project_config_path.exists() {
-            let mut visited = HashSet::new();
-            paths.extend(collect_extends_chain(&project_config_path, &mut visited)?);
-            paths.push(project_config_path);
-        }
+        let paths = config_paths_for_dir(from_dir)?;
 
         load_and_merge_files(&paths).map(Into::into).map_err(|e| {
             eprintln!("Failed to deserialize config: {e}");
@@ -506,7 +629,21 @@ pub fn find_config_sources(from_dir: Option<&std::path::Path>) -> Result<ConfigI
         priority: 2,
     });
 
-    // Extended configs (priority 3 - between global and project, base-first)
+    // Path-conditional overrides (priority 3 - above global, below project)
+    let declaring_globals: Vec<PathBuf> = [old_global, new_global]
+        .into_iter()
+        .filter(|p| p.exists())
+        .collect();
+    for source in collect_override_sources(&declaring_globals, &search_dir).unwrap_or_default() {
+        sources.push(ConfigSource {
+            exists: source.path.exists(),
+            description: format!("Override config (path = \"{}\")", source.pattern),
+            path: source.path,
+            priority: 3,
+        });
+    }
+
+    // Extended configs (priority 4 - between overrides and project, base-first)
     let project_config = search_dir.join(".rona.toml");
     if project_config.exists() {
         let chain = collect_extends_chain(&project_config, &mut HashSet::new()).unwrap_or_default();
@@ -515,17 +652,17 @@ pub fn find_config_sources(from_dir: Option<&std::path::Path>) -> Result<ConfigI
                 path: extended_path.clone(),
                 exists: extended_path.exists(),
                 description: format!("Extended config ({})", i + 1),
-                priority: 3,
+                priority: 4,
             });
         }
     }
 
-    // Project-local config (priority 4 - highest priority, overrides all)
+    // Project-local config (priority 5 - highest priority, overrides all)
     sources.push(ConfigSource {
         path: project_config.clone(),
         exists: project_config.exists(),
         description: "Project config".to_string(),
-        priority: 4,
+        priority: 5,
     });
 
     // Try to load the effective configuration
@@ -862,6 +999,171 @@ mod tests {
 
     use super::*;
     use tempfile::TempDir;
+
+    /// Extracts just the file paths from collected override sources.
+    fn override_paths(sources: &[OverrideSource]) -> Vec<PathBuf> {
+        sources.iter().map(|s| s.path.clone()).collect()
+    }
+
+    #[test]
+    fn test_override_pattern_matches_glob_subdirectories() {
+        assert!(override_pattern_matches(
+            "/Affluences/**",
+            Path::new("/Affluences/afl-notes")
+        ));
+        assert!(override_pattern_matches(
+            "/Affluences/**",
+            Path::new("/Affluences/afl-notes/deep/nested")
+        ));
+        assert!(!override_pattern_matches(
+            "/Affluences/**",
+            Path::new("/Other/project")
+        ));
+    }
+
+    #[test]
+    fn test_override_pattern_matches_base_directory_itself() {
+        assert!(override_pattern_matches(
+            "/Affluences/**",
+            Path::new("/Affluences")
+        ));
+        assert!(override_pattern_matches(
+            "/Affluences/*",
+            Path::new("/Affluences")
+        ));
+    }
+
+    #[test]
+    fn test_override_pattern_without_wildcard_matches_descendants() {
+        assert!(override_pattern_matches(
+            "/Affluences",
+            Path::new("/Affluences")
+        ));
+        assert!(override_pattern_matches(
+            "/Affluences",
+            Path::new("/Affluences/a/b")
+        ));
+        assert!(!override_pattern_matches(
+            "/Affluences",
+            Path::new("/Affluences-other")
+        ));
+    }
+
+    #[test]
+    fn test_collect_override_paths_layers_matching_config()
+    -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let temp_dir = TempDir::new()?;
+        let root = temp_dir.path().canonicalize()?;
+
+        let work_dir = root.join("Affluences/afl-notes");
+        std::fs::create_dir_all(&work_dir)?;
+
+        let override_config = root.join("Affluences/rona.config");
+        std::fs::write(&override_config, "editor = \"helix\"\n")?;
+
+        let global = root.join("rona.toml");
+        std::fs::write(
+            &global,
+            format!(
+                "editor = \"nano\"\n\n[[overrides]]\npath = \"{}/Affluences/**\"\nconfig = \"{}\"\n",
+                root.display(),
+                override_config.display()
+            ),
+        )?;
+
+        let collected = collect_override_sources(std::slice::from_ref(&global), &work_dir)?;
+        assert_eq!(override_paths(&collected), vec![override_config.clone()]);
+
+        // Each collected file remembers the pattern that pulled it in, so
+        // `rona config -w` can report it.
+        assert_eq!(
+            collected[0].pattern,
+            format!("{}/Affluences/**", root.display())
+        );
+
+        // A directory outside the pattern picks up nothing.
+        assert!(collect_override_sources(std::slice::from_ref(&global), &root)?.is_empty());
+
+        // The layered config wins over the global one it is layered above.
+        let merged: ProjectConfig = load_and_merge_files(&[global, override_config])?.into();
+        assert_eq!(merged.editor.as_deref(), Some("helix"));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_collect_override_paths_skips_missing_target()
+    -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let temp_dir = TempDir::new()?;
+        let root = temp_dir.path().canonicalize()?;
+
+        let global = root.join("rona.toml");
+        std::fs::write(
+            &global,
+            format!(
+                "[[overrides]]\npath = \"{}/**\"\nconfig = \"does-not-exist.toml\"\n",
+                root.display()
+            ),
+        )?;
+
+        assert!(collect_override_sources(&[global], &root.join("sub"))?.is_empty());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_collect_override_paths_resolves_relative_config()
+    -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let temp_dir = TempDir::new()?;
+        let root = temp_dir.path().canonicalize()?;
+
+        let override_config = root.join("shared.toml");
+        std::fs::write(&override_config, "editor = \"vim\"\n")?;
+
+        let global = root.join("rona.toml");
+        std::fs::write(
+            &global,
+            format!(
+                "[[overrides]]\npath = \"{}/**\"\nconfig = \"shared.toml\"\n",
+                root.display()
+            ),
+        )?;
+
+        let collected = collect_override_sources(&[global], &root.join("work"))?;
+        assert_eq!(override_paths(&collected), vec![override_config]);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_collect_override_sources_tags_whole_extends_chain()
+    -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let temp_dir = TempDir::new()?;
+        let root = temp_dir.path().canonicalize()?;
+
+        let base = root.join("base.toml");
+        std::fs::write(&base, "editor = \"nano\"\n")?;
+
+        let target = root.join("target.toml");
+        std::fs::write(&target, "extends = \"base.toml\"\neditor = \"helix\"\n")?;
+
+        let pattern = format!("{}/**", root.display());
+        let global = root.join("rona.toml");
+        std::fs::write(
+            &global,
+            format!("[[overrides]]\npath = \"{pattern}\"\nconfig = \"target.toml\"\n"),
+        )?;
+
+        let collected = collect_override_sources(&[global], &root.join("work"))?;
+
+        // The target's extends chain is layered in base-first, ahead of the target.
+        assert_eq!(override_paths(&collected), vec![base, target]);
+
+        // Every file in the chain is attributed to the pattern that pulled it in.
+        assert!(collected.iter().all(|s| s.pattern == pattern));
+
+        Ok(())
+    }
 
     #[test]
     fn test_create_config_file() -> std::result::Result<(), Box<dyn std::error::Error>> {
