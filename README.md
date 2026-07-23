@@ -247,6 +247,21 @@ config = "~/configs/rona-oss.toml"
 - Every matching override is applied, in declaration order, so later entries win over earlier ones.
 - If the referenced file does not exist, the override is skipped silently. Run `rona config -w` (or `rona config which`) to see exactly which files are being layered in from the current directory; each override row names the `path` pattern that matched.
 
+**On Windows**, write paths with forward slashes, or use TOML *literal* strings (single quotes) so backslashes are not treated as escape sequences. `path = "C:\Users\me\work\**"` is invalid TOML, because `\U` is not a valid escape:
+
+```toml
+[[overrides]]
+path = 'C:\Users\me\work\**'   # literal string: backslashes are literal
+config = 'C:\Users\me\work\shared-rona.toml'
+
+# equivalent, and simpler
+[[overrides]]
+path = "C:/Users/me/work/**"
+config = "C:/Users/me/work/shared-rona.toml"
+```
+
+Both separators work, and matching is case-insensitive on Windows.
+
 The resulting precedence, lowest to highest, is: legacy global config, global config, matching `[[overrides]]` targets, the project config's `extends` chain, then the project `.rona.toml` itself.
 
 ### Template Configuration

@@ -93,6 +93,22 @@ fn expand_tilde(value: &str) -> String {
     )
 }
 
+/// Glob options used for override `path` matching.
+///
+/// Windows paths are case-insensitive, so patterns are matched that way there.
+/// The `glob` crate already treats `/` and `\` as interchangeable separators on
+/// Windows, so a pattern may be written with either.
+const OVERRIDE_MATCH_OPTIONS: glob::MatchOptions = glob::MatchOptions {
+    case_sensitive: !cfg!(windows),
+    require_literal_separator: false,
+    require_literal_leading_dot: false,
+};
+
+/// Matches a single glob pattern against a directory. An invalid pattern never matches.
+fn glob_matches_dir(pattern: &str, dir: &Path) -> bool {
+    glob::Pattern::new(pattern).is_ok_and(|p| p.matches_path_with(dir, OVERRIDE_MATCH_OPTIONS))
+}
+
 /// Returns `true` when `dir` is covered by an override's `path` pattern.
 ///
 /// Matching is intentionally forgiving:
@@ -102,19 +118,26 @@ fn expand_tilde(value: &str) -> String {
 fn override_pattern_matches(pattern: &str, dir: &Path) -> bool {
     let expanded = expand_tilde(pattern);
 
-    if glob::Pattern::new(&expanded).is_ok_and(|p| p.matches_path(dir)) {
+    if glob_matches_dir(&expanded, dir) {
         return true;
     }
 
-    if let Some(base) = expanded
-        .strip_suffix("/**")
-        .or_else(|| expanded.strip_suffix("/*"))
-        && glob::Pattern::new(base).is_ok_and(|p| p.matches_path(dir))
+    // Either separator, so a Windows-style `C:\work\**` behaves like `C:/work/**`.
+    if let Some(base) = ["/**", r"\**", "/*", r"\*"]
+        .iter()
+        .find_map(|suffix| expanded.strip_suffix(suffix))
+        && glob_matches_dir(base, dir)
     {
         return true;
     }
 
-    !expanded.contains(['*', '?', '[']) && dir.starts_with(&expanded)
+    // A wildcard-free pattern also covers every descendant. Going through the glob
+    // engine rather than `Path::starts_with` keeps separator and case handling
+    // identical to the branches above, which matters on Windows.
+    !expanded.contains(['*', '?', '[']) && {
+        let trimmed = expanded.trim_end_matches(['/', '\\']);
+        glob_matches_dir(&format!("{trimmed}/**"), dir)
+    }
 }
 
 /// Peeks at the `overrides` key of a TOML config file without full deserialization.
@@ -139,6 +162,11 @@ struct OverrideSource {
 /// in loading order. Returned paths are base-first and include each override target's
 /// own `extends` chain, each tagged with the pattern that pulled it in. Override
 /// targets that do not exist are skipped.
+///
+/// # Errors
+/// Returns `ConfigError::ParseError` if a declaring file is not valid TOML or its
+/// `overrides` entries are malformed. Silently ignoring that would drop every
+/// override with no explanation. Files that cannot be read are skipped.
 fn collect_override_sources(
     declaring_paths: &[PathBuf],
     dir: &Path,
@@ -149,9 +177,12 @@ fn collect_override_sources(
         let Ok(content) = std::fs::read_to_string(declaring) else {
             continue;
         };
-        let Ok(parsed) = toml::from_str::<OverridesOnly>(&content) else {
-            continue;
-        };
+        let parsed = toml::from_str::<OverridesOnly>(&content).map_err(|e| {
+            RonaError::Config(ConfigError::ParseError {
+                file: declaring.display().to_string(),
+                reason: e.to_string(),
+            })
+        })?;
 
         for entry in parsed.overrides {
             if !override_pattern_matches(&entry.path, dir) {
@@ -1005,6 +1036,17 @@ mod tests {
         sources.iter().map(|s| s.path.clone()).collect()
     }
 
+    /// Renders `value` as a TOML *literal* string (single-quoted), where backslashes
+    /// are not escape characters. Required for Windows paths: in a basic (double-quoted)
+    /// string, `C:\Users` contains the invalid escape `\U` and fails to parse.
+    fn toml_literal(value: &str) -> String {
+        assert!(
+            !value.contains('\''),
+            "path contains a single quote, which a TOML literal string cannot express: {value}"
+        );
+        format!("'{value}'")
+    }
+
     #[test]
     fn test_override_pattern_matches_glob_subdirectories() {
         assert!(override_pattern_matches(
@@ -1049,6 +1091,69 @@ mod tests {
         ));
     }
 
+    #[cfg(windows)]
+    #[test]
+    fn test_override_pattern_matches_windows_separators_and_case() {
+        // The glob crate treats `/` and `\` as interchangeable on Windows, so a
+        // pattern may be written either way regardless of how the path is spelled.
+        assert!(override_pattern_matches(
+            r"C:\Users\me\work\**",
+            Path::new(r"C:\Users\me\work\repo")
+        ));
+        assert!(override_pattern_matches(
+            "C:/Users/me/work/**",
+            Path::new(r"C:\Users\me\work\repo")
+        ));
+        assert!(override_pattern_matches(
+            r"C:\Users\me\work",
+            Path::new(r"C:\Users\me\work\repo\src")
+        ));
+
+        // A trailing `\**` covers the base directory itself, as `/**` does.
+        assert!(override_pattern_matches(
+            r"C:\Users\me\work\**",
+            Path::new(r"C:\Users\me\work")
+        ));
+
+        // Windows paths are case-insensitive.
+        assert!(override_pattern_matches(
+            r"c:\users\me\work\**",
+            Path::new(r"C:\Users\Me\Work\repo")
+        ));
+
+        assert!(!override_pattern_matches(
+            r"C:\Users\me\work\**",
+            Path::new(r"C:\Users\me\other\repo")
+        ));
+    }
+
+    #[test]
+    fn test_collect_override_sources_reports_malformed_declaring_file()
+    -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let temp_dir = TempDir::new()?;
+        let root = temp_dir.path().canonicalize()?;
+
+        // A Windows path written into a basic string is the realistic way to get
+        // here: `\U` is an invalid TOML escape. Dropping every override silently
+        // would leave the user with no idea why their config is being ignored.
+        let global = root.join("rona.toml");
+        std::fs::write(
+            &global,
+            "[[overrides]]\npath = \"C:\\Users\\me\\work\\**\"\nconfig = 'x.toml'\n",
+        )?;
+
+        let result = collect_override_sources(&[global], &root);
+        assert!(
+            matches!(
+                result,
+                Err(RonaError::Config(ConfigError::ParseError { .. }))
+            ),
+            "expected a parse error, got: {result:?}"
+        );
+
+        Ok(())
+    }
+
     #[test]
     fn test_collect_override_paths_layers_matching_config()
     -> std::result::Result<(), Box<dyn std::error::Error>> {
@@ -1061,13 +1166,14 @@ mod tests {
         let override_config = root.join("Affluences/rona.config");
         std::fs::write(&override_config, "editor = \"helix\"\n")?;
 
+        let pattern = format!("{}/Affluences/**", root.display());
         let global = root.join("rona.toml");
         std::fs::write(
             &global,
             format!(
-                "editor = \"nano\"\n\n[[overrides]]\npath = \"{}/Affluences/**\"\nconfig = \"{}\"\n",
-                root.display(),
-                override_config.display()
+                "editor = \"nano\"\n\n[[overrides]]\npath = {}\nconfig = {}\n",
+                toml_literal(&pattern),
+                toml_literal(&override_config.display().to_string())
             ),
         )?;
 
@@ -1076,10 +1182,7 @@ mod tests {
 
         // Each collected file remembers the pattern that pulled it in, so
         // `rona config -w` can report it.
-        assert_eq!(
-            collected[0].pattern,
-            format!("{}/Affluences/**", root.display())
-        );
+        assert_eq!(collected[0].pattern, pattern);
 
         // A directory outside the pattern picks up nothing.
         assert!(collect_override_sources(std::slice::from_ref(&global), &root)?.is_empty());
@@ -1101,8 +1204,8 @@ mod tests {
         std::fs::write(
             &global,
             format!(
-                "[[overrides]]\npath = \"{}/**\"\nconfig = \"does-not-exist.toml\"\n",
-                root.display()
+                "[[overrides]]\npath = {}\nconfig = 'does-not-exist.toml'\n",
+                toml_literal(&format!("{}/**", root.display()))
             ),
         )?;
 
@@ -1124,8 +1227,8 @@ mod tests {
         std::fs::write(
             &global,
             format!(
-                "[[overrides]]\npath = \"{}/**\"\nconfig = \"shared.toml\"\n",
-                root.display()
+                "[[overrides]]\npath = {}\nconfig = 'shared.toml'\n",
+                toml_literal(&format!("{}/**", root.display()))
             ),
         )?;
 
@@ -1151,7 +1254,10 @@ mod tests {
         let global = root.join("rona.toml");
         std::fs::write(
             &global,
-            format!("[[overrides]]\npath = \"{pattern}\"\nconfig = \"target.toml\"\n"),
+            format!(
+                "[[overrides]]\npath = {}\nconfig = 'target.toml'\n",
+                toml_literal(&pattern)
+            ),
         )?;
 
         let collected = collect_override_sources(&[global], &root.join("work"))?;
