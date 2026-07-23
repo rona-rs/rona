@@ -224,6 +224,46 @@ Then:
 
 - `rona -g -i` still prompts for both `scope` and `ticket`, because the inherited `commit_template` references `{scope}` and `{ticket}`. Nothing is skipped on the commit side.
 
+### Path-Conditional Configuration with `[[overrides]]`
+
+Where `extends` is declared by the project that wants a shared base, `[[overrides]]` works the other way round: the global config declares that any repository under a given directory should pick up an extra config file, without those repositories needing a `.rona.toml` at all.
+
+```toml
+# ~/.config/rona.toml
+editor = "nano"
+
+# When run anywhere under ~/Affluences, layer in the referenced config.
+[[overrides]]
+path = "~/Affluences/**"
+config = "~/Affluences/.rona.config"
+
+[[overrides]]
+path = "~/oss"
+config = "~/configs/rona-oss.toml"
+```
+
+- `path` is a glob matched against the directory Rona runs from. A leading `~/` is expanded to your home directory. `~/Affluences/**` matches `~/Affluences` itself and every directory beneath it, and a pattern with no wildcard (like `~/oss`) does the same for that directory and all of its descendants.
+- `config` is the config file to layer in. Relative paths resolve against the config file that declares the override, and `~/` is expanded. The referenced file may itself use `extends`.
+- Every matching override is applied, in declaration order, so later entries win over earlier ones.
+- If the referenced file does not exist, the override is skipped silently. Run `rona config -w` (or `rona config which`) to see exactly which files are being layered in from the current directory; each override row names the `path` pattern that matched.
+
+**On Windows**, write paths with forward slashes, or use TOML *literal* strings (single quotes) so backslashes are not treated as escape sequences. `path = "C:\Users\me\work\**"` is invalid TOML, because `\U` is not a valid escape:
+
+```toml
+[[overrides]]
+path = 'C:\Users\me\work\**'   # literal string: backslashes are literal
+config = 'C:\Users\me\work\shared-rona.toml'
+
+# equivalent, and simpler
+[[overrides]]
+path = "C:/Users/me/work/**"
+config = "C:/Users/me/work/shared-rona.toml"
+```
+
+Both separators work, and matching is case-insensitive on Windows.
+
+The resulting precedence, lowest to highest, is: legacy global config, global config, matching `[[overrides]]` targets, the project config's `extends` chain, then the project `.rona.toml` itself.
+
 ### Template Configuration
 
 Rona supports customizable templates for interactive commit message generation. You can define how your commit messages are formatted using variables:
