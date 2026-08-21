@@ -178,7 +178,7 @@ _rona() {
             return 0
             ;;
         rona__subcmd__add__subcmd__with__subcmd__exclude)
-            opts="-i -f -h --interactive --dry-run --config-file --help [PATTERNS]..."
+            opts="-i -f -h --interactive --dry-run --config-file --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -266,7 +266,7 @@ _rona() {
             return 0
             ;;
         rona__subcmd__commit)
-            opts="-p -d -u -y -f -h --push --dry-run --unsigned --yes --copy --config-file --help [ARGS]..."
+            opts="-p -d -u -y -f -h --push --dry-run --unsigned --yes --copy --config-file --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -498,7 +498,7 @@ _rona() {
             return 0
             ;;
         rona__subcmd__config__subcmd__which)
-            opts="-e -f -h --effective --config-file --help [PATH]"
+            opts="-e -f -h --effective --config-file --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -824,7 +824,7 @@ _rona() {
             return 0
             ;;
         rona__subcmd__init)
-            opts="-f -h --dry-run --config-file --help [EDITOR]"
+            opts="-f -h --dry-run --config-file --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -912,7 +912,7 @@ _rona() {
             return 0
             ;;
         rona__subcmd__push)
-            opts="-f -h --dry-run --config-file --help [ARGS]..."
+            opts="-f -h --dry-run --config-file --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -956,7 +956,7 @@ _rona() {
             return 0
             ;;
         rona__subcmd__reset)
-            opts="-i -f -h --interactive --dry-run --config-file --help [FILES]..."
+            opts="-i -f -h --interactive --dry-run --config-file --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -1000,7 +1000,7 @@ _rona() {
             return 0
             ;;
         rona__subcmd__restore)
-            opts="-i -y -f -h --interactive --yes --dry-run --config-file --help [FILES]..."
+            opts="-i -y -f -h --interactive --yes --dry-run --config-file --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -1044,7 +1044,7 @@ _rona() {
             return 0
             ;;
         rona__subcmd__set__subcmd__editor)
-            opts="-f -h --dry-run --config-file --help <EDITOR>"
+            opts="-f -h --dry-run --config-file --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
