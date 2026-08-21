@@ -4,7 +4,7 @@
 //! and commit execution operations.
 
 use std::{
-    fs::{File, OpenOptions, read_to_string, write},
+    fs::{OpenOptions, read_to_string, write},
     io::Write,
     path::Path,
     process::Command,
@@ -12,10 +12,7 @@ use std::{
 
 use colored::Colorize;
 
-use crate::{
-    errors::{GitError, Result, RonaError},
-    git::branch::{format_branch_name, get_current_branch},
-};
+use crate::errors::{GitError, Result, RonaError};
 
 use super::{
     files::get_ignore_patterns,
@@ -261,9 +258,11 @@ pub fn git_commit(args: &[String], unsigned: bool, dry_run: bool) -> Result<()> 
     Ok(())
 }
 
-/// Prepares the commit message.
-/// It creates the commit message file and empties it if it already exists.
-/// It also adds the modified / added files to the commit message file.
+/// Prepares the commit message file.
+///
+/// It creates the commit message file (emptying it if it already exists), writes `header` as the
+/// first line, then lists the modified, added and deleted files so the user can describe each one
+/// in their editor.
 ///
 /// # Errors
 /// * If we cannot write to the commit message file
@@ -272,10 +271,9 @@ pub fn git_commit(args: &[String], unsigned: bool, dry_run: bool) -> Result<()> 
 /// * If we cannot read the commitignore file
 ///
 /// # Arguments
-/// * `commit_type` - `&str` - The commit type
-/// * `no_commit_number` - `bool` - Whether to include the commit number in the header
+/// * `header` - `&str` - The pre-rendered first line of the commit message
 #[tracing::instrument(skip_all)]
-pub fn generate_commit_message(commit_type: &str, no_commit_number: bool) -> Result<()> {
+pub fn generate_commit_message(header: &str) -> Result<()> {
     let project_root = get_top_level_path()?;
     let commit_message_path = project_root.join(COMMIT_MESSAGE_FILE_PATH);
 
@@ -295,7 +293,7 @@ pub fn generate_commit_message(commit_type: &str, no_commit_number: bool) -> Res
         .open(&commit_message_path)?;
 
     // Write header
-    write_commit_header(&mut commit_file, commit_type, no_commit_number)?;
+    writeln!(commit_file, "{header}\n\n")?;
 
     // Get files to ignore
     let ignore_patterns = get_ignore_patterns()?;
@@ -316,35 +314,6 @@ pub fn generate_commit_message(commit_type: &str, no_commit_number: bool) -> Res
     commit_file.flush()?;
 
     tracing::debug!("{} created", commit_message_path.display());
-
-    Ok(())
-}
-
-/// Writes the commit header to the commit file.
-///
-/// # Arguments
-/// * `commit_file` - The file to write to
-/// * `commit_type` - The type of commit
-/// * `no_commit_number` - Whether to include the commit number in the header
-///
-/// # Errors
-/// * If writing to the file fails
-fn write_commit_header(
-    commit_file: &mut File,
-    commit_type: &str,
-    no_commit_number: bool,
-) -> Result<()> {
-    let branch_name = format_branch_name(&COMMIT_TYPES, &get_current_branch()?);
-
-    if no_commit_number {
-        writeln!(commit_file, "({commit_type} on {branch_name})\n\n")?;
-    } else {
-        let commit_number = get_current_commit_nb()? + 1;
-        writeln!(
-            commit_file,
-            "[{commit_number}] ({commit_type} on {branch_name})\n\n"
-        )?;
-    }
 
     Ok(())
 }

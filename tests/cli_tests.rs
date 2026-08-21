@@ -311,3 +311,84 @@ fn test_commit_command() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
+
+/// Tests that editor mode (`rona -g`) renders the configured `commit_template`.
+///
+/// Verifies that:
+/// - The header written to `commit_message.md` comes from `commit_template`, not from a
+///   hard-coded `[n] (type on branch)` format
+/// - The commit type selector is skipped when the template does not use `{commit_type}`
+///   (the test runs without a terminal, so a prompt would fail the command)
+/// - The staged file list is still appended below the header
+#[test]
+fn test_generate_editor_mode_uses_commit_template() -> Result<(), Box<dyn std::error::Error>> {
+    let temp_dir = TempDir::new()?;
+    let temp_path = temp_dir.path();
+
+    Command::new("git")
+        .current_dir(temp_path)
+        .arg("init")
+        .assert()
+        .success();
+    Command::new("git")
+        .current_dir(temp_path)
+        .args(["config", "user.name", "Test User"])
+        .assert()
+        .success();
+    Command::new("git")
+        .current_dir(temp_path)
+        .args(["config", "user.email", "test@example.com"])
+        .assert()
+        .success();
+
+    // One commit so the next commit number is 2
+    fs::write(temp_path.join("first.txt"), "first")?;
+    Command::new("git")
+        .current_dir(temp_path)
+        .args(["add", "first.txt"])
+        .assert()
+        .success();
+    Command::new("git")
+        .current_dir(temp_path)
+        .args(["commit", "-m", "initial", "--no-gpg-sign"])
+        .assert()
+        .success();
+
+    // `true` exits immediately, standing in for the editor
+    fs::write(
+        temp_path.join(".rona.toml"),
+        "editor = \"true\"\ncommit_template = \"[{commit_number}] {message}\"\n",
+    )?;
+
+    fs::write(temp_path.join("test.txt"), "test content")?;
+    Command::new("git")
+        .current_dir(temp_path)
+        .args(["add", "test.txt"])
+        .assert()
+        .success();
+
+    cargo_bin_cmd!("rona")
+        .current_dir(temp_path)
+        .arg("-g")
+        .assert()
+        .success();
+
+    let content = fs::read_to_string(temp_path.join("commit_message.md"))?;
+    let header = content.lines().next().unwrap_or_default();
+
+    assert_eq!(
+        header.trim_end(),
+        "[2]",
+        "header should come from commit_template, got {header:?}"
+    );
+    assert!(
+        !content.contains(" on "),
+        "the hard-coded `(type on branch)` header should be gone: {content:?}"
+    );
+    assert!(
+        content.contains("- `test.txt`:"),
+        "staged files should still be listed: {content:?}"
+    );
+
+    Ok(())
+}
