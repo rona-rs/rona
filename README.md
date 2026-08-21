@@ -176,7 +176,9 @@ The path is resolved relative to the `.rona.toml` file that declares it. Absolut
 
 #### Unreferenced extra fields are skipped
 
-When a config extends another, extra fields are merged by `name`: same-name fields are overridden by the child, and fields the child does not redefine are inherited from the base. Rona only prompts for an extra field that the active template actually references (as `{name}` or `{?name}`). If an inherited field is not referenced by your template, it is skipped with a `[NOTE]` line instead of asking you for a value that would be discarded. This applies independently to `rona branch` (checked against `branch_template`) and `rona -g -i` (checked against `commit_template`).
+When a config extends another, extra fields are merged by `name`: same-name fields are overridden by the child, and fields the child does not redefine are inherited from the base. Rona only prompts for an extra field that the active template actually references (as `{name}` or `{?name}`). If an inherited field is not referenced by your template, it is skipped with a `[NOTE]` line instead of asking you for a value that would be discarded. This applies independently to `rona branch` (checked against `branch_template`) and `rona -g -i` (checked against `commit_template`). The same rule covers the built-in commit type: the "Select commit type" selector is only shown when `commit_template` references `{commit_type}`, in both interactive and editor mode.
+
+Editor mode (`rona -g` without `-i`) renders `commit_template` too: the first line of the generated `commit_message.md` is the template with an empty `{message}`, so you type your message straight onto a line that already has your format. Editor mode never prompts for extra fields. A field that the template uses renders as empty, and Rona prints one `[NOTE]` line for it. Complete these fields yourself in the editor.
 
 For example, given a base config that defines a `ticket` field and uses it in both templates:
 
@@ -1036,10 +1038,10 @@ rona -g [-i | --interactive] [-n | --no-commit-number]
 **Features:**
 
 - Creates `commit_message.md` and `.commitignore`
-- Interactive commit type selection
+- Interactive commit type selection (only when `commit_template` uses `{commit_type}`)
 - Automatic file change tracking
 - **Interactive mode:** Input commit message directly in terminal (`-i` flag)
-- **Editor mode:** Opens in configured editor (default behavior)
+- **Editor mode:** Opens in configured editor (default behavior), on a header rendered from `commit_template`
 - **No commit number:** Omit commit number from message (`-n` flag)
 
 **Options:**
@@ -1050,7 +1052,7 @@ rona -g [-i | --interactive] [-n | --no-commit-number]
 **Examples:**
 
 ```bash
-# Standard mode: Opens commit type selector, then editor
+# Standard mode: Opens commit type selector (if the template needs it), then editor
 rona -g
 
 # Interactive mode: Input message directly in terminal
@@ -1066,7 +1068,7 @@ rona -g -i -n
 **Interactive Mode Usage:**
 When using the `-i` flag, Rona will:
 
-1. Show the commit type selector (uses configured types or defaults: feat, fix, docs, test, chore)
+1. Show the commit type selector, if `commit_template` uses `{commit_type}` (uses configured types or defaults: feat, fix, docs, test, chore)
 2. Show prompts for any configured extra fields and the message, in the order defined by `field_order` (defaults to extra fields first, then message)
 3. Generate a clean format using your template (or default)
 4. Save directly to `commit_message.md` without file details

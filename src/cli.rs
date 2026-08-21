@@ -968,6 +968,33 @@ fn prompt_interactive_fields(
     Ok((message, extra_values))
 }
 
+/// Returns whether `template` uses `name`, either as `{name}` or as a conditional block
+/// `{?name}...{/name}`.
+fn template_references(template: &str, name: &str) -> bool {
+    template.contains(&format!("{{{name}}}")) || template.contains(&format!("{{?{name}}}"))
+}
+
+/// Show the commit type selector and return the chosen type.
+///
+/// # Errors
+/// * If the user cancels the prompt
+fn select_commit_type(config: &Config) -> Result<&str> {
+    let commit_types_vec = config.project_config.commit_types.as_ref().map_or_else(
+        || COMMIT_TYPES.to_vec(),
+        |v| v.iter().map(String::as_str).collect::<Vec<&str>>(),
+    );
+
+    let index = FuzzySelect::with_theme(&prompt_theme())
+        .with_prompt("Select commit type")
+        .items(&commit_types_vec)
+        .default(0)
+        .interact_opt()
+        .map_err(|_| RonaError::UserCancelled)?
+        .ok_or(RonaError::UserCancelled)?;
+
+    Ok(commit_types_vec[index])
+}
+
 /// The default commit-message template used when none is configured.
 ///
 /// The conditional block `{?commit_number}...{/commit_number}` is only included when
@@ -996,38 +1023,30 @@ fn handle_generate(interactive: bool, no_commit_number: bool, config: &Config) -
 
     create_needed_files()?;
 
-    let commit_type = {
-        let commit_types_vec = config.project_config.commit_types.as_ref().map_or_else(
-            || COMMIT_TYPES.to_vec(),
-            |v| v.iter().map(String::as_str).collect::<Vec<&str>>(),
-        );
+    let commit_template = config
+        .project_config
+        .commit_template
+        .as_deref()
+        .unwrap_or(DEFAULT_COMMIT_TEMPLATE);
 
-        let index = FuzzySelect::with_theme(&prompt_theme())
-            .with_prompt("Select commit type")
-            .items(&commit_types_vec)
-            .default(0)
-            .interact_opt()
-            .map_err(|_| RonaError::UserCancelled)?
-            .ok_or(RonaError::UserCancelled)?;
-        commit_types_vec[index]
+    // The selector is only worth showing when the chosen type ends up in the message. Both modes
+    // render the same template, so the template alone decides.
+    let commit_type = if template_references(commit_template, "commit_type") {
+        Some(select_commit_type(config)?)
+    } else {
+        None
     };
 
     if interactive {
         // Only prompt for extra fields referenced in the commit template. Fields inherited from
         // an extended config (or otherwise configured) but unused by this template are skipped
         // rather than prompted for a value that would be discarded.
-        let commit_template = config
-            .project_config
-            .commit_template
-            .as_deref()
-            .unwrap_or(DEFAULT_COMMIT_TEMPLATE);
         let referenced_fields: Vec<ExtraField> = config
             .project_config
             .commit_extra_fields
             .iter()
             .filter(|f| {
-                let referenced = commit_template.contains(&format!("{{{}}}", f.name))
-                    || commit_template.contains(&format!("{{?{}}}", f.name));
+                let referenced = template_references(commit_template, &f.name);
                 if !referenced {
                     println!(
                         "[NOTE] Extra field '{}' is not referenced in the template; skipping.",
@@ -1054,34 +1073,57 @@ fn handle_generate(interactive: bool, no_commit_number: bool, config: &Config) -
             config,
         )?;
     } else {
-        // In editor mode, generate the template file first, then open editor
-        generate_commit_message(commit_type, no_commit_number)?;
+        // Editor mode renders the same template with an empty message, so the file opens on a
+        // header that already matches the configured format and only the message is missing.
+        // Extra fields are never prompted for here, so they resolve to empty as well.
+        let blank_extra_values: HashMap<String, String> = config
+            .project_config
+            .commit_extra_fields
+            .iter()
+            .filter(|f| template_references(commit_template, &f.name))
+            .map(|f| {
+                println!(
+                    "[NOTE] Editor mode leaves the extra field '{}' empty. Complete it in your editor.",
+                    f.name
+                );
+                (f.name.clone(), String::new())
+            })
+            .collect();
+
+        let header = build_commit_message(
+            commit_type,
+            no_commit_number,
+            "",
+            &blank_extra_values,
+            config,
+        )?;
+
+        // In editor mode, generate the scaffold file first, then open the editor
+        generate_commit_message(&header)?;
         handle_editor_mode(config)?;
     }
     Ok(())
 }
 
-/// Handle interactive mode for generate command
-fn handle_interactive_mode(
-    commit_type: &str,
+/// Render the configured commit template (or [`DEFAULT_COMMIT_TEMPLATE`]) for `message`.
+///
+/// `commit_type` is `None` when the template does not use `{commit_type}`, in which case no type
+/// was ever selected and the variable resolves to an empty string. Editor mode passes an empty
+/// `message`, which renders the header the user then completes in their editor.
+///
+/// When the template fails validation a warning is printed and the built-in
+/// `[number] (type on branch) message` layout is used instead, keeping whichever parts are known.
+///
+/// # Errors
+/// * If the current branch, commit count, or git author cannot be read
+/// * If the template cannot be processed
+fn build_commit_message(
+    commit_type: Option<&str>,
     no_commit_number: bool,
     message: &str,
     extra_values: &HashMap<String, String>,
     config: &Config,
-) -> Result<()> {
-    use std::fs;
-
-    let project_root = get_top_level_path()?;
-    let commit_file_path = project_root.join(COMMIT_MESSAGE_FILE_PATH);
-
-    if message.trim().is_empty() {
-        println!(
-            "{} Empty message provided. Exiting.",
-            "WARNING:".yellow().bold()
-        );
-        return Ok(());
-    }
-
+) -> Result<String> {
     let branch_name = format_branch_name(&COMMIT_TYPES, &get_current_branch()?);
     let commit_number = if no_commit_number {
         None
@@ -1104,36 +1146,49 @@ fn handle_interactive_mode(
             "WARNING:".yellow().bold()
         );
         println!("Using fallback format...");
-        let formatted_message = if no_commit_number {
-            format!("({} on {}) {}", commit_type, branch_name, message.trim())
-        } else {
-            format!(
-                "[{}] ({} on {}) {}",
-                commit_number.unwrap_or(0),
-                commit_type,
-                branch_name,
-                message.trim()
-            )
-        };
-        fs::write(&commit_file_path, &formatted_message)?;
-        println!("\n{} Commit message created!", "✓".green());
-        println!("Message: {formatted_message}");
-        return Ok(());
+        let number_prefix = commit_number.map_or_else(String::new, |number| format!("[{number}] "));
+        let type_prefix = commit_type.map_or_else(String::new, |commit_type| {
+            format!("({commit_type} on {branch_name}) ")
+        });
+        return Ok(format!("{number_prefix}{type_prefix}{}", message.trim()));
     }
 
     // Create template variables
     let variables = TemplateVariables::new(
         commit_number,
-        commit_type.to_string(),
+        commit_type.unwrap_or_default().to_string(),
         branch_name,
         message.trim().to_string(),
     )?;
 
     // Process template (extra_values are substituted alongside built-in variables)
-    let formatted_message = process_template(template, &variables, extra_values)?;
+    process_template(template, &variables, extra_values)
+}
+
+/// Handle interactive mode for generate command
+fn handle_interactive_mode(
+    commit_type: Option<&str>,
+    no_commit_number: bool,
+    message: &str,
+    extra_values: &HashMap<String, String>,
+    config: &Config,
+) -> Result<()> {
+    let project_root = get_top_level_path()?;
+    let commit_file_path = project_root.join(COMMIT_MESSAGE_FILE_PATH);
+
+    if message.trim().is_empty() {
+        println!(
+            "{} Empty message provided. Exiting.",
+            "WARNING:".yellow().bold()
+        );
+        return Ok(());
+    }
+
+    let formatted_message =
+        build_commit_message(commit_type, no_commit_number, message, extra_values, config)?;
 
     // Write the formatted message to commit_message.md
-    fs::write(&commit_file_path, &formatted_message)?;
+    std::fs::write(&commit_file_path, &formatted_message)?;
 
     println!("\n{} Commit message created!", "✓".green());
     println!("Message: {formatted_message}");
@@ -2960,6 +3015,40 @@ mod cli_tests {
             !formatted_message.contains("[]"),
             "Should not produce empty brackets"
         );
+    }
+
+    // === COMMIT TYPE SELECTOR TESTS ===
+
+    #[test]
+    fn test_template_references_plain_variable() {
+        assert!(template_references(
+            "({commit_type}) {message}",
+            "commit_type"
+        ));
+        assert!(template_references("({commit_type}) {message}", "message"));
+    }
+
+    #[test]
+    fn test_template_references_conditional_block() {
+        let template = "{?commit_number}[{commit_number}] {/commit_number}{message}";
+        assert!(template_references(template, "commit_number"));
+    }
+
+    #[test]
+    fn test_template_references_ignores_unused_variables() {
+        assert!(!template_references("{message}", "commit_type"));
+        assert!(!template_references("{message}", "ticket"));
+    }
+
+    #[test]
+    fn test_template_references_requires_exact_name() {
+        // A longer name that merely contains the shorter one must not count as a reference.
+        assert!(!template_references("{commit_type_extra}", "commit_type"));
+    }
+
+    #[test]
+    fn test_default_template_references_commit_type() {
+        assert!(template_references(DEFAULT_COMMIT_TEMPLATE, "commit_type"));
     }
 
     // === SYNC COMMAND TESTS ===
