@@ -37,6 +37,9 @@ Register-ArgumentCompleter -Native -CommandName 'rona' -ScriptBlock {
             [CompletionResult]::new('generate', 'generate', [CompletionResultType]::ParameterValue, 'Directly generate the `commit_message.md` file')
             [CompletionResult]::new('init', 'init', [CompletionResultType]::ParameterValue, 'Initialize the rona configuration file')
             [CompletionResult]::new('list-status', 'list-status', [CompletionResultType]::ParameterValue, 'List files from git status (for shell completion on the -a)')
+            [CompletionResult]::new('pr', 'pr', [CompletionResultType]::ParameterValue, 'Open a pull request (or merge request) for the current branch')
+            [CompletionResult]::new('mr', 'mr', [CompletionResultType]::ParameterValue, 'Open a pull request (or merge request) for the current branch')
+            [CompletionResult]::new('pull-request', 'pull-request', [CompletionResultType]::ParameterValue, 'Open a pull request (or merge request) for the current branch')
             [CompletionResult]::new('push', 'push', [CompletionResultType]::ParameterValue, 'Push to a git repository')
             [CompletionResult]::new('reset', 'reset', [CompletionResultType]::ParameterValue, 'Unstage files, moving them out of the staging area without losing changes')
             [CompletionResult]::new('restore', 'restore', [CompletionResultType]::ParameterValue, 'Discard working-tree changes, restoring files to their staged or committed state')
@@ -168,6 +171,96 @@ Register-ArgumentCompleter -Native -CommandName 'rona' -ScriptBlock {
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
+        'rona;pr' {
+            [CompletionResult]::new('-t', '-t', [CompletionResultType]::ParameterName, 'Branch to target (defaults to `pr_target`, then the remote''s default branch)')
+            [CompletionResult]::new('--target', '--target', [CompletionResultType]::ParameterName, 'Branch to target (defaults to `pr_target`, then the remote''s default branch)')
+            [CompletionResult]::new('-T', '-T ', [CompletionResultType]::ParameterName, 'Title of the request (overrides the document heading)')
+            [CompletionResult]::new('--title', '--title', [CompletionResultType]::ParameterName, 'Title of the request (overrides the document heading)')
+            [CompletionResult]::new('-b', '-b', [CompletionResultType]::ParameterName, 'Markdown file holding the whole request (skips the editor)')
+            [CompletionResult]::new('--body-file', '--body-file', [CompletionResultType]::ParameterName, 'Markdown file holding the whole request (skips the editor)')
+            [CompletionResult]::new('-l', '-l', [CompletionResultType]::ParameterName, 'Label to apply (repeat for several)')
+            [CompletionResult]::new('--label', '--label', [CompletionResultType]::ParameterName, 'Label to apply (repeat for several)')
+            [CompletionResult]::new('-r', '-r', [CompletionResultType]::ParameterName, 'Reviewer to request (repeat for several)')
+            [CompletionResult]::new('--reviewer', '--reviewer', [CompletionResultType]::ParameterName, 'Reviewer to request (repeat for several)')
+            [CompletionResult]::new('-A', '-A ', [CompletionResultType]::ParameterName, 'Assignee to set (repeat for several)')
+            [CompletionResult]::new('--assignee', '--assignee', [CompletionResultType]::ParameterName, 'Assignee to set (repeat for several)')
+            [CompletionResult]::new('--backend', '--backend', [CompletionResultType]::ParameterName, 'Backend used to open the request')
+            [CompletionResult]::new('--remote', '--remote', [CompletionResultType]::ParameterName, 'Remote to open the request against (defaults to `pr_remote`, then `origin`)')
+            [CompletionResult]::new('-f', '-f', [CompletionResultType]::ParameterName, 'Config file to use instead of the default global/project hierarchy')
+            [CompletionResult]::new('--config-file', '--config-file', [CompletionResultType]::ParameterName, 'Config file to use instead of the default global/project hierarchy')
+            [CompletionResult]::new('-d', '-d', [CompletionResultType]::ParameterName, 'Open the request as a draft')
+            [CompletionResult]::new('--draft', '--draft', [CompletionResultType]::ParameterName, 'Open the request as a draft')
+            [CompletionResult]::new('-w', '-w', [CompletionResultType]::ParameterName, 'Open the pre-filled web form instead of using a CLI backend')
+            [CompletionResult]::new('--web', '--web', [CompletionResultType]::ParameterName, 'Open the pre-filled web form instead of using a CLI backend')
+            [CompletionResult]::new('--no-edit', '--no-edit', [CompletionResultType]::ParameterName, 'Use the request document as it is instead of opening the editor')
+            [CompletionResult]::new('--no-push', '--no-push', [CompletionResultType]::ParameterName, 'Do not push the source branch before opening the request')
+            [CompletionResult]::new('-y', '-y', [CompletionResultType]::ParameterName, 'Skip the confirmation prompt')
+            [CompletionResult]::new('--yes', '--yes', [CompletionResultType]::ParameterName, 'Skip the confirmation prompt')
+            [CompletionResult]::new('--dry-run', '--dry-run', [CompletionResultType]::ParameterName, 'Show what would be opened without opening anything')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'rona;mr' {
+            [CompletionResult]::new('-t', '-t', [CompletionResultType]::ParameterName, 'Branch to target (defaults to `pr_target`, then the remote''s default branch)')
+            [CompletionResult]::new('--target', '--target', [CompletionResultType]::ParameterName, 'Branch to target (defaults to `pr_target`, then the remote''s default branch)')
+            [CompletionResult]::new('-T', '-T ', [CompletionResultType]::ParameterName, 'Title of the request (overrides the document heading)')
+            [CompletionResult]::new('--title', '--title', [CompletionResultType]::ParameterName, 'Title of the request (overrides the document heading)')
+            [CompletionResult]::new('-b', '-b', [CompletionResultType]::ParameterName, 'Markdown file holding the whole request (skips the editor)')
+            [CompletionResult]::new('--body-file', '--body-file', [CompletionResultType]::ParameterName, 'Markdown file holding the whole request (skips the editor)')
+            [CompletionResult]::new('-l', '-l', [CompletionResultType]::ParameterName, 'Label to apply (repeat for several)')
+            [CompletionResult]::new('--label', '--label', [CompletionResultType]::ParameterName, 'Label to apply (repeat for several)')
+            [CompletionResult]::new('-r', '-r', [CompletionResultType]::ParameterName, 'Reviewer to request (repeat for several)')
+            [CompletionResult]::new('--reviewer', '--reviewer', [CompletionResultType]::ParameterName, 'Reviewer to request (repeat for several)')
+            [CompletionResult]::new('-A', '-A ', [CompletionResultType]::ParameterName, 'Assignee to set (repeat for several)')
+            [CompletionResult]::new('--assignee', '--assignee', [CompletionResultType]::ParameterName, 'Assignee to set (repeat for several)')
+            [CompletionResult]::new('--backend', '--backend', [CompletionResultType]::ParameterName, 'Backend used to open the request')
+            [CompletionResult]::new('--remote', '--remote', [CompletionResultType]::ParameterName, 'Remote to open the request against (defaults to `pr_remote`, then `origin`)')
+            [CompletionResult]::new('-f', '-f', [CompletionResultType]::ParameterName, 'Config file to use instead of the default global/project hierarchy')
+            [CompletionResult]::new('--config-file', '--config-file', [CompletionResultType]::ParameterName, 'Config file to use instead of the default global/project hierarchy')
+            [CompletionResult]::new('-d', '-d', [CompletionResultType]::ParameterName, 'Open the request as a draft')
+            [CompletionResult]::new('--draft', '--draft', [CompletionResultType]::ParameterName, 'Open the request as a draft')
+            [CompletionResult]::new('-w', '-w', [CompletionResultType]::ParameterName, 'Open the pre-filled web form instead of using a CLI backend')
+            [CompletionResult]::new('--web', '--web', [CompletionResultType]::ParameterName, 'Open the pre-filled web form instead of using a CLI backend')
+            [CompletionResult]::new('--no-edit', '--no-edit', [CompletionResultType]::ParameterName, 'Use the request document as it is instead of opening the editor')
+            [CompletionResult]::new('--no-push', '--no-push', [CompletionResultType]::ParameterName, 'Do not push the source branch before opening the request')
+            [CompletionResult]::new('-y', '-y', [CompletionResultType]::ParameterName, 'Skip the confirmation prompt')
+            [CompletionResult]::new('--yes', '--yes', [CompletionResultType]::ParameterName, 'Skip the confirmation prompt')
+            [CompletionResult]::new('--dry-run', '--dry-run', [CompletionResultType]::ParameterName, 'Show what would be opened without opening anything')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'rona;pull-request' {
+            [CompletionResult]::new('-t', '-t', [CompletionResultType]::ParameterName, 'Branch to target (defaults to `pr_target`, then the remote''s default branch)')
+            [CompletionResult]::new('--target', '--target', [CompletionResultType]::ParameterName, 'Branch to target (defaults to `pr_target`, then the remote''s default branch)')
+            [CompletionResult]::new('-T', '-T ', [CompletionResultType]::ParameterName, 'Title of the request (overrides the document heading)')
+            [CompletionResult]::new('--title', '--title', [CompletionResultType]::ParameterName, 'Title of the request (overrides the document heading)')
+            [CompletionResult]::new('-b', '-b', [CompletionResultType]::ParameterName, 'Markdown file holding the whole request (skips the editor)')
+            [CompletionResult]::new('--body-file', '--body-file', [CompletionResultType]::ParameterName, 'Markdown file holding the whole request (skips the editor)')
+            [CompletionResult]::new('-l', '-l', [CompletionResultType]::ParameterName, 'Label to apply (repeat for several)')
+            [CompletionResult]::new('--label', '--label', [CompletionResultType]::ParameterName, 'Label to apply (repeat for several)')
+            [CompletionResult]::new('-r', '-r', [CompletionResultType]::ParameterName, 'Reviewer to request (repeat for several)')
+            [CompletionResult]::new('--reviewer', '--reviewer', [CompletionResultType]::ParameterName, 'Reviewer to request (repeat for several)')
+            [CompletionResult]::new('-A', '-A ', [CompletionResultType]::ParameterName, 'Assignee to set (repeat for several)')
+            [CompletionResult]::new('--assignee', '--assignee', [CompletionResultType]::ParameterName, 'Assignee to set (repeat for several)')
+            [CompletionResult]::new('--backend', '--backend', [CompletionResultType]::ParameterName, 'Backend used to open the request')
+            [CompletionResult]::new('--remote', '--remote', [CompletionResultType]::ParameterName, 'Remote to open the request against (defaults to `pr_remote`, then `origin`)')
+            [CompletionResult]::new('-f', '-f', [CompletionResultType]::ParameterName, 'Config file to use instead of the default global/project hierarchy')
+            [CompletionResult]::new('--config-file', '--config-file', [CompletionResultType]::ParameterName, 'Config file to use instead of the default global/project hierarchy')
+            [CompletionResult]::new('-d', '-d', [CompletionResultType]::ParameterName, 'Open the request as a draft')
+            [CompletionResult]::new('--draft', '--draft', [CompletionResultType]::ParameterName, 'Open the request as a draft')
+            [CompletionResult]::new('-w', '-w', [CompletionResultType]::ParameterName, 'Open the pre-filled web form instead of using a CLI backend')
+            [CompletionResult]::new('--web', '--web', [CompletionResultType]::ParameterName, 'Open the pre-filled web form instead of using a CLI backend')
+            [CompletionResult]::new('--no-edit', '--no-edit', [CompletionResultType]::ParameterName, 'Use the request document as it is instead of opening the editor')
+            [CompletionResult]::new('--no-push', '--no-push', [CompletionResultType]::ParameterName, 'Do not push the source branch before opening the request')
+            [CompletionResult]::new('-y', '-y', [CompletionResultType]::ParameterName, 'Skip the confirmation prompt')
+            [CompletionResult]::new('--yes', '--yes', [CompletionResultType]::ParameterName, 'Skip the confirmation prompt')
+            [CompletionResult]::new('--dry-run', '--dry-run', [CompletionResultType]::ParameterName, 'Show what would be opened without opening anything')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
         'rona;push' {
             [CompletionResult]::new('-f', '-f', [CompletionResultType]::ParameterName, 'Config file to use instead of the default global/project hierarchy')
             [CompletionResult]::new('--config-file', '--config-file', [CompletionResultType]::ParameterName, 'Config file to use instead of the default global/project hierarchy')
@@ -229,6 +322,7 @@ Register-ArgumentCompleter -Native -CommandName 'rona' -ScriptBlock {
             [CompletionResult]::new('generate', 'generate', [CompletionResultType]::ParameterValue, 'Directly generate the `commit_message.md` file')
             [CompletionResult]::new('init', 'init', [CompletionResultType]::ParameterValue, 'Initialize the rona configuration file')
             [CompletionResult]::new('list-status', 'list-status', [CompletionResultType]::ParameterValue, 'List files from git status (for shell completion on the -a)')
+            [CompletionResult]::new('pr', 'pr', [CompletionResultType]::ParameterValue, 'Open a pull request (or merge request) for the current branch')
             [CompletionResult]::new('push', 'push', [CompletionResultType]::ParameterValue, 'Push to a git repository')
             [CompletionResult]::new('reset', 'reset', [CompletionResultType]::ParameterValue, 'Unstage files, moving them out of the staging area without losing changes')
             [CompletionResult]::new('restore', 'restore', [CompletionResultType]::ParameterValue, 'Discard working-tree changes, restoring files to their staged or committed state')
@@ -267,6 +361,9 @@ Register-ArgumentCompleter -Native -CommandName 'rona' -ScriptBlock {
             break
         }
         'rona;help;list-status' {
+            break
+        }
+        'rona;help;pr' {
             break
         }
         'rona;help;push' {

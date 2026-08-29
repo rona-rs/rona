@@ -102,3 +102,55 @@ pub fn git_push(args: &[String], verbose: bool, dry_run: bool) -> Result<()> {
 /// * `Result<()>` - `Ok(())` if the command succeeded, `Err(RonaError)` if it failed
 // Use the shared handle_output function from the parent module
 use super::handle_output;
+
+/// Runs `git push` and returns its combined output instead of printing it.
+///
+/// [`git_push`] is the right entry point for ordinary pushes. This variant exists for the
+/// push-options backend of `rona pr`, which needs to read the `remote:` lines that GitLab
+/// writes to stderr in order to recover the merge request URL.
+///
+/// # Arguments
+/// * `args` - Arguments to pass to `git push`, including any `-o` push options
+/// * `verbose` - Whether to skip the spinner and let git write straight to the terminal
+///
+/// # Errors
+/// * If the git push command cannot be run
+/// * If the push is rejected by the remote
+///
+/// # Panics
+/// * If the internal git push thread panics (should not happen in normal use)
+#[tracing::instrument(skip(args))]
+pub fn git_push_capture(args: &[String], verbose: bool) -> Result<String> {
+    tracing::debug!(args = ?args, "Running git push with output capture");
+
+    let show_spinner = !verbose && std::io::stderr().is_terminal();
+    let args_vec: Vec<String> = args.to_vec();
+
+    let output = if show_spinner {
+        let pb = ProgressBar::new_spinner();
+        pb.set_draw_target(ProgressDrawTarget::stderr());
+        pb.set_message("Pushing...");
+        pb.enable_steady_tick(Duration::from_millis(80));
+
+        let handle =
+            std::thread::spawn(move || Command::new("git").arg("push").args(&args_vec).output());
+        let result = handle.join().map_err(|_| RonaError::CommandFailed {
+            command: "git push".to_string(),
+        })?;
+        pb.finish_and_clear();
+        result?
+    } else {
+        Command::new("git").arg("push").args(args).output()?
+    };
+
+    if !output.status.success() {
+        // Reuse the shared formatter so a failed push reads the same as it does elsewhere.
+        handle_output("push", &output)?;
+    }
+
+    Ok(format!(
+        "{}\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    ))
+}

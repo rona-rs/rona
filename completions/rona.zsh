@@ -195,6 +195,99 @@ _arguments "${_arguments_options[@]}" : \
 '--help[Print help]' \
 && ret=0
 ;;
+(pr)
+_arguments "${_arguments_options[@]}" : \
+'-t+[Branch to target (defaults to \`pr_target\`, then the remote'\''s default branch)]:BRANCH:_default' \
+'--target=[Branch to target (defaults to \`pr_target\`, then the remote'\''s default branch)]:BRANCH:_default' \
+'-T+[Title of the request (overrides the document heading)]:TITLE:_default' \
+'--title=[Title of the request (overrides the document heading)]:TITLE:_default' \
+'-b+[Markdown file holding the whole request (skips the editor)]:PATH:_files' \
+'--body-file=[Markdown file holding the whole request (skips the editor)]:PATH:_files' \
+'*-l+[Label to apply (repeat for several)]:LABEL:_default' \
+'*--label=[Label to apply (repeat for several)]:LABEL:_default' \
+'*-r+[Reviewer to request (repeat for several)]:USER:_default' \
+'*--reviewer=[Reviewer to request (repeat for several)]:USER:_default' \
+'*-A+[Assignee to set (repeat for several)]:USER:_default' \
+'*--assignee=[Assignee to set (repeat for several)]:USER:_default' \
+'--backend=[Backend used to open the request]:BACKEND:(auto gh glab push-options browser)' \
+'--remote=[Remote to open the request against (defaults to \`pr_remote\`, then \`origin\`)]:NAME:_default' \
+'-f+[Config file to use instead of the default global/project hierarchy]:PATH:_files' \
+'--config-file=[Config file to use instead of the default global/project hierarchy]:PATH:_files' \
+'-d[Open the request as a draft]' \
+'--draft[Open the request as a draft]' \
+'-w[Open the pre-filled web form instead of using a CLI backend]' \
+'--web[Open the pre-filled web form instead of using a CLI backend]' \
+'--no-edit[Use the request document as it is instead of opening the editor]' \
+'--no-push[Do not push the source branch before opening the request]' \
+'-y[Skip the confirmation prompt]' \
+'--yes[Skip the confirmation prompt]' \
+'--dry-run[Show what would be opened without opening anything]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(mr)
+_arguments "${_arguments_options[@]}" : \
+'-t+[Branch to target (defaults to \`pr_target\`, then the remote'\''s default branch)]:BRANCH:_default' \
+'--target=[Branch to target (defaults to \`pr_target\`, then the remote'\''s default branch)]:BRANCH:_default' \
+'-T+[Title of the request (overrides the document heading)]:TITLE:_default' \
+'--title=[Title of the request (overrides the document heading)]:TITLE:_default' \
+'-b+[Markdown file holding the whole request (skips the editor)]:PATH:_files' \
+'--body-file=[Markdown file holding the whole request (skips the editor)]:PATH:_files' \
+'*-l+[Label to apply (repeat for several)]:LABEL:_default' \
+'*--label=[Label to apply (repeat for several)]:LABEL:_default' \
+'*-r+[Reviewer to request (repeat for several)]:USER:_default' \
+'*--reviewer=[Reviewer to request (repeat for several)]:USER:_default' \
+'*-A+[Assignee to set (repeat for several)]:USER:_default' \
+'*--assignee=[Assignee to set (repeat for several)]:USER:_default' \
+'--backend=[Backend used to open the request]:BACKEND:(auto gh glab push-options browser)' \
+'--remote=[Remote to open the request against (defaults to \`pr_remote\`, then \`origin\`)]:NAME:_default' \
+'-f+[Config file to use instead of the default global/project hierarchy]:PATH:_files' \
+'--config-file=[Config file to use instead of the default global/project hierarchy]:PATH:_files' \
+'-d[Open the request as a draft]' \
+'--draft[Open the request as a draft]' \
+'-w[Open the pre-filled web form instead of using a CLI backend]' \
+'--web[Open the pre-filled web form instead of using a CLI backend]' \
+'--no-edit[Use the request document as it is instead of opening the editor]' \
+'--no-push[Do not push the source branch before opening the request]' \
+'-y[Skip the confirmation prompt]' \
+'--yes[Skip the confirmation prompt]' \
+'--dry-run[Show what would be opened without opening anything]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(pull-request)
+_arguments "${_arguments_options[@]}" : \
+'-t+[Branch to target (defaults to \`pr_target\`, then the remote'\''s default branch)]:BRANCH:_default' \
+'--target=[Branch to target (defaults to \`pr_target\`, then the remote'\''s default branch)]:BRANCH:_default' \
+'-T+[Title of the request (overrides the document heading)]:TITLE:_default' \
+'--title=[Title of the request (overrides the document heading)]:TITLE:_default' \
+'-b+[Markdown file holding the whole request (skips the editor)]:PATH:_files' \
+'--body-file=[Markdown file holding the whole request (skips the editor)]:PATH:_files' \
+'*-l+[Label to apply (repeat for several)]:LABEL:_default' \
+'*--label=[Label to apply (repeat for several)]:LABEL:_default' \
+'*-r+[Reviewer to request (repeat for several)]:USER:_default' \
+'*--reviewer=[Reviewer to request (repeat for several)]:USER:_default' \
+'*-A+[Assignee to set (repeat for several)]:USER:_default' \
+'*--assignee=[Assignee to set (repeat for several)]:USER:_default' \
+'--backend=[Backend used to open the request]:BACKEND:(auto gh glab push-options browser)' \
+'--remote=[Remote to open the request against (defaults to \`pr_remote\`, then \`origin\`)]:NAME:_default' \
+'-f+[Config file to use instead of the default global/project hierarchy]:PATH:_files' \
+'--config-file=[Config file to use instead of the default global/project hierarchy]:PATH:_files' \
+'-d[Open the request as a draft]' \
+'--draft[Open the request as a draft]' \
+'-w[Open the pre-filled web form instead of using a CLI backend]' \
+'--web[Open the pre-filled web form instead of using a CLI backend]' \
+'--no-edit[Use the request document as it is instead of opening the editor]' \
+'--no-push[Do not push the source branch before opening the request]' \
+'-y[Skip the confirmation prompt]' \
+'--yes[Skip the confirmation prompt]' \
+'--dry-run[Show what would be opened without opening anything]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
 (push)
 _arguments "${_arguments_options[@]}" : \
 '-f+[Config file to use instead of the default global/project hierarchy]:PATH:_files' \
@@ -320,6 +413,10 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
+(pr)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
 (push)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
@@ -364,6 +461,9 @@ _rona_commands() {
 'generate:Directly generate the \`commit_message.md\` file' \
 'init:Initialize the rona configuration file' \
 'list-status:List files from git status (for shell completion on the -a)' \
+'pr:Open a pull request (or merge request) for the current branch' \
+'mr:Open a pull request (or merge request) for the current branch' \
+'pull-request:Open a pull request (or merge request) for the current branch' \
 'push:Push to a git repository' \
 'reset:Unstage files, moving them out of the staging area without losing changes' \
 'restore:Discard working-tree changes, restoring files to their staged or committed state' \
@@ -453,6 +553,7 @@ _rona__subcmd__help_commands() {
 'generate:Directly generate the \`commit_message.md\` file' \
 'init:Initialize the rona configuration file' \
 'list-status:List files from git status (for shell completion on the -a)' \
+'pr:Open a pull request (or merge request) for the current branch' \
 'push:Push to a git repository' \
 'reset:Unstage files, moving them out of the staging area without losing changes' \
 'restore:Discard working-tree changes, restoring files to their staged or committed state' \
@@ -520,6 +621,11 @@ _rona__subcmd__help__subcmd__list-status_commands() {
     local commands; commands=()
     _describe -t commands 'rona help list-status commands' commands "$@"
 }
+(( $+functions[_rona__subcmd__help__subcmd__pr_commands] )) ||
+_rona__subcmd__help__subcmd__pr_commands() {
+    local commands; commands=()
+    _describe -t commands 'rona help pr commands' commands "$@"
+}
 (( $+functions[_rona__subcmd__help__subcmd__push_commands] )) ||
 _rona__subcmd__help__subcmd__push_commands() {
     local commands; commands=()
@@ -554,6 +660,11 @@ _rona__subcmd__init_commands() {
 _rona__subcmd__list-status_commands() {
     local commands; commands=()
     _describe -t commands 'rona list-status commands' commands "$@"
+}
+(( $+functions[_rona__subcmd__pr_commands] )) ||
+_rona__subcmd__pr_commands() {
+    local commands; commands=()
+    _describe -t commands 'rona pr commands' commands "$@"
 }
 (( $+functions[_rona__subcmd__push_commands] )) ||
 _rona__subcmd__push_commands() {

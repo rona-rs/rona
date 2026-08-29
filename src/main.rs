@@ -9,6 +9,7 @@
 //! - Intelligent file staging with pattern exclusion
 //! - Structured commit message generation
 //! - Streamlined push operations
+//! - Pull and merge request creation (GitHub, GitLab, Bitbucket)
 //! - Interactive commit type selection
 //! - Multi-shell completion support
 //!
@@ -26,6 +27,9 @@
 //!
 //! # Commit and push changes
 //! rona -c -p
+//!
+//! # Open a pull request for the current branch
+//! rona pr
 //! ```
 //!
 //! For more detailed examples and usage instructions, see the [README.md](../README.md) file.
@@ -37,6 +41,7 @@
 //! - `config`: Manages application configuration
 //! - `errors`: Error handling and custom error types
 //! - `git`: Organized Git-related functionality with focused submodules
+//! - `pr`: Pull and merge request creation across forges
 //! - `my_clap_theme`: Custom theme for command-line output
 //! - `utils`: Common utility functions
 //!
@@ -52,6 +57,7 @@ pub mod config;
 pub mod errors;
 pub mod extra_fields;
 pub mod git;
+pub mod pr;
 pub mod template;
 pub mod theme;
 pub mod utils;

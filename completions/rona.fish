@@ -36,6 +36,9 @@ complete -c rona -n "__fish_rona_needs_command" -f -a "config" -d 'Manage config
 complete -c rona -n "__fish_rona_needs_command" -f -a "generate" -d 'Directly generate the `commit_message.md` file'
 complete -c rona -n "__fish_rona_needs_command" -f -a "init" -d 'Initialize the rona configuration file'
 complete -c rona -n "__fish_rona_needs_command" -f -a "list-status" -d 'List files from git status (for shell completion on the -a)'
+complete -c rona -n "__fish_rona_needs_command" -f -a "pr" -d 'Open a pull request (or merge request) for the current branch'
+complete -c rona -n "__fish_rona_needs_command" -f -a "mr" -d 'Open a pull request (or merge request) for the current branch'
+complete -c rona -n "__fish_rona_needs_command" -f -a "pull-request" -d 'Open a pull request (or merge request) for the current branch'
 complete -c rona -n "__fish_rona_needs_command" -f -a "push" -d 'Push to a git repository'
 complete -c rona -n "__fish_rona_needs_command" -f -a "reset" -d 'Unstage files, moving them out of the staging area without losing changes'
 complete -c rona -n "__fish_rona_needs_command" -f -a "restore" -d 'Discard working-tree changes, restoring files to their staged or committed state'
@@ -88,6 +91,66 @@ complete -c rona -n "__fish_rona_using_subcommand init" -l dry-run -d 'Show what
 complete -c rona -n "__fish_rona_using_subcommand init" -s h -l help -d 'Print help'
 complete -c rona -n "__fish_rona_using_subcommand list-status" -s f -l config-file -d 'Config file to use instead of the default global/project hierarchy' -r -F
 complete -c rona -n "__fish_rona_using_subcommand list-status" -s h -l help -d 'Print help'
+complete -c rona -n "__fish_rona_using_subcommand pr" -s t -l target -d 'Branch to target (defaults to `pr_target`, then the remote\'s default branch)' -r
+complete -c rona -n "__fish_rona_using_subcommand pr" -s T -l title -d 'Title of the request (overrides the document heading)' -r
+complete -c rona -n "__fish_rona_using_subcommand pr" -s b -l body-file -d 'Markdown file holding the whole request (skips the editor)' -r -F
+complete -c rona -n "__fish_rona_using_subcommand pr" -s l -l label -d 'Label to apply (repeat for several)' -r
+complete -c rona -n "__fish_rona_using_subcommand pr" -s r -l reviewer -d 'Reviewer to request (repeat for several)' -r
+complete -c rona -n "__fish_rona_using_subcommand pr" -s A -l assignee -d 'Assignee to set (repeat for several)' -r
+complete -c rona -n "__fish_rona_using_subcommand pr" -l backend -d 'Backend used to open the request' -r -f -a "auto\t''
+gh\t''
+glab\t''
+push-options\t''
+browser\t''"
+complete -c rona -n "__fish_rona_using_subcommand pr" -l remote -d 'Remote to open the request against (defaults to `pr_remote`, then `origin`)' -r
+complete -c rona -n "__fish_rona_using_subcommand pr" -s f -l config-file -d 'Config file to use instead of the default global/project hierarchy' -r -F
+complete -c rona -n "__fish_rona_using_subcommand pr" -s d -l draft -d 'Open the request as a draft'
+complete -c rona -n "__fish_rona_using_subcommand pr" -s w -l web -d 'Open the pre-filled web form instead of using a CLI backend'
+complete -c rona -n "__fish_rona_using_subcommand pr" -l no-edit -d 'Use the request document as it is instead of opening the editor'
+complete -c rona -n "__fish_rona_using_subcommand pr" -l no-push -d 'Do not push the source branch before opening the request'
+complete -c rona -n "__fish_rona_using_subcommand pr" -s y -l yes -d 'Skip the confirmation prompt'
+complete -c rona -n "__fish_rona_using_subcommand pr" -l dry-run -d 'Show what would be opened without opening anything'
+complete -c rona -n "__fish_rona_using_subcommand pr" -s h -l help -d 'Print help'
+complete -c rona -n "__fish_rona_using_subcommand mr" -s t -l target -d 'Branch to target (defaults to `pr_target`, then the remote\'s default branch)' -r
+complete -c rona -n "__fish_rona_using_subcommand mr" -s T -l title -d 'Title of the request (overrides the document heading)' -r
+complete -c rona -n "__fish_rona_using_subcommand mr" -s b -l body-file -d 'Markdown file holding the whole request (skips the editor)' -r -F
+complete -c rona -n "__fish_rona_using_subcommand mr" -s l -l label -d 'Label to apply (repeat for several)' -r
+complete -c rona -n "__fish_rona_using_subcommand mr" -s r -l reviewer -d 'Reviewer to request (repeat for several)' -r
+complete -c rona -n "__fish_rona_using_subcommand mr" -s A -l assignee -d 'Assignee to set (repeat for several)' -r
+complete -c rona -n "__fish_rona_using_subcommand mr" -l backend -d 'Backend used to open the request' -r -f -a "auto\t''
+gh\t''
+glab\t''
+push-options\t''
+browser\t''"
+complete -c rona -n "__fish_rona_using_subcommand mr" -l remote -d 'Remote to open the request against (defaults to `pr_remote`, then `origin`)' -r
+complete -c rona -n "__fish_rona_using_subcommand mr" -s f -l config-file -d 'Config file to use instead of the default global/project hierarchy' -r -F
+complete -c rona -n "__fish_rona_using_subcommand mr" -s d -l draft -d 'Open the request as a draft'
+complete -c rona -n "__fish_rona_using_subcommand mr" -s w -l web -d 'Open the pre-filled web form instead of using a CLI backend'
+complete -c rona -n "__fish_rona_using_subcommand mr" -l no-edit -d 'Use the request document as it is instead of opening the editor'
+complete -c rona -n "__fish_rona_using_subcommand mr" -l no-push -d 'Do not push the source branch before opening the request'
+complete -c rona -n "__fish_rona_using_subcommand mr" -s y -l yes -d 'Skip the confirmation prompt'
+complete -c rona -n "__fish_rona_using_subcommand mr" -l dry-run -d 'Show what would be opened without opening anything'
+complete -c rona -n "__fish_rona_using_subcommand mr" -s h -l help -d 'Print help'
+complete -c rona -n "__fish_rona_using_subcommand pull-request" -s t -l target -d 'Branch to target (defaults to `pr_target`, then the remote\'s default branch)' -r
+complete -c rona -n "__fish_rona_using_subcommand pull-request" -s T -l title -d 'Title of the request (overrides the document heading)' -r
+complete -c rona -n "__fish_rona_using_subcommand pull-request" -s b -l body-file -d 'Markdown file holding the whole request (skips the editor)' -r -F
+complete -c rona -n "__fish_rona_using_subcommand pull-request" -s l -l label -d 'Label to apply (repeat for several)' -r
+complete -c rona -n "__fish_rona_using_subcommand pull-request" -s r -l reviewer -d 'Reviewer to request (repeat for several)' -r
+complete -c rona -n "__fish_rona_using_subcommand pull-request" -s A -l assignee -d 'Assignee to set (repeat for several)' -r
+complete -c rona -n "__fish_rona_using_subcommand pull-request" -l backend -d 'Backend used to open the request' -r -f -a "auto\t''
+gh\t''
+glab\t''
+push-options\t''
+browser\t''"
+complete -c rona -n "__fish_rona_using_subcommand pull-request" -l remote -d 'Remote to open the request against (defaults to `pr_remote`, then `origin`)' -r
+complete -c rona -n "__fish_rona_using_subcommand pull-request" -s f -l config-file -d 'Config file to use instead of the default global/project hierarchy' -r -F
+complete -c rona -n "__fish_rona_using_subcommand pull-request" -s d -l draft -d 'Open the request as a draft'
+complete -c rona -n "__fish_rona_using_subcommand pull-request" -s w -l web -d 'Open the pre-filled web form instead of using a CLI backend'
+complete -c rona -n "__fish_rona_using_subcommand pull-request" -l no-edit -d 'Use the request document as it is instead of opening the editor'
+complete -c rona -n "__fish_rona_using_subcommand pull-request" -l no-push -d 'Do not push the source branch before opening the request'
+complete -c rona -n "__fish_rona_using_subcommand pull-request" -s y -l yes -d 'Skip the confirmation prompt'
+complete -c rona -n "__fish_rona_using_subcommand pull-request" -l dry-run -d 'Show what would be opened without opening anything'
+complete -c rona -n "__fish_rona_using_subcommand pull-request" -s h -l help -d 'Print help'
 complete -c rona -n "__fish_rona_using_subcommand push" -s f -l config-file -d 'Config file to use instead of the default global/project hierarchy' -r -F
 complete -c rona -n "__fish_rona_using_subcommand push" -l dry-run -d 'Show what would be pushed without actually pushing'
 complete -c rona -n "__fish_rona_using_subcommand push" -s h -l help -d 'Print help'
@@ -109,20 +172,21 @@ complete -c rona -n "__fish_rona_using_subcommand sync" -s f -l config-file -d '
 complete -c rona -n "__fish_rona_using_subcommand sync" -s r -l rebase -d 'Use rebase instead of merge'
 complete -c rona -n "__fish_rona_using_subcommand sync" -l dry-run -d 'Show what would be done without actually doing it'
 complete -c rona -n "__fish_rona_using_subcommand sync" -s h -l help -d 'Print help'
-complete -c rona -n "__fish_rona_using_subcommand help; and not __fish_seen_subcommand_from branch add-with-exclude commit completion config generate init list-status push reset restore set-editor sync help" -f -a "branch" -d 'Create a new branch interactively using a branch name template'
-complete -c rona -n "__fish_rona_using_subcommand help; and not __fish_seen_subcommand_from branch add-with-exclude commit completion config generate init list-status push reset restore set-editor sync help" -f -a "add-with-exclude" -d 'Add all files to the `git add` command and exclude the patterns passed as positional arguments'
-complete -c rona -n "__fish_rona_using_subcommand help; and not __fish_seen_subcommand_from branch add-with-exclude commit completion config generate init list-status push reset restore set-editor sync help" -f -a "commit" -d 'Directly commit the file with the text in `commit_message.md`'
-complete -c rona -n "__fish_rona_using_subcommand help; and not __fish_seen_subcommand_from branch add-with-exclude commit completion config generate init list-status push reset restore set-editor sync help" -f -a "completion" -d 'Generate shell completions for your shell'
-complete -c rona -n "__fish_rona_using_subcommand help; and not __fish_seen_subcommand_from branch add-with-exclude commit completion config generate init list-status push reset restore set-editor sync help" -f -a "config" -d 'Manage configuration files (create or inspect)'
-complete -c rona -n "__fish_rona_using_subcommand help; and not __fish_seen_subcommand_from branch add-with-exclude commit completion config generate init list-status push reset restore set-editor sync help" -f -a "generate" -d 'Directly generate the `commit_message.md` file'
-complete -c rona -n "__fish_rona_using_subcommand help; and not __fish_seen_subcommand_from branch add-with-exclude commit completion config generate init list-status push reset restore set-editor sync help" -f -a "init" -d 'Initialize the rona configuration file'
-complete -c rona -n "__fish_rona_using_subcommand help; and not __fish_seen_subcommand_from branch add-with-exclude commit completion config generate init list-status push reset restore set-editor sync help" -f -a "list-status" -d 'List files from git status (for shell completion on the -a)'
-complete -c rona -n "__fish_rona_using_subcommand help; and not __fish_seen_subcommand_from branch add-with-exclude commit completion config generate init list-status push reset restore set-editor sync help" -f -a "push" -d 'Push to a git repository'
-complete -c rona -n "__fish_rona_using_subcommand help; and not __fish_seen_subcommand_from branch add-with-exclude commit completion config generate init list-status push reset restore set-editor sync help" -f -a "reset" -d 'Unstage files, moving them out of the staging area without losing changes'
-complete -c rona -n "__fish_rona_using_subcommand help; and not __fish_seen_subcommand_from branch add-with-exclude commit completion config generate init list-status push reset restore set-editor sync help" -f -a "restore" -d 'Discard working-tree changes, restoring files to their staged or committed state'
-complete -c rona -n "__fish_rona_using_subcommand help; and not __fish_seen_subcommand_from branch add-with-exclude commit completion config generate init list-status push reset restore set-editor sync help" -f -a "set-editor" -d 'Set the editor to use for editing the commit message'
-complete -c rona -n "__fish_rona_using_subcommand help; and not __fish_seen_subcommand_from branch add-with-exclude commit completion config generate init list-status push reset restore set-editor sync help" -f -a "sync" -d 'Sync current branch with main (or another branch) by pulling and merging/rebasing'
-complete -c rona -n "__fish_rona_using_subcommand help; and not __fish_seen_subcommand_from branch add-with-exclude commit completion config generate init list-status push reset restore set-editor sync help" -f -a "help" -d 'Print this message or the help of the given subcommand(s)'
+complete -c rona -n "__fish_rona_using_subcommand help; and not __fish_seen_subcommand_from branch add-with-exclude commit completion config generate init list-status pr push reset restore set-editor sync help" -f -a "branch" -d 'Create a new branch interactively using a branch name template'
+complete -c rona -n "__fish_rona_using_subcommand help; and not __fish_seen_subcommand_from branch add-with-exclude commit completion config generate init list-status pr push reset restore set-editor sync help" -f -a "add-with-exclude" -d 'Add all files to the `git add` command and exclude the patterns passed as positional arguments'
+complete -c rona -n "__fish_rona_using_subcommand help; and not __fish_seen_subcommand_from branch add-with-exclude commit completion config generate init list-status pr push reset restore set-editor sync help" -f -a "commit" -d 'Directly commit the file with the text in `commit_message.md`'
+complete -c rona -n "__fish_rona_using_subcommand help; and not __fish_seen_subcommand_from branch add-with-exclude commit completion config generate init list-status pr push reset restore set-editor sync help" -f -a "completion" -d 'Generate shell completions for your shell'
+complete -c rona -n "__fish_rona_using_subcommand help; and not __fish_seen_subcommand_from branch add-with-exclude commit completion config generate init list-status pr push reset restore set-editor sync help" -f -a "config" -d 'Manage configuration files (create or inspect)'
+complete -c rona -n "__fish_rona_using_subcommand help; and not __fish_seen_subcommand_from branch add-with-exclude commit completion config generate init list-status pr push reset restore set-editor sync help" -f -a "generate" -d 'Directly generate the `commit_message.md` file'
+complete -c rona -n "__fish_rona_using_subcommand help; and not __fish_seen_subcommand_from branch add-with-exclude commit completion config generate init list-status pr push reset restore set-editor sync help" -f -a "init" -d 'Initialize the rona configuration file'
+complete -c rona -n "__fish_rona_using_subcommand help; and not __fish_seen_subcommand_from branch add-with-exclude commit completion config generate init list-status pr push reset restore set-editor sync help" -f -a "list-status" -d 'List files from git status (for shell completion on the -a)'
+complete -c rona -n "__fish_rona_using_subcommand help; and not __fish_seen_subcommand_from branch add-with-exclude commit completion config generate init list-status pr push reset restore set-editor sync help" -f -a "pr" -d 'Open a pull request (or merge request) for the current branch'
+complete -c rona -n "__fish_rona_using_subcommand help; and not __fish_seen_subcommand_from branch add-with-exclude commit completion config generate init list-status pr push reset restore set-editor sync help" -f -a "push" -d 'Push to a git repository'
+complete -c rona -n "__fish_rona_using_subcommand help; and not __fish_seen_subcommand_from branch add-with-exclude commit completion config generate init list-status pr push reset restore set-editor sync help" -f -a "reset" -d 'Unstage files, moving them out of the staging area without losing changes'
+complete -c rona -n "__fish_rona_using_subcommand help; and not __fish_seen_subcommand_from branch add-with-exclude commit completion config generate init list-status pr push reset restore set-editor sync help" -f -a "restore" -d 'Discard working-tree changes, restoring files to their staged or committed state'
+complete -c rona -n "__fish_rona_using_subcommand help; and not __fish_seen_subcommand_from branch add-with-exclude commit completion config generate init list-status pr push reset restore set-editor sync help" -f -a "set-editor" -d 'Set the editor to use for editing the commit message'
+complete -c rona -n "__fish_rona_using_subcommand help; and not __fish_seen_subcommand_from branch add-with-exclude commit completion config generate init list-status pr push reset restore set-editor sync help" -f -a "sync" -d 'Sync current branch with main (or another branch) by pulling and merging/rebasing'
+complete -c rona -n "__fish_rona_using_subcommand help; and not __fish_seen_subcommand_from branch add-with-exclude commit completion config generate init list-status pr push reset restore set-editor sync help" -f -a "help" -d 'Print this message or the help of the given subcommand(s)'
 complete -c rona -n "__fish_rona_using_subcommand help; and __fish_seen_subcommand_from config" -f -a "create" -d 'Create or manage a local or global configuration file'
 complete -c rona -n "__fish_rona_using_subcommand help; and __fish_seen_subcommand_from config" -f -a "which" -d 'Show which configuration files would be used from a directory'
 

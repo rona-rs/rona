@@ -139,6 +139,83 @@ branch_field_order = ["ticket", "description"]
 
 
 # ---------------------------------------------------------------------------
+# Pull / merge requests  (rona pr)
+# ---------------------------------------------------------------------------
+# `rona pr` builds a request the same way whatever the forge is, then hands it to
+# a backend that knows how to submit it:
+#
+#   gh            the GitHub CLI
+#   glab          the GitLab CLI
+#   push-options  git push -o merge_request.*  (GitLab only, no extra binary)
+#   browser       a pre-filled web form        (any known forge, no login)
+#
+# The default, "auto", uses gh or glab when the binary is installed, falls back to
+# GitLab push options, and otherwise opens the web form.
+
+# pr_backend = "auto"
+
+# Branch requests target. When absent, the remote's default branch is used.
+# pr_target = "main"
+
+# Remote requests are opened against.
+# pr_remote = "origin"
+
+# Forge behind the remote: "github", "gitlab", or "bitbucket".
+# Detection reads the hostname, so gitlab.example.com is recognised but
+# git.example.com is not. Set this key for self-hosted instances.
+# pr_forge = "gitlab"
+
+# Open every request as a draft.
+# pr_draft = false
+
+# Applied to every request opened from this project. Values passed on the command
+# line are added to these rather than replacing them.
+# pr_labels = ["needs-review"]
+# pr_reviewers = ["alice"]
+# pr_assignees = ["bob"]
+
+
+# ---------------------------------------------------------------------------
+# Request title template
+# ---------------------------------------------------------------------------
+# A request is one Markdown document: the leading "# Heading" is the title and
+# everything below it is the description. This template seeds that heading when
+# the document is created, and whatever the heading says after you edit it is
+# what gets posted.
+#
+# The default is "{commit_subject}", which needs no prompt: the editor opens on a
+# heading you can correct in place. Reference {title} instead to be asked for one
+# before the editor opens.
+#
+# Built-in variables:
+#   {branch_type}     Prefix of the current branch, e.g. "feat" for feat/login
+#   {branch_name}     Full current branch name
+#   {title}           The title entered at the prompt
+#   {target_branch}   Branch the request targets
+#   {commit_subject}  Subject line of the most recent commit
+#   {date}            Today's date as YYYY-MM-DD
+#   {time}            Current time as HH:MM:SS
+#   {author}          Git author name
+#   {email}           Git author email
+#
+# Extra field variables come from [[pr_extra_fields]] below.
+# Conditional blocks work exactly as they do for commit templates.
+#
+# pr_title_template = "{?ticket}[{ticket}] {/ticket}{commit_subject}"
+
+
+# ---------------------------------------------------------------------------
+# Request prompt order
+# ---------------------------------------------------------------------------
+# Use the reserved name "title" to position the built-in title prompt.
+# Extra fields not listed here are appended after all listed items.
+# Only applies when the title template references the fields, so the default
+# template prompts for nothing at all.
+
+# pr_field_order = ["ticket", "title"]
+
+
+# ---------------------------------------------------------------------------
 # Commit extra fields
 # ---------------------------------------------------------------------------
 # Each [[extra_fields]] entry adds one interactive prompt to `rona -g -i`.
@@ -247,3 +324,27 @@ prefetch.extract_regex = "[A-Z]+-[0-9]+"
 # prompt = "Component scope (optional)"
 # kind = "text"
 # required = false
+
+
+# ---------------------------------------------------------------------------
+# Request extra fields
+# ---------------------------------------------------------------------------
+# Each [[pr_extra_fields]] entry adds one interactive prompt to `rona pr`.
+# The value entered becomes a variable in `pr_title_template`.
+# Supports the same keys as [[extra_fields]] above (name, prompt, kind, required,
+# validation, prefetch.*).
+#
+# Only fields the title template actually references are prompted, so an unused
+# field is skipped rather than asked for and discarded.
+
+# --- ticket ---
+# Ticket reference read straight off the branch name, which is the most common way
+# to title a request after the branch it comes from.
+#
+# [[pr_extra_fields]]
+# name = "ticket"
+# prompt = "Ticket reference (optional)"
+# kind = "text"
+# required = false
+# prefetch.source = "branch"
+# prefetch.extract_regex = "[A-Z]+-[0-9]+"

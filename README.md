@@ -46,6 +46,7 @@ Rona is a command-line interface tool designed to enhance your Git workflow with
 - Structured commit message generation
 - Interactive branch creation from configurable name templates (`rona branch`)
 - Streamlined push operations
+- Pull and merge request creation from the terminal (`rona pr`), through `gh`, `glab`, GitLab push options, or a pre-filled web form
 - Branch synchronization with merge/rebase support
 - Interactive commit type selection with customizable types
 - Config-driven extra prompt fields (scope, ticket, etc.) with optional prefetching, regex validation, and configurable ordering — for both commit messages and branch names
@@ -150,6 +151,46 @@ template = "{?commit_number}[{commit_number}] {/commit_number}({commit_type} on 
 
 # Extra prompts for branch name generation (see "Branch Extra Fields" section below)
 # [[branch_extra_fields]]
+# name = "ticket"
+# ...
+
+# --- Pull / merge requests (rona pr) ---
+
+# Template that seeds the heading of the request document.
+# Built-in variables: {branch_type}, {branch_name}, {title}, {target_branch}, {commit_subject}, {date}, {time}, {author}, {email}
+# Extra field names defined in [[pr_extra_fields]] are also valid.
+# Default: "{commit_subject}" (the last commit subject, which needs no prompt).
+# Referencing {title} adds an interactive title prompt before the editor opens.
+# pr_title_template = "{branch_type}: {commit_subject}"
+
+# Optional: control the order of prompts in rona pr.
+# Use "title" to position the built-in title prompt.
+# pr_field_order = ["ticket", "title"]
+
+# Backend used to open the request: "auto", "gh", "glab", "push-options", or "browser".
+# Default: "auto" (picks from the detected forge and the binaries installed).
+# pr_backend = "auto"
+
+# Branch requests target. When absent, the remote's default branch is used.
+# pr_target = "main"
+
+# Remote requests are opened against. Default: "origin".
+# pr_remote = "origin"
+
+# Forge behind the remote: "github", "gitlab", or "bitbucket".
+# Only needed for self-hosted instances whose hostname does not name the product.
+# pr_forge = "gitlab"
+
+# Open every request as a draft. Default: false.
+# pr_draft = false
+
+# Applied to every request opened from this project.
+# pr_labels = ["needs-review"]
+# pr_reviewers = ["alice"]
+# pr_assignees = ["bob"]
+
+# Extra prompts for request titles, same shape as [[extra_fields]]
+# [[pr_extra_fields]]
 # name = "ticket"
 # ...
 ```
@@ -1130,6 +1171,125 @@ Display repository status (primarily for shell completion).
 rona list-status
 # or
 rona -l
+```
+
+### `pr` (`mr`, `pull-request`)
+
+Open a pull request (or merge request) for the current branch, without leaving the terminal.
+
+```bash
+rona pr [OPTIONS]
+```
+
+**What it does:**
+
+1. Reads the remote (`--remote`, then `pr_remote`, then `origin`) and works out which forge is behind it
+2. Resolves the target branch (`--target`, then `pr_target`, then the remote's default branch)
+3. Picks a backend, unless one is configured or passed
+4. Creates `pr_description.md` and opens it in your editor, with the heading seeded from `pr_title_template` and the body from the repository's own request template
+5. Reads the title back from the heading and the description from everything below it
+6. Pushes the branch, shows a summary, and asks for confirmation
+7. Submits the request and prints its URL
+
+**One file for the whole request:**
+
+A request is one Markdown document. The leading `# Heading` is the title and everything below it is the description, so the entire thing can be written in your editor, reviewed, and passed around as a single file:
+
+```markdown
+# Add user authentication
+
+Adds session handling and the login form.
+
+## Notes
+
+Migration `0042` has to run before deploying.
+```
+
+That posts as a request titled "Add user authentication" whose description starts at "Adds session handling". The heading is never posted twice.
+
+The rules are deliberately narrow, so a document is never silently misread:
+
+- Only the first non-empty line can be the title, and only when it starts with a single `#`
+- `## Summary` and deeper headings are ordinary body content, which is how most forge templates open
+- A document with no leading heading is all description, and the title falls back to `pr_title_template`, then to `--title`
+- `--title` always wins, and the heading is still stripped from the body
+
+The same applies to `--body-file`, so a request written elsewhere works too:
+
+```bash
+rona pr --body-file release-notes.md -y
+```
+
+**Backends:**
+
+| Backend | Used for | Needs |
+|---|---|---|
+| `gh` | GitHub | The `gh` CLI, logged in |
+| `glab` | GitLab | The `glab` CLI, logged in |
+| `push-options` | GitLab only | Nothing beyond git |
+| `browser` | Any known forge | A browser, no login |
+
+With `pr_backend = "auto"` (the default) rona picks `gh` or `glab` when the matching binary is installed, falls back to GitLab push options, and otherwise opens the web form. Push options are refused on anything other than GitLab, because other forges ignore them silently and nothing would be created.
+
+**Options:**
+
+- `-t, --target <BRANCH>` - Branch to target
+- `-T, --title <TITLE>` - Title of the request, overriding the document heading
+- `-b, --body-file <PATH>` - Markdown file to use as the description, skipping the editor
+- `-d, --draft` - Open the request as a draft
+- `-l, --label <LABEL>` - Label to apply (repeat for several)
+- `-r, --reviewer <USER>` - Reviewer to request (repeat for several)
+- `-A, --assignee <USER>` - Assignee to set (repeat for several)
+- `--backend <BACKEND>` - One of `auto`, `gh`, `glab`, `push-options`, `browser`
+- `--remote <NAME>` - Remote to open the request against
+- `-w, --web` - Open the pre-filled web form, whatever the configured backend is
+- `--no-edit` - Use `pr_description.md` as it is instead of opening the editor
+- `--no-push` - Do not push the source branch first
+- `-y, --yes` - Skip the confirmation prompt
+- `--dry-run` - Print the exact backend command without running it
+
+**Examples:**
+
+```bash
+# Interactive: prompts for the title, opens the description in your editor
+rona pr
+
+# Everything on the command line
+rona pr -T "Add user authentication" -b notes.md -y
+
+# Draft against a non-default branch, with reviewers
+rona pr --target develop --draft -r alice -r bob
+
+# See what would run, without opening anything
+rona pr --dry-run
+```
+
+**Dry-run output:**
+
+```
+$ rona pr --dry-run --no-edit -y
+Would write the request to: /repo/pr_description.md
+Would push to remote repository
+Would run: gh pr create --base main --head feat/pr --title 'Add the pr command' --body-file /repo/.git/rona-pr-body.md
+```
+
+The description is handed to `gh` through `.git/rona-pr-body.md`, which holds the body with the title heading removed. It is a handoff file, not something to edit or commit.
+
+**Description templates:**
+
+Below the heading, a new `pr_description.md` is seeded from whatever the repository already uses, so the same template your teammates see in the web UI is what you get in your editor:
+
+- GitHub: `.github/PULL_REQUEST_TEMPLATE.md`, `PULL_REQUEST_TEMPLATE.md`, `docs/PULL_REQUEST_TEMPLATE.md`, or any Markdown file under `.github/PULL_REQUEST_TEMPLATE/`
+- GitLab: `.gitlab/merge_request_templates/*.md`
+
+When several templates are found, rona shows a picker. When none are found, the file starts empty. `pr_description.md` is added to `.git/info/exclude`, the same way `commit_message.md` is.
+
+**Self-hosted instances:**
+
+Detection reads the hostname, so `gitlab.example.com` is recognised but `git.example.com` is not. Name it once in your config:
+
+```toml
+pr_forge = "gitlab"
 ```
 
 ### `push` (`-p`)
