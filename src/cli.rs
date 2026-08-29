@@ -14,6 +14,7 @@
 //! - `generate`: Generate a new commit message file
 //! - `init`: Initialize Rona configuration
 //! - `list-status`: List git status files (for shell completion)
+//! - `pr`: Open a pull or merge request for the current branch
 //! - `push`: Push changes to remote repository
 //! - `set-editor`: Configure the editor for commit messages
 //!
@@ -26,12 +27,14 @@
 //! - Handles configuration management
 //!
 
-use clap::{Command as ClapCommand, CommandFactory, Parser, Subcommand, ValueEnum, ValueHint};
+use clap::{
+    Args, Command as ClapCommand, CommandFactory, Parser, Subcommand, ValueEnum, ValueHint,
+};
 use clap_complete::{Shell, generate};
 use colored::Colorize;
 use dialoguer::{Confirm, FuzzySelect, Input, MultiSelect};
 use glob::Pattern;
-use std::{collections::HashMap, fs::read_to_string, io, process::Command};
+use std::{collections::HashMap, fs::read_to_string, io, path::Path, process::Command};
 
 use crate::{
     config::{Config, find_config_sources},
@@ -41,16 +44,22 @@ use crate::{
         run_message_prefetch,
     },
     git::{
-        COMMIT_MESSAGE_FILE_PATH, COMMIT_TYPES, add_to_git_exclude, create_needed_files,
-        format_branch_name, generate_commit_message, get_current_branch, get_current_commit_nb,
-        get_restorable_files, get_stageable_files, get_staged_files, get_status_files,
-        get_top_level_path, git_add_files, git_add_with_exclude_patterns, git_branch_only,
-        git_commit, git_create_branch, git_push, git_restore_files, git_unstage_files,
-        sanitize_branch_name,
+        COMMIT_MESSAGE_FILE_PATH, COMMIT_TYPES, Forge, RemoteInfo, add_to_git_exclude,
+        create_needed_files, default_branch, detect_remote, format_branch_name,
+        generate_commit_message, get_current_branch, get_current_commit_nb, get_restorable_files,
+        get_stageable_files, get_staged_files, get_status_files, get_top_level_path, git_add_files,
+        git_add_with_exclude_patterns, git_branch_only, git_commit, git_create_branch, git_push,
+        git_restore_files, git_unstage_files, sanitize_branch_name,
+    },
+    pr::{
+        PR_DESCRIPTION_FILE_PATH, PrBackend, PrRequest, body_file_path, branch_type_of,
+        compose_description, default_title_source, find_description_templates, push_source_branch,
+        resolve_backend, split_title_and_body, submit, write_body_file,
     },
     template::{
-        BranchTemplateVariables, TemplateVariables, process_branch_template, process_template,
-        validate_branch_template, validate_template,
+        BranchTemplateVariables, PrTemplateVariables, TemplateVariables, process_branch_template,
+        process_pr_template, process_template, validate_branch_template, validate_pr_template,
+        validate_template,
     },
     theme::prompt_theme,
 };
@@ -94,6 +103,75 @@ pub(crate) enum ConfigSubcommand {
         #[arg(short = 'e', long = "effective", default_value_t = false)]
         show_effective: bool,
     },
+}
+
+/// Arguments for the `pr` command.
+///
+/// Every field has a config counterpart, and the flag always wins. Anything left unset falls
+/// back to the config file and then to a value derived from the repository.
+// A command line flag struct is naturally bool-heavy; one field per switch is the clearest form.
+#[allow(clippy::struct_excessive_bools)]
+#[derive(Args, Debug)]
+pub(crate) struct PrArgs {
+    /// Branch to target (defaults to `pr_target`, then the remote's default branch)
+    #[arg(short = 't', long = "target", value_name = "BRANCH")]
+    pub(crate) target: Option<String>,
+
+    /// Title of the request (overrides the document heading)
+    #[arg(short = 'T', long = "title", value_name = "TITLE")]
+    pub(crate) title: Option<String>,
+
+    /// Markdown file holding the whole request (skips the editor)
+    #[arg(short = 'b', long = "body-file", value_name = "PATH", value_hint = ValueHint::FilePath)]
+    pub(crate) body_file: Option<String>,
+
+    /// Open the request as a draft
+    #[arg(short = 'd', long = "draft", default_value_t = false)]
+    pub(crate) draft: bool,
+
+    /// Label to apply (repeat for several)
+    #[arg(short = 'l', long = "label", value_name = "LABEL")]
+    pub(crate) labels: Vec<String>,
+
+    /// Reviewer to request (repeat for several)
+    #[arg(short = 'r', long = "reviewer", value_name = "USER")]
+    pub(crate) reviewers: Vec<String>,
+
+    /// Assignee to set (repeat for several)
+    #[arg(short = 'A', long = "assignee", value_name = "USER")]
+    pub(crate) assignees: Vec<String>,
+
+    /// Backend used to open the request
+    #[arg(
+        long = "backend",
+        value_name = "BACKEND",
+        value_parser = ["auto", "gh", "glab", "push-options", "browser"]
+    )]
+    pub(crate) backend: Option<String>,
+
+    /// Remote to open the request against (defaults to `pr_remote`, then `origin`)
+    #[arg(long = "remote", value_name = "NAME")]
+    pub(crate) remote: Option<String>,
+
+    /// Open the pre-filled web form instead of using a CLI backend
+    #[arg(short = 'w', long = "web", default_value_t = false)]
+    pub(crate) web: bool,
+
+    /// Use the request document as it is instead of opening the editor
+    #[arg(long = "no-edit", default_value_t = false)]
+    pub(crate) no_edit: bool,
+
+    /// Do not push the source branch before opening the request
+    #[arg(long = "no-push", default_value_t = false)]
+    pub(crate) no_push: bool,
+
+    /// Skip the confirmation prompt
+    #[arg(short = 'y', long = "yes", default_value_t = false)]
+    pub(crate) yes: bool,
+
+    /// Show what would be opened without opening anything
+    #[arg(long, default_value_t = false)]
+    pub(crate) dry_run: bool,
 }
 
 /// CLI's commands
@@ -202,6 +280,10 @@ pub(crate) enum CliCommand {
     #[command(short_flag = 'l')]
     ListStatus,
 
+    /// Open a pull request (or merge request) for the current branch.
+    #[command(name = "pr", visible_aliases = ["mr", "pull-request"])]
+    Pr(PrArgs),
+
     /// Push to a git repository.
     #[command(short_flag = 'p')]
     Push {
@@ -289,6 +371,7 @@ pub(crate) enum CliCommand {
 \t- Generate the 'commit_message.md' file.\n\
 \t- Push to git repository.\n\
 \t- Add files with pattern exclusion.\n\
+\t- Open a pull or merge request for the current branch.\n\
 \nAll commands support --dry-run to preview changes.")]
 #[command(author = "Tom Planche <tomplanche@proton.me>")]
 #[command(help_template = "{about}\nMade by: {author}\n\nUSAGE:\n{usage}\n\n{all-args}\n")]
@@ -354,24 +437,12 @@ fn prompt_branch_fields(
     let description_disabled = description_config.is_some_and(|c| c.disabled);
     let effective_needs_description = needs_description && !description_disabled;
 
-    let ordered: Vec<String> = if field_order.is_empty() {
-        let mut v: Vec<String> = extra_fields.iter().map(|f| f.name.clone()).collect();
-        if effective_needs_description {
-            v.push(DESCRIPTION_KEY.to_string());
-        }
-        v
-    } else {
-        let mut v: Vec<String> = field_order.to_vec();
-        for f in extra_fields {
-            if !v.iter().any(|s| s == &f.name) {
-                v.push(f.name.clone());
-            }
-        }
-        if effective_needs_description && !v.iter().any(|s| s == DESCRIPTION_KEY) {
-            v.push(DESCRIPTION_KEY.to_string());
-        }
-        v
-    };
+    let ordered = ordered_field_names(
+        extra_fields,
+        field_order,
+        DESCRIPTION_KEY,
+        effective_needs_description,
+    );
 
     let mut description: Option<String> = None;
     let mut extra_values: HashMap<String, String> = HashMap::new();
@@ -381,34 +452,11 @@ fn prompt_branch_fields(
             let prompt_text = description_config
                 .and_then(|c| c.prompt.as_deref())
                 .unwrap_or("Branch description");
-            let validator_pattern = description_config.and_then(|c| c.validation.as_deref());
-            let value = if let Some(pattern) = validator_pattern {
-                let re = regex::Regex::new(pattern).map_err(|e| {
-                    RonaError::InvalidInput(format!(
-                        "Invalid validation regex for branch description: {e}"
-                    ))
-                })?;
-                let pattern_owned = pattern.to_string();
-                Input::<String>::with_theme(&prompt_theme())
-                    .with_prompt(prompt_text)
-                    .allow_empty(true)
-                    .validate_with(move |input: &String| -> std::result::Result<(), String> {
-                        if re.is_match(input) {
-                            Ok(())
-                        } else {
-                            Err(format!("Must match pattern: {pattern_owned}"))
-                        }
-                    })
-                    .interact_text()
-                    .map_err(|_| RonaError::UserCancelled)?
-            } else {
-                Input::<String>::with_theme(&prompt_theme())
-                    .with_prompt(prompt_text)
-                    .allow_empty(true)
-                    .interact_text()
-                    .map_err(|_| RonaError::UserCancelled)?
-            };
-            description = Some(value);
+            description = Some(prompt_text_field(
+                prompt_text,
+                description_config.and_then(|c| c.validation.as_deref()),
+                None,
+            )?);
         } else if let Some(field) = extra_fields.iter().find(|f| f.name == *name)
             && let Some(value) = prompt_extra_field(field)?
         {
@@ -1002,6 +1050,13 @@ fn select_commit_type(config: &Config) -> Result<&str> {
 const DEFAULT_COMMIT_TEMPLATE: &str =
     "{?commit_number}[{commit_number}] {/commit_number}({commit_type} on {branch_name}) {message}";
 
+/// The default pull/merge request title template used when none is configured.
+///
+/// The title is normally written as the request document's heading, so the default only has to
+/// seed that heading. The last commit subject is the closest thing to a title the repository
+/// already holds, and it needs no prompt. Configure `{title}` to be asked for one instead.
+const DEFAULT_PR_TITLE_TEMPLATE: &str = "{commit_subject}";
+
 /// Handle the Generate command which creates a new commit message file.
 ///
 /// # Arguments
@@ -1195,14 +1250,15 @@ fn handle_interactive_mode(
     Ok(())
 }
 
-/// Handle editor mode for generate command
-fn handle_editor_mode(config: &Config) -> Result<()> {
+/// Opens a file in the configured editor and waits for it to close.
+///
+/// # Errors
+/// * If the editor cannot be launched or waited on
+fn open_in_editor(path: &Path, config: &Config) -> Result<()> {
     let editor = config.get_editor()?;
-    let project_root = get_top_level_path()?;
-    let commit_file_path = project_root.join(COMMIT_MESSAGE_FILE_PATH);
 
     Command::new(&editor)
-        .arg(&commit_file_path)
+        .arg(path)
         .spawn()
         .map_err(|e| RonaError::CommandFailed {
             command: format!("Failed to spawn editor '{editor}': {e}"),
@@ -1211,7 +1267,16 @@ fn handle_editor_mode(config: &Config) -> Result<()> {
         .map_err(|e| RonaError::CommandFailed {
             command: format!("Failed to wait for editor '{editor}': {e}"),
         })?;
+
     Ok(())
+}
+
+/// Handle editor mode for generate command
+fn handle_editor_mode(config: &Config) -> Result<()> {
+    let project_root = get_top_level_path()?;
+    let commit_file_path = project_root.join(COMMIT_MESSAGE_FILE_PATH);
+
+    open_in_editor(&commit_file_path, config)
 }
 
 /// Handle the Initialize command which creates the initial configuration file.
@@ -1624,6 +1689,540 @@ fn handle_config_command(scope: ConfigScope, exclude: bool, config: &Config) -> 
     Ok(())
 }
 
+/// Prompts for a free-text value.
+///
+/// `validation` is a regex the answer must match, and `default_value` is offered as the
+/// pre-filled answer so that pressing Enter accepts it.
+///
+/// # Errors
+/// * If the validation regex is invalid
+/// * If the user cancels the prompt
+fn prompt_text_field(
+    prompt_text: &str,
+    validation: Option<&str>,
+    default_value: Option<&str>,
+) -> Result<String> {
+    let theme = prompt_theme();
+    let mut input = Input::<String>::with_theme(&theme)
+        .with_prompt(prompt_text)
+        .allow_empty(true);
+
+    if let Some(default) = default_value.filter(|value| !value.trim().is_empty()) {
+        input = input.default(default.to_string());
+    }
+
+    if let Some(pattern) = validation {
+        let regex = regex::Regex::new(pattern).map_err(|e| {
+            RonaError::InvalidInput(format!("Invalid validation regex '{pattern}': {e}"))
+        })?;
+        let pattern_owned = pattern.to_string();
+        input = input.validate_with(move |value: &String| -> std::result::Result<(), String> {
+            if regex.is_match(value) {
+                Ok(())
+            } else {
+                Err(format!("Must match pattern: {pattern_owned}"))
+            }
+        });
+    }
+
+    input.interact_text().map_err(|_| RonaError::UserCancelled)
+}
+
+/// Prompts for the request title and any configured PR extra fields, in the configured order.
+///
+/// The reserved name `"title"` positions the built-in title prompt. Extra fields not listed in
+/// `field_order` are appended after all listed items.
+///
+/// # Errors
+/// * If any prompt is cancelled or a validation regex is invalid
+fn prompt_pr_fields(
+    extra_fields: &[ExtraField],
+    field_order: &[String],
+    needs_title: bool,
+    title_config: Option<&BuiltInFieldConfig>,
+    title_default: &str,
+) -> Result<(String, HashMap<String, String>)> {
+    const TITLE_KEY: &str = "title";
+
+    let title_disabled = title_config.is_some_and(|c| c.disabled);
+    let effective_needs_title = needs_title && !title_disabled;
+
+    let ordered = ordered_field_names(extra_fields, field_order, TITLE_KEY, effective_needs_title);
+
+    let mut title: Option<String> = None;
+    let mut extra_values: HashMap<String, String> = HashMap::new();
+
+    for name in &ordered {
+        if name == TITLE_KEY {
+            let prompt_text = title_config
+                .and_then(|c| c.prompt.as_deref())
+                .unwrap_or("Request title");
+            title = Some(prompt_text_field(
+                prompt_text,
+                title_config.and_then(|c| c.validation.as_deref()),
+                Some(title_default),
+            )?);
+        } else if let Some(field) = extra_fields.iter().find(|f| f.name == *name)
+            && let Some(value) = prompt_extra_field(field)?
+        {
+            extra_values.insert(field.name.clone(), value);
+        }
+    }
+
+    Ok((title.unwrap_or_default(), extra_values))
+}
+
+/// Builds the prompt order for a template that has one built-in field.
+///
+/// Fields named in `field_order` come first in that order, then any configured field the order
+/// does not mention, then the built-in prompt when it is not already positioned.
+fn ordered_field_names(
+    extra_fields: &[ExtraField],
+    field_order: &[String],
+    builtin_key: &str,
+    needs_builtin: bool,
+) -> Vec<String> {
+    let mut ordered: Vec<String> = if field_order.is_empty() {
+        extra_fields.iter().map(|f| f.name.clone()).collect()
+    } else {
+        let mut listed = field_order.to_vec();
+        for field in extra_fields {
+            if !listed.iter().any(|name| name == &field.name) {
+                listed.push(field.name.clone());
+            }
+        }
+        listed
+    };
+
+    if needs_builtin && !ordered.iter().any(|name| name == builtin_key) {
+        ordered.push(builtin_key.to_string());
+    }
+
+    ordered
+}
+
+/// Resolves the remote a request is opened against, and the forge behind it.
+///
+/// A `pr_forge` config value overrides detection, which is what self-hosted instances need
+/// when their hostname does not name the product.
+///
+/// # Errors
+/// * If the remote is not configured or its URL cannot be parsed
+/// * If `pr_forge` names something rona does not know
+fn resolve_pr_remote(args: &PrArgs, config: &Config) -> Result<(String, RemoteInfo)> {
+    let remote = args
+        .remote
+        .clone()
+        .or_else(|| config.project_config.pr_remote.clone())
+        .unwrap_or_else(|| "origin".to_string());
+
+    let mut info = detect_remote(&remote)?;
+
+    if let Some(name) = &config.project_config.pr_forge {
+        info.forge = Forge::parse(name).ok_or_else(|| {
+            RonaError::InvalidInput(format!(
+                "Unknown pr_forge '{name}'. Use github, gitlab, or bitbucket."
+            ))
+        })?;
+    }
+
+    Ok((remote, info))
+}
+
+/// Resolves the branch a request targets.
+///
+/// # Errors
+/// * If no target can be determined
+/// * If the target is the branch the request is opened from
+fn resolve_pr_target(args: &PrArgs, config: &Config, remote: &str, source: &str) -> Result<String> {
+    let target = args
+        .target
+        .clone()
+        .or_else(|| config.project_config.pr_target.clone())
+        .or_else(|| default_branch(remote))
+        .ok_or_else(|| {
+            RonaError::InvalidInput(format!(
+                "Could not determine the target branch of '{remote}'. \
+                 Pass --target or set `pr_target` in your rona config."
+            ))
+        })?;
+
+    if target == source {
+        return Err(RonaError::InvalidInput(format!(
+            "'{source}' cannot target itself. Switch to your feature branch, or pass --target."
+        )));
+    }
+
+    Ok(target)
+}
+
+/// Resolves the backend used to open the request.
+///
+/// `--web` is a shorthand for `--backend browser` and wins over the config.
+///
+/// # Errors
+/// * If a configured backend name is not recognised
+/// * If the forge is unknown and no backend was configured
+fn resolve_pr_backend(args: &PrArgs, config: &Config, info: &RemoteInfo) -> Result<PrBackend> {
+    if args.web {
+        return Ok(PrBackend::Browser);
+    }
+
+    let configured = args
+        .backend
+        .clone()
+        .or_else(|| config.project_config.pr_backend.clone());
+
+    let backend = match configured {
+        None => PrBackend::Auto,
+        Some(name) => PrBackend::parse(&name).ok_or_else(|| {
+            RonaError::InvalidInput(format!(
+                "Unknown pr backend '{name}'. Use auto, gh, glab, push-options, or browser."
+            ))
+        })?,
+    };
+
+    resolve_backend(backend, info)
+}
+
+/// Builds the request title from the flag, or from the template and its prompts.
+///
+/// # Errors
+/// * If the title template is invalid
+/// * If the user cancels a prompt
+fn build_pr_title(
+    args: &PrArgs,
+    config: &Config,
+    source_branch: &str,
+    target_branch: &str,
+) -> Result<String> {
+    if let Some(title) = &args.title {
+        return Ok(title.clone());
+    }
+
+    let template = config
+        .project_config
+        .pr_title_template
+        .as_deref()
+        .unwrap_or(DEFAULT_PR_TITLE_TEMPLATE);
+
+    // Only prompt for fields the template actually uses, matching `rona branch`.
+    let referenced_fields: Vec<ExtraField> = config
+        .project_config
+        .pr_extra_fields
+        .iter()
+        .filter(|field| {
+            let referenced = template_references(template, &field.name);
+            if !referenced {
+                println!(
+                    "[NOTE] PR extra field '{}' is not referenced in the template; skipping.",
+                    field.name
+                );
+            }
+            referenced
+        })
+        .cloned()
+        .collect();
+
+    let extra_names: Vec<&str> = referenced_fields
+        .iter()
+        .map(|field| field.name.as_str())
+        .collect();
+    if let Err(e) = validate_pr_template(template, &extra_names) {
+        return Err(RonaError::InvalidInput(format!(
+            "PR title template validation error: {e}"
+        )));
+    }
+
+    let (title, extra_values) = prompt_pr_fields(
+        &referenced_fields,
+        &config.project_config.pr_field_order,
+        template_references(template, "title"),
+        config.project_config.pr_title.as_ref(),
+        &default_title_source(),
+    )?;
+
+    let variables = PrTemplateVariables::new(
+        source_branch.to_string(),
+        branch_type_of(source_branch),
+        title.trim().to_string(),
+        target_branch.to_string(),
+        default_title_source(),
+    )?;
+
+    Ok(process_pr_template(template, &variables, &extra_values)?
+        .trim()
+        .to_string())
+}
+
+/// Prepares the request document and returns its content.
+///
+/// `--body-file` is read as it is. Otherwise `pr_description.md` at the repository root is
+/// created, excluded from git, and opened in the configured editor unless `--no-edit` was
+/// passed. A new file is seeded with `seed_title` as its heading followed by the repository's
+/// own request template, so the whole request is one editable document.
+///
+/// The returned text still carries the title heading; [`split_title_and_body`] separates them.
+///
+/// # Errors
+/// * If the document cannot be read or written
+/// * If the editor cannot be launched
+fn prepare_pr_document(
+    args: &PrArgs,
+    config: &Config,
+    info: &RemoteInfo,
+    seed_title: &str,
+) -> Result<String> {
+    if let Some(body_file) = &args.body_file {
+        return read_to_string(body_file).map_err(|e| {
+            RonaError::Io(std::io::Error::other(format!(
+                "Could not read body file '{body_file}': {e}"
+            )))
+        });
+    }
+
+    let root = get_top_level_path()?;
+    let path = root.join(PR_DESCRIPTION_FILE_PATH);
+
+    if config.dry_run {
+        println!("Would write the request to: {}", path.display());
+
+        return if path.exists() {
+            Ok(read_to_string(&path)?)
+        } else {
+            Ok(compose_description(seed_title, ""))
+        };
+    }
+
+    if !path.exists() {
+        let template = seed_pr_description(&root, info.forge)?;
+        std::fs::write(&path, compose_description(seed_title, &template))?;
+        add_to_git_exclude(&[PR_DESCRIPTION_FILE_PATH])?;
+    }
+
+    if !args.no_edit {
+        println!("The first heading is the title; everything below it is the description.");
+        open_in_editor(&path, config)?;
+    }
+
+    Ok(read_to_string(&path)?)
+}
+
+/// Returns the content a new description file starts from.
+///
+/// Repositories with a single forge template use it. With several, the user picks one. With
+/// none, the file starts empty.
+///
+/// # Errors
+/// * If a template file cannot be read
+/// * If the user cancels the template picker
+fn seed_pr_description(root: &Path, forge: Forge) -> Result<String> {
+    let templates = find_description_templates(root, forge);
+
+    let chosen = match templates.len() {
+        0 => return Ok(String::new()),
+        1 => templates[0].clone(),
+        _ => {
+            let labels: Vec<String> = templates
+                .iter()
+                .map(|path| {
+                    path.strip_prefix(root)
+                        .unwrap_or(path)
+                        .display()
+                        .to_string()
+                })
+                .collect();
+            let index = FuzzySelect::with_theme(&prompt_theme())
+                .with_prompt("Select a description template")
+                .items(&labels)
+                .default(0)
+                .interact_opt()
+                .map_err(|_| RonaError::UserCancelled)?
+                .ok_or(RonaError::UserCancelled)?;
+            templates[index].clone()
+        }
+    };
+
+    println!(
+        "Seeded {PR_DESCRIPTION_FILE_PATH} from {}",
+        chosen.strip_prefix(root).unwrap_or(&chosen).display()
+    );
+
+    Ok(read_to_string(&chosen)?)
+}
+
+/// Warns about request fields the chosen backend cannot carry.
+///
+/// Silence here would be the worst outcome: the request would be created without the labels or
+/// reviewers the user asked for, and nothing would say so.
+fn warn_unsupported_pr_fields(backend: PrBackend, request: &PrRequest, forge: Forge) {
+    let warn = |what: &str, why: &str| {
+        println!("{} {what} {why}", "WARNING:".yellow().bold());
+    };
+
+    if backend == PrBackend::PushOptions && !request.reviewers.is_empty() {
+        warn(
+            "Reviewers are dropped:",
+            "GitLab push options cannot set them. Use --backend glab instead.",
+        );
+    }
+
+    if backend == PrBackend::Browser {
+        if forge == Forge::GitLab
+            && !(request.labels.is_empty()
+                && request.reviewers.is_empty()
+                && request.assignees.is_empty())
+        {
+            warn(
+                "Labels, reviewers, and assignees are not pre-filled:",
+                "the GitLab form takes only the branches, title, and description.",
+            );
+        }
+
+        if forge == Forge::Bitbucket {
+            warn(
+                "The title and description are not pre-filled:",
+                "the Bitbucket form takes only the branches.",
+            );
+        }
+
+        if request.draft {
+            warn(
+                "Draft is not pre-filled:",
+                "tick the draft box in the web form.",
+            );
+        }
+    }
+}
+
+/// Shows what is about to be opened and asks for confirmation.
+fn confirm_pr(request: &PrRequest, backend: PrBackend, info: &RemoteInfo) -> bool {
+    let summary = format!(
+        "Open a {} on {}\n  {} -> {}\n  Title: {}\n  Backend: {}\nProceed?",
+        info.forge.change_request_name(),
+        info.project_path(),
+        request.source_branch,
+        request.target_branch,
+        request.title,
+        backend.as_str()
+    );
+
+    Confirm::with_theme(&prompt_theme())
+        .with_prompt(summary)
+        .default(true)
+        .interact()
+        .unwrap_or(false)
+}
+
+/// Chooses the request title from the sources that can supply one.
+///
+/// The flag wins, then the heading the user wrote in the document, then whatever seeded that
+/// heading. Blank candidates are skipped rather than accepted, so `--title ""` falls through to
+/// the document instead of leaving the request untitled.
+fn choose_pr_title(from_flag: Option<&str>, from_heading: Option<&str>, seed: &str) -> String {
+    [from_flag, from_heading, Some(seed)]
+        .into_iter()
+        .flatten()
+        .map(str::trim)
+        .find(|candidate| !candidate.is_empty())
+        .unwrap_or_default()
+        .to_string()
+}
+
+/// Handle the `Pr` command, which opens a pull or merge request for the current branch.
+///
+/// The payload is assembled the same way whatever the forge is, then handed to the backend
+/// resolved from the remote: `gh`, `glab`, GitLab push options, or a pre-filled web form.
+///
+/// # Errors
+/// * If the remote is missing, unparsable, or of an unknown forge
+/// * If the target branch cannot be determined
+/// * If the user cancels a prompt
+/// * If the backend fails to open the request
+fn handle_pr(args: &PrArgs, config: &Config) -> Result<()> {
+    let (remote, info) = resolve_pr_remote(args, config)?;
+    let source_branch = get_current_branch()?;
+    let target_branch = resolve_pr_target(args, config, &remote, &source_branch)?;
+    let backend = resolve_pr_backend(args, config, &info)?;
+
+    // The title template seeds the document's heading, which the user can then edit in place.
+    let seed_title = build_pr_title(args, config, &source_branch, &target_branch)?;
+    let document = prepare_pr_document(args, config, &info, &seed_title)?;
+    let (heading, body) = split_title_and_body(&document);
+
+    let title = choose_pr_title(args.title.as_deref(), heading.as_deref(), &seed_title);
+
+    if title.is_empty() {
+        println!(
+            "{} No title found. Give the request a `# Heading` or pass --title.",
+            "WARNING:".yellow().bold()
+        );
+        return Ok(());
+    }
+
+    let body_path = if config.dry_run {
+        body_file_path()?
+    } else {
+        write_body_file(body.trim())?
+    };
+
+    let request = PrRequest {
+        title,
+        body: body.trim().to_string(),
+        source_branch,
+        target_branch,
+        remote,
+        draft: args.draft || config.project_config.pr_draft,
+        labels: merged_pr_values(&args.labels, &config.project_config.pr_labels),
+        reviewers: merged_pr_values(&args.reviewers, &config.project_config.pr_reviewers),
+        assignees: merged_pr_values(&args.assignees, &config.project_config.pr_assignees),
+    };
+
+    warn_unsupported_pr_fields(backend, &request, info.forge);
+
+    if !args.yes && !config.dry_run && !confirm_pr(&request, backend, &info) {
+        println!("Request cancelled.");
+        return Ok(());
+    }
+
+    // Push options carry the branch themselves; every other backend needs it on the remote first.
+    if !args.no_push && !backend.pushes_branch() {
+        push_source_branch(&request, config.verbose, config.dry_run)?;
+    }
+
+    let url = submit(
+        &request,
+        backend,
+        &info,
+        &body_path,
+        args.yes,
+        config.verbose,
+        config.dry_run,
+    )?;
+
+    // A dry run has already printed the command it would have run, URL included.
+    if let Some(url) = url
+        && !config.dry_run
+    {
+        println!("\n{} {url}", "✓".green());
+    }
+
+    Ok(())
+}
+
+/// Combines command line values with their config defaults, keeping each value once.
+fn merged_pr_values(from_flags: &[String], from_config: &[String]) -> Vec<String> {
+    let mut merged: Vec<String> = from_config.to_vec();
+
+    for value in from_flags {
+        if !merged.contains(value) {
+            merged.push(value.clone());
+        }
+    }
+
+    merged
+}
+
 /// Initializes structured logging for the CLI.
 ///
 /// Respects the `RUST_LOG` environment variable; falls back to `debug` when
@@ -1640,6 +2239,17 @@ fn init_logging(verbose: bool) {
         .ok();
 }
 
+/// Loads the configuration, either from an explicit file or from the global/project hierarchy.
+///
+/// # Errors
+/// * If the named config file is missing or cannot be parsed
+/// * If the home directory cannot be determined
+fn load_config(config_path: Option<&str>) -> Result<Config> {
+    config_path.map_or_else(Config::new, |path| {
+        Config::new_with_config_file(Path::new(path))
+    })
+}
+
 /// Runs the program by parsing command line arguments and executing the appropriate command.
 ///
 /// # Errors
@@ -1653,13 +2263,7 @@ pub fn run() -> Result<()> {
     let cli = Cli::parse();
     init_logging(cli.verbose);
 
-    let mut config = if let Some(ref config_path) = cli.config {
-        Config::new_with_config_file(std::path::Path::new(config_path))?
-    } else {
-        Config::new()?
-    };
-
-    // Set the global flags in the config
+    let mut config = load_config(cli.config.as_deref())?;
     config.set_verbose(cli.verbose);
 
     match cli.command {
@@ -1724,6 +2328,11 @@ pub fn run() -> Result<()> {
         }
 
         CliCommand::ListStatus => handle_list_status(),
+
+        CliCommand::Pr(pr_args) => {
+            config.set_dry_run(pr_args.dry_run);
+            handle_pr(&pr_args, &config)
+        }
 
         CliCommand::Push { args, dry_run } => {
             config.set_dry_run(dry_run);
@@ -3278,5 +3887,259 @@ mod cli_tests {
         assert_eq!(new_branch, Some("hotfix/critical".to_string()));
         assert!(!dry_run);
         Ok(())
+    }
+
+    // === PR COMMAND TESTS ===
+
+    #[test]
+    fn test_pr_defaults() -> TestResult {
+        let args = vec!["rona", "pr"];
+        let cli = Cli::try_parse_from(args)?;
+
+        let CliCommand::Pr(pr) = cli.command else {
+            return Err("Wrong command parsed".into());
+        };
+        assert!(pr.target.is_none());
+        assert!(pr.title.is_none());
+        assert!(pr.body_file.is_none());
+        assert!(pr.backend.is_none());
+        assert!(pr.remote.is_none());
+        assert!(!pr.draft);
+        assert!(!pr.web);
+        assert!(!pr.no_edit);
+        assert!(!pr.no_push);
+        assert!(!pr.yes);
+        assert!(!pr.dry_run);
+        assert!(pr.labels.is_empty());
+        assert!(pr.reviewers.is_empty());
+        assert!(pr.assignees.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn test_pr_mr_alias() -> TestResult {
+        let cli = Cli::try_parse_from(vec!["rona", "mr"])?;
+
+        assert!(matches!(cli.command, CliCommand::Pr(_)));
+        Ok(())
+    }
+
+    #[test]
+    fn test_pr_pull_request_alias() -> TestResult {
+        let cli = Cli::try_parse_from(vec!["rona", "pull-request"])?;
+
+        assert!(matches!(cli.command, CliCommand::Pr(_)));
+        Ok(())
+    }
+
+    #[test]
+    fn test_pr_target_and_title() -> TestResult {
+        let args = vec![
+            "rona",
+            "pr",
+            "--target",
+            "develop",
+            "--title",
+            "Add the pr command",
+        ];
+        let cli = Cli::try_parse_from(args)?;
+
+        let CliCommand::Pr(pr) = cli.command else {
+            return Err("Wrong command parsed".into());
+        };
+        assert_eq!(pr.target, Some("develop".to_string()));
+        assert_eq!(pr.title, Some("Add the pr command".to_string()));
+        Ok(())
+    }
+
+    #[test]
+    fn test_pr_short_flags() -> TestResult {
+        let args = vec!["rona", "pr", "-t", "main", "-T", "Title", "-d", "-y", "-w"];
+        let cli = Cli::try_parse_from(args)?;
+
+        let CliCommand::Pr(pr) = cli.command else {
+            return Err("Wrong command parsed".into());
+        };
+        assert_eq!(pr.target, Some("main".to_string()));
+        assert_eq!(pr.title, Some("Title".to_string()));
+        assert!(pr.draft);
+        assert!(pr.yes);
+        assert!(pr.web);
+        Ok(())
+    }
+
+    #[test]
+    fn test_pr_repeated_labels_and_reviewers() -> TestResult {
+        let args = vec![
+            "rona", "pr", "-l", "bug", "-l", "urgent", "-r", "alice", "-A", "bob",
+        ];
+        let cli = Cli::try_parse_from(args)?;
+
+        let CliCommand::Pr(pr) = cli.command else {
+            return Err("Wrong command parsed".into());
+        };
+        assert_eq!(pr.labels, vec!["bug".to_string(), "urgent".to_string()]);
+        assert_eq!(pr.reviewers, vec!["alice".to_string()]);
+        assert_eq!(pr.assignees, vec!["bob".to_string()]);
+        Ok(())
+    }
+
+    #[test]
+    fn test_pr_backend_accepts_known_names() -> TestResult {
+        for backend in ["auto", "gh", "glab", "push-options", "browser"] {
+            let cli = Cli::try_parse_from(vec!["rona", "pr", "--backend", backend])?;
+            let CliCommand::Pr(pr) = cli.command else {
+                return Err("Wrong command parsed".into());
+            };
+            assert_eq!(pr.backend, Some(backend.to_string()));
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_pr_backend_rejects_unknown_names() {
+        // A typo must fail at parse time rather than silently opening nothing.
+        assert!(Cli::try_parse_from(vec!["rona", "pr", "--backend", "carrier-pigeon"]).is_err());
+    }
+
+    #[test]
+    fn test_pr_body_file_and_no_edit() -> TestResult {
+        let args = vec![
+            "rona",
+            "pr",
+            "--body-file",
+            "notes.md",
+            "--no-edit",
+            "--no-push",
+        ];
+        let cli = Cli::try_parse_from(args)?;
+
+        let CliCommand::Pr(pr) = cli.command else {
+            return Err("Wrong command parsed".into());
+        };
+        assert_eq!(pr.body_file, Some("notes.md".to_string()));
+        assert!(pr.no_edit);
+        assert!(pr.no_push);
+        Ok(())
+    }
+
+    #[test]
+    fn test_pr_dry_run() -> TestResult {
+        let cli = Cli::try_parse_from(vec!["rona", "pr", "--dry-run"])?;
+
+        let CliCommand::Pr(pr) = cli.command else {
+            return Err("Wrong command parsed".into());
+        };
+        assert!(pr.dry_run);
+        Ok(())
+    }
+
+    // === PR TITLE RESOLUTION TESTS ===
+
+    #[test]
+    fn test_choose_pr_title_prefers_the_flag() {
+        let title = choose_pr_title(Some("From flag"), Some("From heading"), "From seed");
+
+        assert_eq!(title, "From flag");
+    }
+
+    #[test]
+    fn test_choose_pr_title_falls_back_to_the_heading() {
+        let title = choose_pr_title(None, Some("From heading"), "From seed");
+
+        assert_eq!(title, "From heading");
+    }
+
+    #[test]
+    fn test_choose_pr_title_falls_back_to_the_seed() {
+        let title = choose_pr_title(None, None, "From seed");
+
+        assert_eq!(title, "From seed");
+    }
+
+    #[test]
+    fn test_choose_pr_title_skips_blank_candidates() {
+        // An explicitly empty flag must not leave the request untitled.
+        assert_eq!(
+            choose_pr_title(Some("   "), Some("Heading"), "Seed"),
+            "Heading"
+        );
+        assert_eq!(choose_pr_title(Some(""), None, "Seed"), "Seed");
+    }
+
+    #[test]
+    fn test_choose_pr_title_trims_whitespace() {
+        assert_eq!(choose_pr_title(Some("  Padded  "), None, "Seed"), "Padded");
+    }
+
+    #[test]
+    fn test_choose_pr_title_is_empty_when_nothing_supplies_one() {
+        assert!(choose_pr_title(None, None, "").is_empty());
+    }
+
+    // === PR FIELD ORDERING AND MERGING TESTS ===
+
+    fn field(name: &str) -> ExtraField {
+        ExtraField {
+            name: name.to_string(),
+            prompt: None,
+            kind: crate::extra_fields::FieldKind::default(),
+            required: false,
+            validation: None,
+            prefetch: None,
+        }
+    }
+
+    #[test]
+    fn test_ordered_field_names_appends_builtin_last_by_default() {
+        let fields = vec![field("ticket")];
+
+        let ordered = ordered_field_names(&fields, &[], "title", true);
+
+        assert_eq!(ordered, vec!["ticket".to_string(), "title".to_string()]);
+    }
+
+    #[test]
+    fn test_ordered_field_names_honours_a_configured_order() {
+        let fields = vec![field("ticket"), field("scope")];
+        let order = vec!["title".to_string(), "ticket".to_string()];
+
+        let ordered = ordered_field_names(&fields, &order, "title", true);
+
+        // Listed items keep their order, and the unlisted field is appended.
+        assert_eq!(
+            ordered,
+            vec![
+                "title".to_string(),
+                "ticket".to_string(),
+                "scope".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn test_ordered_field_names_omits_a_disabled_builtin() {
+        let fields = vec![field("ticket")];
+
+        let ordered = ordered_field_names(&fields, &[], "title", false);
+
+        assert_eq!(ordered, vec!["ticket".to_string()]);
+    }
+
+    #[test]
+    fn test_merged_pr_values_keeps_config_first_and_deduplicates() {
+        let from_flags = vec!["urgent".to_string(), "bug".to_string()];
+        let from_config = vec!["bug".to_string()];
+
+        let merged = merged_pr_values(&from_flags, &from_config);
+
+        assert_eq!(merged, vec!["bug".to_string(), "urgent".to_string()]);
+    }
+
+    #[test]
+    fn test_merged_pr_values_without_config_defaults() {
+        let merged = merged_pr_values(&["bug".to_string()], &[]);
+
+        assert_eq!(merged, vec!["bug".to_string()]);
     }
 }

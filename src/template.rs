@@ -122,6 +122,70 @@ impl BranchTemplateVariables {
     }
 }
 
+/// Pull/merge request template variables used by `rona pr`.
+#[derive(Debug, Clone)]
+pub struct PrTemplateVariables {
+    pub branch_type: String,
+    pub branch_name: String,
+    pub title: String,
+    pub target_branch: String,
+    pub commit_subject: String,
+    pub date: String,
+    pub time: String,
+    pub author: String,
+    pub email: String,
+}
+
+impl PrTemplateVariables {
+    /// Creates a new `PrTemplateVariables` with current date/time and git author.
+    ///
+    /// `branch_type` is the prefix of the source branch when it carries one (`feat/x` gives
+    /// `feat`), and `commit_subject` is the subject line of the most recent commit.
+    ///
+    /// # Errors
+    /// * If git author information cannot be retrieved
+    pub fn new(
+        branch_name: String,
+        branch_type: String,
+        title: String,
+        target_branch: String,
+        commit_subject: String,
+    ) -> Result<Self> {
+        let now = Local::now();
+        let date = now.format("%Y-%m-%d").to_string();
+        let time = now.format("%H:%M:%S").to_string();
+        let (author, email) = get_git_author_info()?;
+
+        Ok(Self {
+            branch_type,
+            branch_name,
+            title,
+            target_branch,
+            commit_subject,
+            date,
+            time,
+            author,
+            email,
+        })
+    }
+
+    /// Converts the variables to a `HashMap` for template substitution.
+    #[must_use]
+    pub fn to_map(&self) -> HashMap<String, String> {
+        let mut map = HashMap::new();
+        map.insert("branch_type".to_string(), self.branch_type.clone());
+        map.insert("branch_name".to_string(), self.branch_name.clone());
+        map.insert("title".to_string(), self.title.clone());
+        map.insert("target_branch".to_string(), self.target_branch.clone());
+        map.insert("commit_subject".to_string(), self.commit_subject.clone());
+        map.insert("date".to_string(), self.date.clone());
+        map.insert("time".to_string(), self.time.clone());
+        map.insert("author".to_string(), self.author.clone());
+        map.insert("email".to_string(), self.email.clone());
+        map
+    }
+}
+
 /// Processes conditional blocks in a template string using a pre-merged variable map.
 fn process_conditional_blocks_from_map(
     template: &str,
@@ -225,6 +289,23 @@ pub fn process_template<S: BuildHasher>(
 pub fn process_branch_template<S: BuildHasher>(
     template: &str,
     variables: &BranchTemplateVariables,
+    extra_variables: &HashMap<String, String, S>,
+) -> Result<String> {
+    let mut variable_map = variables.to_map();
+    variable_map.extend(extra_variables.iter().map(|(k, v)| (k.clone(), v.clone())));
+    process_template_from_map(template, &variable_map)
+}
+
+/// Processes a pull/merge request template using `PrTemplateVariables` and optional extra fields.
+///
+/// Available built-in variables: `branch_type`, `branch_name`, `title`, `target_branch`,
+/// `commit_subject`, `date`, `time`, `author`, `email`.
+///
+/// # Errors
+/// * If the template contains invalid variable syntax or mismatched conditional blocks
+pub fn process_pr_template<S: BuildHasher>(
+    template: &str,
+    variables: &PrTemplateVariables,
     extra_variables: &HashMap<String, String, S>,
 ) -> Result<String> {
     let mut variable_map = variables.to_map();
@@ -354,6 +435,29 @@ pub fn validate_template(template: &str, extra_variable_names: &[&str]) -> Resul
 /// * If the template contains unknown variables or mismatched conditional blocks
 pub fn validate_branch_template(template: &str, extra_variable_names: &[&str]) -> Result<()> {
     let mut valid: Vec<&str> = vec!["branch_type", "description", "date", "time", "author"];
+    valid.extend_from_slice(extra_variable_names);
+    validate_template_with_vars(template, &valid)
+}
+
+/// Validates a pull/merge request title template string.
+///
+/// Valid built-in variables: `branch_type`, `branch_name`, `title`, `target_branch`,
+/// `commit_subject`, `date`, `time`, `author`, `email`. Extra field names are also accepted.
+///
+/// # Errors
+/// * If the template contains unknown variables or mismatched conditional blocks
+pub fn validate_pr_template(template: &str, extra_variable_names: &[&str]) -> Result<()> {
+    let mut valid: Vec<&str> = vec![
+        "branch_type",
+        "branch_name",
+        "title",
+        "target_branch",
+        "commit_subject",
+        "date",
+        "time",
+        "author",
+        "email",
+    ];
     valid.extend_from_slice(extra_variable_names);
     validate_template_with_vars(template, &valid)
 }

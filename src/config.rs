@@ -307,6 +307,58 @@ pub struct ProjectConfig {
     /// Set `disabled = true` to skip the prompt (the `{description}` variable will be empty).
     pub branch_description: Option<crate::extra_fields::BuiltInFieldConfig>,
 
+    /// Template that seeds the heading of the `rona pr` request document.
+    /// Available variables: `{branch_type}`, `{branch_name}`, `{title}`, `{target_branch}`,
+    /// `{commit_subject}`, `{date}`, `{time}`, `{author}`, `{email}`.
+    /// Extra field names defined in `pr_extra_fields` are also available.
+    /// Referencing `{title}` adds an interactive title prompt; the default does not.
+    pub pr_title_template: Option<String>,
+
+    /// Extra fields to prompt when opening a pull/merge request.
+    /// Each field becomes a template variable with the field's `name`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pr_extra_fields: Vec<crate::extra_fields::ExtraField>,
+
+    /// Controls the order of prompts for `rona pr`.
+    /// Use the reserved name `"title"` to position the built-in title prompt.
+    /// Extra fields not listed are appended after all listed items.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pr_field_order: Vec<String>,
+
+    /// Optional overrides for the built-in pull/merge request title prompt.
+    /// Set `disabled = true` to skip the prompt (the `{title}` variable will be empty).
+    pub pr_title: Option<crate::extra_fields::BuiltInFieldConfig>,
+
+    /// Backend used to open the request: `auto`, `gh`, `glab`, `push-options`, or `browser`.
+    /// Defaults to `auto`, which picks from the detected forge and the binaries available.
+    pub pr_backend: Option<String>,
+
+    /// Branch a request targets by default. When absent, the remote's default branch is used.
+    pub pr_target: Option<String>,
+
+    /// Remote a request is opened against. Defaults to `origin`.
+    pub pr_remote: Option<String>,
+
+    /// Forge behind the remote: `github`, `gitlab`, or `bitbucket`.
+    /// Only needed for self-hosted instances whose hostname does not name the product.
+    pub pr_forge: Option<String>,
+
+    /// Whether requests are opened as drafts by default.
+    #[serde(default)]
+    pub pr_draft: bool,
+
+    /// Labels applied to every request opened from this project.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pr_labels: Vec<String>,
+
+    /// Reviewers requested on every request opened from this project.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pr_reviewers: Vec<String>,
+
+    /// Assignees set on every request opened from this project.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pr_assignees: Vec<String>,
+
     /// Path-conditional config layers. Declared as `[[overrides]]`, typically in the
     /// global config, so that running rona under a given directory tree layers in
     /// another config file.
@@ -337,6 +389,18 @@ impl Default for ProjectConfig {
             message_prefetch: None,
             commit_message: None,
             branch_description: None,
+            pr_title_template: Some("{commit_subject}".to_string()),
+            pr_extra_fields: vec![],
+            pr_field_order: vec![],
+            pr_title: None,
+            pr_backend: None,
+            pr_target: None,
+            pr_remote: None,
+            pr_forge: None,
+            pr_draft: false,
+            pr_labels: vec![],
+            pr_reviewers: vec![],
+            pr_assignees: vec![],
             overrides: vec![],
         }
     }
@@ -365,6 +429,18 @@ struct RawProjectConfig {
     message_prefetch: Option<crate::extra_fields::MessagePrefetchConfig>,
     commit_message: Option<crate::extra_fields::BuiltInFieldConfig>,
     branch_description: Option<crate::extra_fields::BuiltInFieldConfig>,
+    pr_title_template: Option<String>,
+    pr_extra_fields: Option<Vec<crate::extra_fields::ExtraField>>,
+    pr_field_order: Option<Vec<String>>,
+    pr_title: Option<crate::extra_fields::BuiltInFieldConfig>,
+    pr_backend: Option<String>,
+    pr_target: Option<String>,
+    pr_remote: Option<String>,
+    pr_forge: Option<String>,
+    pr_draft: Option<bool>,
+    pr_labels: Option<Vec<String>>,
+    pr_reviewers: Option<Vec<String>>,
+    pr_assignees: Option<Vec<String>>,
     overrides: Option<Vec<ConfigOverride>>,
 }
 
@@ -384,6 +460,18 @@ impl From<RawProjectConfig> for ProjectConfig {
             message_prefetch: raw.message_prefetch,
             commit_message: raw.commit_message,
             branch_description: raw.branch_description,
+            pr_title_template: raw.pr_title_template,
+            pr_extra_fields: raw.pr_extra_fields.unwrap_or_default(),
+            pr_field_order: raw.pr_field_order.unwrap_or_default(),
+            pr_title: raw.pr_title,
+            pr_backend: raw.pr_backend,
+            pr_target: raw.pr_target,
+            pr_remote: raw.pr_remote,
+            pr_forge: raw.pr_forge,
+            pr_draft: raw.pr_draft.unwrap_or(false),
+            pr_labels: raw.pr_labels.unwrap_or_default(),
+            pr_reviewers: raw.pr_reviewers.unwrap_or_default(),
+            pr_assignees: raw.pr_assignees.unwrap_or_default(),
             overrides: raw.overrides.unwrap_or_default(),
         }
     }
@@ -459,6 +547,18 @@ fn merge_raw(base: RawProjectConfig, child: RawProjectConfig) -> RawProjectConfi
         message_prefetch: child.message_prefetch.or(base.message_prefetch),
         commit_message: child.commit_message.or(base.commit_message),
         branch_description: child.branch_description.or(base.branch_description),
+        pr_title_template: child.pr_title_template.or(base.pr_title_template),
+        pr_extra_fields: merge_named_fields(base.pr_extra_fields, child.pr_extra_fields),
+        pr_field_order: child.pr_field_order.or(base.pr_field_order),
+        pr_title: child.pr_title.or(base.pr_title),
+        pr_backend: child.pr_backend.or(base.pr_backend),
+        pr_target: child.pr_target.or(base.pr_target),
+        pr_remote: child.pr_remote.or(base.pr_remote),
+        pr_forge: child.pr_forge.or(base.pr_forge),
+        pr_draft: child.pr_draft.or(base.pr_draft),
+        pr_labels: child.pr_labels.or(base.pr_labels),
+        pr_reviewers: child.pr_reviewers.or(base.pr_reviewers),
+        pr_assignees: child.pr_assignees.or(base.pr_assignees),
         overrides: child.overrides.or(base.overrides),
     }
 }

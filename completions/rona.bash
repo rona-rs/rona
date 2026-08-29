@@ -43,6 +43,15 @@ _rona() {
             rona,list-status)
                 cmd="rona__subcmd__list__subcmd__status"
                 ;;
+            rona,mr)
+                cmd="rona__subcmd__pr"
+                ;;
+            rona,pr)
+                cmd="rona__subcmd__pr"
+                ;;
+            rona,pull-request)
+                cmd="rona__subcmd__pr"
+                ;;
             rona,push)
                 cmd="rona__subcmd__push"
                 ;;
@@ -106,6 +115,9 @@ _rona() {
             rona__subcmd__help,list-status)
                 cmd="rona__subcmd__help__subcmd__list__subcmd__status"
                 ;;
+            rona__subcmd__help,pr)
+                cmd="rona__subcmd__help__subcmd__pr"
+                ;;
             rona__subcmd__help,push)
                 cmd="rona__subcmd__help__subcmd__push"
                 ;;
@@ -134,7 +146,7 @@ _rona() {
 
     case "${cmd}" in
         rona)
-            opts="-v -f -h -V --verbose --config-file --help --version branch add-with-exclude commit completion config generate init list-status push reset restore set-editor sync help"
+            opts="-v -f -h -V --verbose --config-file --help --version branch add-with-exclude commit completion config generate init list-status pr mr pull-request push reset restore set-editor sync help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 1 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -586,7 +598,7 @@ _rona() {
             return 0
             ;;
         rona__subcmd__help)
-            opts="branch add-with-exclude commit completion config generate init list-status push reset restore set-editor sync help"
+            opts="branch add-with-exclude commit completion config generate init list-status pr push reset restore set-editor sync help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -753,6 +765,20 @@ _rona() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
+        rona__subcmd__help__subcmd__pr)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
         rona__subcmd__help__subcmd__push)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
@@ -874,6 +900,128 @@ _rona() {
                 return 0
             fi
             case "${prev}" in
+                --config-file)
+                    local oldifs
+                    if [ -n "${IFS+x}" ]; then
+                        oldifs="$IFS"
+                    fi
+                    IFS=$'\n'
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    if [ -n "${oldifs+x}" ]; then
+                        IFS="$oldifs"
+                    fi
+                    if [[ "${BASH_VERSINFO[0]}" -ge 4 ]]; then
+                        compopt -o filenames
+                    fi
+                    return 0
+                    ;;
+                -f)
+                    local oldifs
+                    if [ -n "${IFS+x}" ]; then
+                        oldifs="$IFS"
+                    fi
+                    IFS=$'\n'
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    if [ -n "${oldifs+x}" ]; then
+                        IFS="$oldifs"
+                    fi
+                    if [[ "${BASH_VERSINFO[0]}" -ge 4 ]]; then
+                        compopt -o filenames
+                    fi
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        rona__subcmd__pr)
+            opts="-t -T -b -d -l -r -A -w -y -f -h --target --title --body-file --draft --label --reviewer --assignee --backend --remote --web --no-edit --no-push --yes --dry-run --config-file --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --target)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                -t)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --title)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                -T)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --body-file)
+                    local oldifs
+                    if [ -n "${IFS+x}" ]; then
+                        oldifs="$IFS"
+                    fi
+                    IFS=$'\n'
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    if [ -n "${oldifs+x}" ]; then
+                        IFS="$oldifs"
+                    fi
+                    if [[ "${BASH_VERSINFO[0]}" -ge 4 ]]; then
+                        compopt -o filenames
+                    fi
+                    return 0
+                    ;;
+                -b)
+                    local oldifs
+                    if [ -n "${IFS+x}" ]; then
+                        oldifs="$IFS"
+                    fi
+                    IFS=$'\n'
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    if [ -n "${oldifs+x}" ]; then
+                        IFS="$oldifs"
+                    fi
+                    if [[ "${BASH_VERSINFO[0]}" -ge 4 ]]; then
+                        compopt -o filenames
+                    fi
+                    return 0
+                    ;;
+                --label)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                -l)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --reviewer)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                -r)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --assignee)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                -A)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --backend)
+                    COMPREPLY=($(compgen -W "auto gh glab push-options browser" -- "${cur}"))
+                    return 0
+                    ;;
+                --remote)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
                 --config-file)
                     local oldifs
                     if [ -n "${IFS+x}" ]; then

@@ -17,6 +17,7 @@
 //! - [`commit`] - Commit operations (commit counting, committing, commit message generation)
 //! - [`status`] - Git status parsing and processing
 //! - [`staging`] - File staging operations with pattern exclusion
+//! - [`forge`] - Forge detection and remote URL parsing (GitHub, GitLab, Bitbucket)
 //! - [`remote`] - Remote operations (git push)
 //! - [`files`] - File and exclusion handling utilities
 
@@ -27,6 +28,7 @@ use std::process::Output;
 pub mod branch;
 pub mod commit;
 pub mod files;
+pub mod forge;
 pub mod remote;
 pub mod repository;
 pub mod staging;
@@ -44,7 +46,11 @@ pub use commit::{
     git_commit,
 };
 pub use files::{add_to_git_exclude, create_needed_files};
-pub use remote::git_push;
+pub use forge::{
+    Forge, RemoteInfo, binary_exists, default_branch, detect_remote, has_upstream,
+    last_commit_subject, parse_remote_url,
+};
+pub use remote::{git_push, git_push_capture};
 pub use repository::{find_git_root, get_top_level_path};
 pub use staging::{
     git_add_files, git_add_with_exclude_patterns, git_restore_files, git_unstage_files,
