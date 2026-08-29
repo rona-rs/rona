@@ -26,6 +26,23 @@ jobs:
           fi
           echo "Using tag: $TAG"
 
+      - name: Collect bottle checksums from the release
+        id: bottles
+        env:
+          GH_TOKEN: ${{ secrets.RONA_PRS_TOKEN }}
+        run: |
+          VERSION="${TAG#v}"
+          gh release download "$TAG" -R rona-rs/rona -p "*.bottle.tar.gz" -D bottles --clobber
+          for platform in arm64_sequoia sequoia x86_64_linux; do
+            FILE="bottles/rona-${VERSION}.${platform}.bottle.tar.gz"
+            if [ ! -f "$FILE" ]; then
+              echo "ERROR: missing bottle asset ${FILE} on release ${TAG}"
+              exit 1
+            fi
+            SHA=$(sha256sum "$FILE" | cut -d " " -f 1)
+            echo "sha256_${platform}=${SHA}" >> "$GITHUB_OUTPUT"
+          done
+
       - name: Check if PR already exists in tap (guard)
         id: guard
         env:
@@ -34,8 +51,8 @@ jobs:
           OWNER="rona-rs"
           REPO="homebrew-rona"
           BRANCH="bump/rona-${TAG}"
-          API_URL="https://api.github.com/repos/${OWNER}/${REPO}/pulls?state=open&head=${BRANCH}"
-          # Query open PRs with the expected head branch (use just branch name, not owner:branch)
+          API_URL="https://api.github.com/repos/${OWNER}/${REPO}/pulls?state=open&head=${OWNER}:${BRANCH}"
+          # Query open PRs with the expected head branch (the API head filter needs owner:branch)
           echo "Checking for existing PRs at: ${API_URL}"
           RES=$(curl -s -H "Authorization: token ${TOKEN}" "${API_URL}")
 
@@ -65,5 +82,8 @@ jobs:
           client-payload: |
             {
               "tag": "${{ env.TAG }}",
-              "tarball_url": "https://github.com/rona-rs/rona/archive/refs/tags/${{ env.TAG }}.tar.gz"
+              "tarball_url": "https://github.com/rona-rs/rona/archive/refs/tags/${{ env.TAG }}.tar.gz",
+              "sha256_arm64_sequoia": "${{ steps.bottles.outputs.sha256_arm64_sequoia }}",
+              "sha256_sequoia": "${{ steps.bottles.outputs.sha256_sequoia }}",
+              "sha256_x86_64_linux": "${{ steps.bottles.outputs.sha256_x86_64_linux }}"
             }
