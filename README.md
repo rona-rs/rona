@@ -70,6 +70,14 @@ brew tap rona-rs/rona
 brew install rona
 ```
 
+### cargo-binstall
+
+Downloads a pre-built binary instead of compiling from source:
+
+```bash
+cargo binstall rona
+```
+
 ### Cargo (Alternative)
 
 ```bash
