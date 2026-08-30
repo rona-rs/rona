@@ -22,7 +22,9 @@ cargo install rona
 Download the appropriate binary for your system from the assets below and extract it to a directory in your PATH.
 
 ## Supported Platforms
-- Linux (x86_64)
+- Linux (x86_64, glibc)
+- Linux (x86_64, musl)
+- Linux (arm64, glibc)
 - macOS (Intel x86_64)
 - macOS (Apple Silicon arm64)
 
