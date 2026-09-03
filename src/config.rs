@@ -211,6 +211,29 @@ fn collect_override_sources(
     Ok(collected)
 }
 
+/// Finds the project `.rona.toml` that applies to `dir`.
+///
+/// The search starts at `dir` and walks up through its parents, so running rona
+/// from a subdirectory picks up the config declared at the top of the project.
+/// The walk stops at the repository root (the first directory that holds a `.git`
+/// entry, checked after that directory's own `.rona.toml`), so a config never
+/// leaks in from outside the repository.
+fn find_project_config(dir: &Path) -> Option<PathBuf> {
+    for ancestor in dir.ancestors() {
+        let candidate = ancestor.join(".rona.toml");
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+
+        // `.git` is a directory in a normal clone and a file in a worktree or submodule.
+        if ancestor.join(".git").exists() {
+            break;
+        }
+    }
+
+    None
+}
+
 /// Builds the ordered list of config files to merge for `dir`, base-first.
 /// Global configs come first, then any matching `[[overrides]]` targets,
 /// then the project `.rona.toml` with its `extends` chain.
@@ -231,8 +254,7 @@ fn config_paths_for_dir(dir: &Path) -> Result<Vec<PathBuf>> {
             .map(|source| source.path),
     );
 
-    let project_config_path = dir.join(".rona.toml");
-    if project_config_path.exists() {
+    if let Some(project_config_path) = find_project_config(dir) {
         let mut visited = HashSet::new();
         paths.extend(collect_extends_chain(&project_config_path, &mut visited)?);
         paths.push(project_config_path);
@@ -774,9 +796,14 @@ pub fn find_config_sources(from_dir: Option<&std::path::Path>) -> Result<ConfigI
         });
     }
 
+    // Project config, searched from `search_dir` upwards to the repository root.
+    let found_project_config = find_project_config(&search_dir);
+    let project_config = found_project_config
+        .clone()
+        .unwrap_or_else(|| search_dir.join(".rona.toml"));
+
     // Extended configs (priority 4 - between overrides and project, base-first)
-    let project_config = search_dir.join(".rona.toml");
-    if project_config.exists() {
+    if found_project_config.is_some() {
         let chain = collect_extends_chain(&project_config, &mut HashSet::new()).unwrap_or_default();
         for (i, extended_path) in chain.iter().enumerate() {
             sources.push(ConfigSource {
@@ -789,10 +816,18 @@ pub fn find_config_sources(from_dir: Option<&std::path::Path>) -> Result<ConfigI
     }
 
     // Project-local config (priority 5 - highest priority, overrides all)
+    let description = if found_project_config
+        .as_ref()
+        .is_some_and(|path| path.parent() != Some(search_dir.as_path()))
+    {
+        "Project config, found in a parent directory".to_string()
+    } else {
+        "Project config".to_string()
+    };
     sources.push(ConfigSource {
-        path: project_config.clone(),
-        exists: project_config.exists(),
-        description: "Project config".to_string(),
+        path: project_config,
+        exists: found_project_config.is_some(),
+        description,
         priority: 5,
     });
 
@@ -1145,6 +1180,70 @@ mod tests {
             "path contains a single quote, which a TOML literal string cannot express: {value}"
         );
         format!("'{value}'")
+    }
+
+    #[test]
+    fn test_find_project_config_walks_up_to_repository_root()
+    -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let temp_dir = TempDir::new()?;
+        let repo = temp_dir.path();
+        std::fs::create_dir(repo.join(".git"))?;
+        std::fs::write(repo.join(".rona.toml"), r#"editor = "vim""#)?;
+        let nested = repo.join("crates/inner");
+        std::fs::create_dir_all(&nested)?;
+
+        assert_eq!(find_project_config(&nested), Some(repo.join(".rona.toml")));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_find_project_config_prefers_the_nearest_ancestor()
+    -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let temp_dir = TempDir::new()?;
+        let repo = temp_dir.path();
+        std::fs::create_dir(repo.join(".git"))?;
+        std::fs::write(repo.join(".rona.toml"), r#"editor = "vim""#)?;
+        let nested = repo.join("crates/inner");
+        std::fs::create_dir_all(&nested)?;
+        std::fs::write(repo.join("crates/.rona.toml"), r#"editor = "nano""#)?;
+
+        assert_eq!(
+            find_project_config(&nested),
+            Some(repo.join("crates/.rona.toml"))
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_find_project_config_stops_at_repository_root()
+    -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let temp_dir = TempDir::new()?;
+        // A config outside the repository must not leak in.
+        std::fs::write(temp_dir.path().join(".rona.toml"), r#"editor = "vim""#)?;
+        let repo = temp_dir.path().join("repo");
+        std::fs::create_dir_all(repo.join(".git"))?;
+        let nested = repo.join("src");
+        std::fs::create_dir_all(&nested)?;
+
+        assert_eq!(find_project_config(&nested), None);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_find_project_config_reads_the_repository_root_config_before_stopping()
+    -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let temp_dir = TempDir::new()?;
+        let repo = temp_dir.path();
+        // A worktree or submodule stores `.git` as a file, not a directory.
+        std::fs::write(repo.join(".git"), "gitdir: /elsewhere/.git/worktrees/x")?;
+        std::fs::write(repo.join(".rona.toml"), r#"editor = "vim""#)?;
+
+        assert_eq!(find_project_config(repo), Some(repo.join(".rona.toml")));
+
+        Ok(())
     }
 
     #[test]
