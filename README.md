@@ -95,7 +95,7 @@ rona init [editor] # The editor to use for commit messages (default: nano)
 Rona supports flexible configuration through TOML files:
 
 - **Global config**: `~/.config/rona.toml` - applies to all projects
-- **Project config**: `./.rona.toml` - applies only to the current project (overrides global)
+- **Project config**: `.rona.toml` - applies only to the current project (overrides global). Rona looks for it in the current directory, then in each parent directory up to the repository root, so it also applies when you work in a subdirectory
 - **Custom config**: any TOML file passed via `-f <PATH>` / `--config-file <PATH>` - bypasses the default hierarchy entirely
 - **Extended config**: a `.rona.toml` containing only `extends = "path/to/config.toml"` delegates all settings to another file
 
