@@ -359,6 +359,10 @@ pub(crate) enum CliCommand {
         #[arg(short = 'n', long = "new-branch")]
         new_branch: Option<String>,
 
+        /// Keep local changes in place instead of stashing them during the sync
+        #[arg(long = "no-stash", default_value_t = false)]
+        no_stash: bool,
+
         /// Show what would be done without actually doing it
         #[arg(long, default_value_t = false)]
         dry_run: bool,
@@ -1338,10 +1342,14 @@ fn handle_set(editor: &str, config: &Config) -> Result<()> {
 
 /// Handle the Sync command which syncs the current branch with another branch.
 ///
+/// Local changes to tracked files are stashed before the first branch switch and restored once
+/// the sync is over, unless `no_stash` is set.
+///
 /// # Arguments
 /// * `source_branch` - The branch to sync from (e.g., "main")
 /// * `rebase` - Whether to use rebase instead of merge
 /// * `new_branch` - Optional name for a new branch to create before syncing
+/// * `no_stash` - Whether to leave local changes in place instead of stashing them
 /// * `config` - Global configuration including verbose and dry-run settings
 ///
 /// # Errors
@@ -1352,38 +1360,92 @@ fn handle_sync(
     source_branch: &str,
     rebase: bool,
     new_branch: Option<&str>,
+    no_stash: bool,
     config: &Config,
 ) -> Result<()> {
-    use crate::git::{git_create_branch, git_merge, git_pull, git_rebase, git_switch};
+    use crate::git::{git_create_branch, has_local_changes, restore_stash, stash_local_changes};
 
     // Get current branch before any operations
     let original_branch = get_current_branch()?;
+    let target_branch = new_branch.unwrap_or(&original_branch);
 
     if config.dry_run {
+        let would_stash = !no_stash && has_local_changes()?;
+
+        if would_stash {
+            println!("Would stash local changes");
+        }
         if let Some(branch_name) = new_branch {
             println!("Would create new branch: {branch_name}");
         }
         println!("Would switch to: {source_branch}");
         println!("Would pull latest changes");
-        println!(
-            "Would switch back to: {}",
-            new_branch.unwrap_or(&original_branch)
-        );
+        println!("Would switch back to: {target_branch}");
         if rebase {
             println!("Would rebase with: {source_branch}");
         } else {
             println!("Would merge with: {source_branch}");
         }
+        if would_stash {
+            println!("Would restore the stashed changes");
+        }
         return Ok(());
     }
 
-    // Create new branch if specified
-    if let Some(branch_name) = new_branch {
-        git_create_branch(branch_name)?;
-        git_switch(branch_name)?;
+    let stash = if no_stash {
+        None
+    } else {
+        stash_local_changes(&format!("rona sync: auto-stash from {original_branch}"))?
+    };
+
+    if stash.is_some() {
+        println!("Stashed local changes");
     }
 
-    let target_branch = new_branch.unwrap_or(&original_branch);
+    // Create new branch if specified
+    let sync_result = new_branch
+        .map_or(Ok(()), git_create_branch)
+        .and_then(|()| sync_with_source(source_branch, target_branch, rebase, config));
+
+    if let Some(stash) = stash {
+        if sync_result.is_ok() {
+            restore_stash(&stash)?;
+            println!("Restored the stashed changes");
+        } else {
+            println!(
+                "\n{}",
+                format!(
+                    "Your local changes are still stashed as {}. Restore them with 'git stash pop --index'.",
+                    stash.short_commit()
+                )
+                .yellow()
+            );
+        }
+    }
+
+    sync_result?;
+
+    println!("\nSuccessfully synced '{target_branch}' with '{source_branch}'");
+    Ok(())
+}
+
+/// Pulls `source_branch` and brings it into `target_branch`.
+///
+/// # Arguments
+/// * `source_branch` - The branch to sync from (e.g., "main")
+/// * `target_branch` - The branch to sync into, which is left checked out
+/// * `rebase` - Whether to use rebase instead of merge
+/// * `config` - Global configuration including verbose settings
+///
+/// # Errors
+/// * If any of the switch, pull, merge or rebase operations fail
+fn sync_with_source(
+    source_branch: &str,
+    target_branch: &str,
+    rebase: bool,
+    config: &Config,
+) -> Result<()> {
+    use crate::git::{git_merge, git_pull, git_rebase, git_switch};
 
     // Switch to source branch and pull
     git_switch(source_branch)?;
@@ -1394,13 +1456,10 @@ fn handle_sync(
 
     // Merge or rebase
     if rebase {
-        git_rebase(source_branch, config.verbose)?;
+        git_rebase(source_branch, config.verbose)
     } else {
-        git_merge(source_branch, config.verbose)?;
+        git_merge(source_branch, config.verbose)
     }
-
-    println!("\nSuccessfully synced '{target_branch}' with '{source_branch}'");
-    Ok(())
 }
 
 /// Handle the `WhichConfig` command which shows which config files would be used.
@@ -2250,6 +2309,31 @@ fn load_config(config_path: Option<&str>) -> Result<Config> {
     })
 }
 
+/// Dispatches the `config` subcommands.
+///
+/// # Arguments
+/// * `subcommand` - The parsed `config` subcommand
+/// * `config` - Global configuration, updated with the subcommand dry-run setting
+///
+/// # Errors
+/// * If the underlying config handler fails
+fn handle_config_subcommand(subcommand: ConfigSubcommand, config: &mut Config) -> Result<()> {
+    match subcommand {
+        ConfigSubcommand::Create {
+            scope,
+            exclude,
+            dry_run,
+        } => {
+            config.set_dry_run(dry_run);
+            handle_config_command(scope, exclude, config)
+        }
+        ConfigSubcommand::Which {
+            path,
+            show_effective,
+        } => handle_which_config(path.as_deref(), show_effective),
+    }
+}
+
 /// Runs the program by parsing command line arguments and executing the appropriate command.
 ///
 /// # Errors
@@ -2298,20 +2382,7 @@ pub fn run() -> Result<()> {
             Ok(())
         }
 
-        CliCommand::Config { subcommand } => match subcommand {
-            ConfigSubcommand::Create {
-                scope,
-                exclude,
-                dry_run,
-            } => {
-                config.set_dry_run(dry_run);
-                handle_config_command(scope, exclude, &config)
-            }
-            ConfigSubcommand::Which {
-                path,
-                show_effective,
-            } => handle_which_config(path.as_deref(), show_effective),
-        },
+        CliCommand::Config { subcommand } => handle_config_subcommand(subcommand, &mut config),
 
         CliCommand::Generate {
             dry_run,
@@ -2367,10 +2438,17 @@ pub fn run() -> Result<()> {
             source_branch,
             rebase,
             new_branch,
+            no_stash,
             dry_run,
         } => {
             config.set_dry_run(dry_run);
-            handle_sync(&source_branch, rebase, new_branch.as_deref(), &config)
+            handle_sync(
+                &source_branch,
+                rebase,
+                new_branch.as_deref(),
+                no_stash,
+                &config,
+            )
         }
     }
 }
@@ -3671,6 +3749,7 @@ mod cli_tests {
             source_branch,
             rebase,
             new_branch,
+            no_stash,
             dry_run,
         } = cli.command
         else {
@@ -3679,6 +3758,7 @@ mod cli_tests {
         assert_eq!(source_branch, "main");
         assert!(!rebase);
         assert!(new_branch.is_none());
+        assert!(!no_stash);
         assert!(!dry_run);
         Ok(())
     }
@@ -3692,6 +3772,7 @@ mod cli_tests {
             source_branch,
             rebase,
             new_branch,
+            no_stash,
             dry_run,
         } = cli.command
         else {
@@ -3700,6 +3781,7 @@ mod cli_tests {
         assert_eq!(source_branch, "develop");
         assert!(!rebase);
         assert!(new_branch.is_none());
+        assert!(!no_stash);
         assert!(!dry_run);
         Ok(())
     }
@@ -3713,6 +3795,7 @@ mod cli_tests {
             source_branch,
             rebase,
             new_branch,
+            no_stash,
             dry_run,
         } = cli.command
         else {
@@ -3721,6 +3804,7 @@ mod cli_tests {
         assert_eq!(source_branch, "staging");
         assert!(!rebase);
         assert!(new_branch.is_none());
+        assert!(!no_stash);
         assert!(!dry_run);
         Ok(())
     }
@@ -3734,6 +3818,7 @@ mod cli_tests {
             source_branch,
             rebase,
             new_branch,
+            no_stash,
             dry_run,
         } = cli.command
         else {
@@ -3742,6 +3827,7 @@ mod cli_tests {
         assert_eq!(source_branch, "main");
         assert!(rebase);
         assert!(new_branch.is_none());
+        assert!(!no_stash);
         assert!(!dry_run);
         Ok(())
     }
@@ -3755,6 +3841,7 @@ mod cli_tests {
             source_branch,
             rebase,
             new_branch,
+            no_stash,
             dry_run,
         } = cli.command
         else {
@@ -3763,6 +3850,7 @@ mod cli_tests {
         assert_eq!(source_branch, "main");
         assert!(rebase);
         assert!(new_branch.is_none());
+        assert!(!no_stash);
         assert!(!dry_run);
         Ok(())
     }
@@ -3776,6 +3864,7 @@ mod cli_tests {
             source_branch,
             rebase,
             new_branch,
+            no_stash,
             dry_run,
         } = cli.command
         else {
@@ -3784,6 +3873,7 @@ mod cli_tests {
         assert_eq!(source_branch, "main");
         assert!(!rebase);
         assert_eq!(new_branch, Some("feature/new-feature".to_string()));
+        assert!(!no_stash);
         assert!(!dry_run);
         Ok(())
     }
@@ -3797,6 +3887,7 @@ mod cli_tests {
             source_branch,
             rebase,
             new_branch,
+            no_stash,
             dry_run,
         } = cli.command
         else {
@@ -3805,6 +3896,30 @@ mod cli_tests {
         assert_eq!(source_branch, "main");
         assert!(!rebase);
         assert_eq!(new_branch, Some("bugfix/issue-123".to_string()));
+        assert!(!no_stash);
+        assert!(!dry_run);
+        Ok(())
+    }
+
+    #[test]
+    fn test_sync_with_no_stash() -> TestResult {
+        let args = vec!["rona", "sync", "--no-stash"];
+        let cli = Cli::try_parse_from(args)?;
+
+        let CliCommand::Sync {
+            source_branch,
+            rebase,
+            new_branch,
+            no_stash,
+            dry_run,
+        } = cli.command
+        else {
+            return Err("Wrong command parsed".into());
+        };
+        assert_eq!(source_branch, "main");
+        assert!(!rebase);
+        assert!(new_branch.is_none());
+        assert!(no_stash);
         assert!(!dry_run);
         Ok(())
     }
@@ -3818,6 +3933,7 @@ mod cli_tests {
             source_branch,
             rebase,
             new_branch,
+            no_stash,
             dry_run,
         } = cli.command
         else {
@@ -3826,6 +3942,7 @@ mod cli_tests {
         assert_eq!(source_branch, "main");
         assert!(!rebase);
         assert!(new_branch.is_none());
+        assert!(!no_stash);
         assert!(dry_run);
         Ok(())
     }
@@ -3848,6 +3965,7 @@ mod cli_tests {
             source_branch,
             rebase,
             new_branch,
+            no_stash,
             dry_run,
         } = cli.command
         else {
@@ -3856,6 +3974,7 @@ mod cli_tests {
         assert_eq!(source_branch, "develop");
         assert!(rebase);
         assert_eq!(new_branch, Some("feature/test".to_string()));
+        assert!(!no_stash);
         assert!(dry_run);
         Ok(())
     }
@@ -3877,6 +3996,7 @@ mod cli_tests {
             source_branch,
             rebase,
             new_branch,
+            no_stash,
             dry_run,
         } = cli.command
         else {
@@ -3885,6 +4005,7 @@ mod cli_tests {
         assert_eq!(source_branch, "staging");
         assert!(rebase);
         assert_eq!(new_branch, Some("hotfix/critical".to_string()));
+        assert!(!no_stash);
         assert!(!dry_run);
         Ok(())
     }

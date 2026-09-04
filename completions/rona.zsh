@@ -344,6 +344,7 @@ _arguments "${_arguments_options[@]}" : \
 '--config-file=[Config file to use instead of the default global/project hierarchy]:PATH:_files' \
 '-r[Use rebase instead of merge]' \
 '--rebase[Use rebase instead of merge]' \
+'--no-stash[Keep local changes in place instead of stashing them during the sync]' \
 '--dry-run[Show what would be done without actually doing it]' \
 '-h[Print help]' \
 '--help[Print help]' \

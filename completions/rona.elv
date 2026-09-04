@@ -282,6 +282,7 @@ set edit:completion:arg-completer[rona] = {|@words|
             cand --config-file 'Config file to use instead of the default global/project hierarchy'
             cand -r 'Use rebase instead of merge'
             cand --rebase 'Use rebase instead of merge'
+            cand --no-stash 'Keep local changes in place instead of stashing them during the sync'
             cand --dry-run 'Show what would be done without actually doing it'
             cand -h 'Print help'
             cand --help 'Print help'

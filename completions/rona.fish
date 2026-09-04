@@ -170,6 +170,7 @@ complete -c rona -n "__fish_rona_using_subcommand sync" -s b -l branch -d 'Branc
 complete -c rona -n "__fish_rona_using_subcommand sync" -s n -l new-branch -d 'Create a new branch before syncing' -r
 complete -c rona -n "__fish_rona_using_subcommand sync" -s f -l config-file -d 'Config file to use instead of the default global/project hierarchy' -r -F
 complete -c rona -n "__fish_rona_using_subcommand sync" -s r -l rebase -d 'Use rebase instead of merge'
+complete -c rona -n "__fish_rona_using_subcommand sync" -l no-stash -d 'Keep local changes in place instead of stashing them during the sync'
 complete -c rona -n "__fish_rona_using_subcommand sync" -l dry-run -d 'Show what would be done without actually doing it'
 complete -c rona -n "__fish_rona_using_subcommand sync" -s h -l help -d 'Print help'
 complete -c rona -n "__fish_rona_using_subcommand help; and not __fish_seen_subcommand_from branch add-with-exclude commit completion config generate init list-status pr push reset restore set-editor sync help" -f -a "branch" -d 'Create a new branch interactively using a branch name template'
