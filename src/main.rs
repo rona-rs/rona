@@ -37,12 +37,16 @@
 //! # Architecture
 //!
 //! The application is organized into several modules:
-//! - `cli`: Handles command-line interface and argument parsing
+//! - `cli`: Command-line grammar, shell completion, and dispatch
+//! - `commands`: What each command does, one module per family of commands
 //! - `config`: Manages application configuration
 //! - `errors`: Error handling and custom error types
+//! - `extra_fields`: Config-declared prompt fields and their prefetching
 //! - `git`: Organized Git-related functionality with focused submodules
 //! - `pr`: Pull and merge request creation across forges
-//! - `my_clap_theme`: Custom theme for command-line output
+//! - `prompt`: Interactive prompts shared by the commands
+//! - `template`: Commit, branch, and request title template rendering
+//! - `theme`: Custom theme for command-line output
 //! - `utils`: Common utility functions
 //!
 //! # Error Handling
@@ -53,11 +57,13 @@
 //!
 
 pub mod cli;
+pub mod commands;
 pub mod config;
 pub mod errors;
 pub mod extra_fields;
 pub mod git;
 pub mod pr;
+pub mod prompt;
 pub mod template;
 pub mod theme;
 pub mod utils;

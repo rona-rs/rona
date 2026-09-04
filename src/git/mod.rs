@@ -44,8 +44,7 @@ pub use branch::{
     git_merge, git_pull, git_rebase, git_switch, sanitize_branch_name,
 };
 pub use commit::{
-    COMMIT_MESSAGE_FILE_PATH, COMMIT_TYPES, generate_commit_message, get_current_commit_nb,
-    git_commit,
+    COMMIT_MESSAGE_FILE_PATH, generate_commit_message, get_current_commit_nb, git_commit,
 };
 pub use files::{add_to_git_exclude, create_needed_files};
 pub use forge::{

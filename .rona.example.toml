@@ -25,7 +25,8 @@ editor = "nano"
 # Commit types
 # ---------------------------------------------------------------------------
 # The list shown in the commit-type selector (used by both `rona -g` and `rona branch`).
-# Omit this key to use the built-in default: ["feat", "fix", "docs", "test", "chore"].
+# Omit this key to use the built-in default:
+# ["feat", "fix", "perf", "revert", "docs", "quality", "style", "chore", "refactor", "test", "build", "ci"].
 
 commit_types = [
     "feat",     # New feature

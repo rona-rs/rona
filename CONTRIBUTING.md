@@ -43,11 +43,26 @@ cargo clippy --workspace --release --all-targets --all-features -- --deny warnin
 ```
 src/
 ├── main.rs              # Application entry point
-├── cli.rs               # Command-line interface, argument parsing, and render config
+├── cli/                 # The command line itself
+│   ├── mod.rs           # Parses the command line and dispatches to one command
+│   ├── args.rs          # The whole clap grammar: commands, flags, aliases, defaults
+│   ├── args/tests.rs    # Parsing tests (what a typed command line produces)
+│   └── completion.rs    # Shell completion scripts generated from the grammar
+├── commands/            # What each command does, one module per family
+│   ├── branch.rs        # rona branch
+│   ├── commit.rs        # rona commit, rona push
+│   ├── config.rs        # rona config create/which, rona init, rona set-editor
+│   ├── generate.rs      # rona generate (writes commit_message.md)
+│   ├── pr.rs            # rona pr
+│   ├── staging.rs       # rona add-with-exclude, reset, restore, list-status
+│   └── sync.rs          # rona sync
+├── prompt.rs            # Interactive prompts shared by the commands
 ├── config.rs            # Configuration management (two-tier: global + project)
 ├── errors.rs            # Error types and handling (using thiserror)
-├── template.rs          # Commit message template processing with variables
-├── performance.rs       # Performance measurement utilities
+├── extra_fields.rs      # Config-declared prompt fields and their prefetching
+├── pr.rs                # Pull/merge request payloads and forge backends
+├── template.rs          # Commit, branch, and PR title template processing
+├── theme.rs             # Shared theme for interactive prompts
 ├── utils.rs             # General utility functions
 └── git/                 # Modular git operations
     ├── mod.rs           # Git module exports and shared utilities
@@ -55,10 +70,19 @@ src/
     ├── commit.rs        # Commit counting, committing, and GPG signing
     ├── status.rs        # Parsing git status --porcelain=v1 output
     ├── staging.rs       # File staging with glob pattern exclusion
+    ├── stash.rs         # Stashing and restoring changes around branch switches
+    ├── forge.rs         # Forge detection and remote URL parsing
     ├── files.rs         # File creation and .gitignore management
     ├── remote.rs        # Push operations
     └── repository.rs    # Finding git root and repository paths
 ```
+
+Two rules keep this layout coherent:
+
+- **`cli/` only describes and dispatches the command line.** A command's behaviour lives in
+  `commands/`, so it can be read and changed without going through argument parsing.
+- **Interactive prompts go through `prompt.rs`.** Every command shares the same theme,
+  cancellation handling, and field ordering rules that way.
 
 ## Development Guidelines
 
@@ -138,7 +162,7 @@ Rona uses a structured commit message format with commit numbers and branch cont
 [{commit_number}] ({commit_type} on {branch_name}) {message}
 ```
 
-**Available commit types:** `chore`, `feat`, `fix`, `test`
+**Available commit types:** whatever `commit_types` lists in your config; without that key, the built-in list (`DEFAULT_COMMIT_TYPES` in `src/config.rs`): `feat`, `fix`, `perf`, `revert`, `docs`, `quality`, `style`, `chore`, `refactor`, `test`, `build`, `ci`
 
 **Example commits:**
 - `[42] (feat on new-feature) Add dry-run mode for all commands`
@@ -170,12 +194,14 @@ cargo test -- --nocapture
 cargo test test_name
 
 # Run tests in specific module
-cargo test cli::cli_tests
+cargo test cli::args
 ```
 
 ### Writing Tests
 
-- Place unit tests in the same file as the code being tested
+- Place unit tests in the same file as the code being tested; when a module's tests grow large
+  enough to bury the code (as with the command line grammar), move them to a `tests.rs` child
+  module declared with `#[cfg(test)] mod tests;`
 - Use descriptive test names that explain what is being tested
 - Test both success and error cases
 - Use `tempfile` for tests that need temporary files/directories

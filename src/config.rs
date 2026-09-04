@@ -60,8 +60,32 @@ pub struct ConfigInfo {
     pub search_directory: PathBuf,
 }
 
-// Define your default commit types
-const DEFAULT_COMMIT_TYPES: &[&str] = &["feat", "fix", "docs", "test", "chore"];
+/// The commit types rona offers when no config lists any.
+///
+/// This is the only built-in list: the commit type selector, the branch type selector (which
+/// falls back to it), the `{branch_name}` prefix stripping, and the config file written by
+/// `rona config create` all resolve to it.
+pub const DEFAULT_COMMIT_TYPES: &[&str] = &[
+    "feat", "fix", "perf", "revert", "docs", "quality", "style", "chore", "refactor", "test",
+    "build", "ci",
+];
+
+/// The commit message template used when the config sets none.
+///
+/// The conditional block `{?commit_number}...{/commit_number}` is only rendered when
+/// `commit_number` has a value, so `--no-commit-number` leaves no empty brackets behind.
+pub const DEFAULT_COMMIT_TEMPLATE: &str =
+    "{?commit_number}[{commit_number}] {/commit_number}({commit_type} on {branch_name}) {message}";
+
+/// The branch name template used when the config sets none.
+pub const DEFAULT_BRANCH_TEMPLATE: &str = "{branch_type}/{description}";
+
+/// The pull/merge request title template used when the config sets none.
+///
+/// The title is normally written as the request document's heading, so the default only has to
+/// seed that heading. The last commit subject is the closest thing to a title the repository
+/// already holds, and it needs no prompt. Configure `{title}` to be asked for one instead.
+pub const DEFAULT_PR_TITLE_TEMPLATE: &str = "{commit_subject}";
 
 /// A path-conditional config layer, declared as `[[overrides]]` in a config file.
 ///
@@ -398,12 +422,10 @@ impl Default for ProjectConfig {
                     .map(std::string::ToString::to_string)
                     .collect(),
             ),
-            commit_template: Some(
-                "{?commit_number}[{commit_number}] {/commit_number}({commit_type} on {branch_name}) {message}".to_string(),
-            ),
+            commit_template: Some(DEFAULT_COMMIT_TEMPLATE.to_string()),
             commit_extra_fields: vec![],
             commit_fields_order: vec![],
-            branch_template: Some("{branch_type}/{description}".to_string()),
+            branch_template: Some(DEFAULT_BRANCH_TEMPLATE.to_string()),
             branch_extra_fields: vec![],
             branch_field_order: vec![],
             branch_types: None,
@@ -411,7 +433,7 @@ impl Default for ProjectConfig {
             message_prefetch: None,
             commit_message: None,
             branch_description: None,
-            pr_title_template: Some("{commit_subject}".to_string()),
+            pr_title_template: Some(DEFAULT_PR_TITLE_TEMPLATE.to_string()),
             pr_extra_fields: vec![],
             pr_field_order: vec![],
             pr_title: None,
@@ -427,6 +449,105 @@ impl Default for ProjectConfig {
         }
     }
 }
+
+/// The starting point written by `rona config create`: every supported option, documented,
+/// with the optional ones commented out.
+///
+/// It lives next to [`ProjectConfig`] on purpose: a new option is only usable once users can
+/// discover it, so adding a field above means documenting it here in the same edit.
+pub const ANNOTATED_CONFIG_TEMPLATE: &str = r#"# Editor used to open commit_message.md in non-interactive mode.
+editor = "nano"
+
+# Commit types shown in the selector.
+commit_types = ["feat", "fix", "perf", "revert", "docs", "quality", "style", "chore", "refactor", "test", "build", "ci"]
+
+##########
+# COMMIT #
+##########
+
+# Template applied to the final commit message.
+# Built-in variables:
+#   {commit_number}  - sequential commit count on the current branch
+#   {commit_type}    - the type chosen in the selector
+#   {branch_name}    - current branch (prefix stripped, e.g. feat/x -> x)
+#   {message}        - the message entered by the user
+#   {date}           - YYYY-MM-DD
+#   {time}           - HH:MM:SS
+#   {author}         - git user.name
+#   {email}          - git user.email
+# Conditional blocks: {?var}...{/var} renders only when var has a value.
+# Extra variables: add with [[commit_extra_fields]].
+commit_template = "{?commit_number}[{commit_number}] {/commit_number}({commit_type} on {branch_name}) {message}"
+
+# Order of prompts in interactive mode (-i).
+# Use the reserved name "message" to position the built-in message prompt.
+# Fields not listed are appended after all listed items.
+# commit_fields_order = ["scope", "message", "ticket"]
+
+# Overrides for the built-in message prompt (uncomment to customise or disable).
+# [commit_message]
+# prompt = "Commit message"
+# validation = ""
+# disabled = false
+
+# [[commit_extra_fields]]
+# name = "scope"
+# prompt = "Select scope"
+# kind = "select"
+# required = false
+# prefetch.source = "command"
+# prefetch.command = "git log -50 --pretty=format:%s"
+# prefetch.extract_regex = "\\w+\\((?P<value>[^)]*)\\):"
+# prefetch.deduplicate = true
+
+# [[commit_extra_fields]]
+# name = "ticket"
+# prompt = "Ticket:"
+# kind = "text"
+# required = false
+# validation = "^[A-Z]+-[0-9]+$"
+# prefetch.source = "branch"
+# prefetch.extract_regex = "[A-Z]+-[0-9]+"
+
+##########
+# BRANCH #
+##########
+
+# Template applied to the generated branch name.
+# Built-in variables:
+#   {branch_type}   - the type chosen in the selector
+#   {description}   - the description entered by the user
+#   {date}          - YYYY-MM-DD
+#   {time}          - HH:MM:SS
+#   {author}        - git user.name
+# Conditional blocks: {?var}...{/var} renders only when var has a value.
+# Extra variables: add with [[branch_extra_fields]].
+# Commit extra fields (from [[commit_extra_fields]]) can also be referenced here.
+branch_template = "{branch_type}/{description}"
+
+# Dedicated branch types (when absent, commit_types is used).
+# branch_types = ["feat", "fix", "chore"]
+
+# When true, branch_types and commit_types are merged in the selector.
+# merge_branch_and_commit_types = false
+
+# Order of prompts for branch creation.
+# Use the reserved name "description" to position the built-in description prompt.
+# branch_field_order = ["description", "ticket"]
+
+# Overrides for the built-in description prompt (uncomment to customise or disable).
+# [branch_description]
+# prompt = "Branch description"
+# validation = ""
+# disabled = false
+
+# [[branch_extra_fields]]
+# name = "description"
+# prompt = "Small description in kebab-case"
+# kind = "text"
+# required = true
+# validation = "^[a-z][a-z0-9-]+$"
+"#;
 
 /// Intermediate deserialization target that accepts both current and legacy field names.
 /// All array and bool fields are `Option` so absent keys are distinguishable from explicit
@@ -610,6 +731,43 @@ fn load_and_merge_files(paths: &[PathBuf]) -> Result<RawProjectConfig> {
 }
 
 impl ProjectConfig {
+    /// The types offered by the commit type selector.
+    ///
+    /// Falls back to [`DEFAULT_COMMIT_TYPES`] when `commit_types` is not configured. This is
+    /// also the set of prefixes stripped from `{branch_name}`, so a `feat/x` branch renders as
+    /// `x` for exactly the types the selector could have produced.
+    #[must_use]
+    pub fn commit_type_choices(&self) -> Vec<&str> {
+        self.commit_types.as_ref().map_or_else(
+            || DEFAULT_COMMIT_TYPES.to_vec(),
+            |types| types.iter().map(String::as_str).collect(),
+        )
+    }
+
+    /// The types offered by the branch type selector.
+    ///
+    /// `branch_types` replaces the commit types when configured, unless
+    /// `merge_branch_and_commit_types` asks for both, in which case the commit types the
+    /// branch list does not already name are appended.
+    #[must_use]
+    pub fn branch_type_choices(&self) -> Vec<&str> {
+        let Some(branch_types) = &self.branch_types else {
+            return self.commit_type_choices();
+        };
+
+        let mut choices: Vec<&str> = branch_types.iter().map(String::as_str).collect();
+
+        if self.merge_branch_and_commit_types {
+            for commit_type in self.commit_type_choices() {
+                if !choices.contains(&commit_type) {
+                    choices.push(commit_type);
+                }
+            }
+        }
+
+        choices
+    }
+
     /// Loads the project configuration, merging global and project config files.
     ///
     /// # Errors
@@ -978,6 +1136,28 @@ impl Config {
             .ok_or_else(|| ConfigError::InvalidConfig.into())
     }
 
+    /// Opens `path` in the configured editor and waits for it to close.
+    ///
+    /// # Errors
+    /// * If no editor is configured
+    /// * If the editor cannot be launched or waited on
+    pub fn open_in_editor(&self, path: &Path) -> Result<()> {
+        let editor = self.get_editor()?;
+
+        std::process::Command::new(&editor)
+            .arg(path)
+            .spawn()
+            .map_err(|e| RonaError::CommandFailed {
+                command: format!("Failed to spawn editor '{editor}': {e}"),
+            })?
+            .wait()
+            .map_err(|e| RonaError::CommandFailed {
+                command: format!("Failed to wait for editor '{editor}': {e}"),
+            })?;
+
+        Ok(())
+    }
+
     /// Sets the editor in the configuration file.
     ///
     /// # Arguments
@@ -1169,6 +1349,93 @@ mod tests {
     /// Extracts just the file paths from collected override sources.
     fn override_paths(sources: &[OverrideSource]) -> Vec<PathBuf> {
         sources.iter().map(|s| s.path.clone()).collect()
+    }
+
+    /// The file `rona config create` writes must load and state the built-in defaults, or
+    /// every option in it is a lie. This is what keeps the annotated template in step with
+    /// the constants above.
+    #[test]
+    fn test_annotated_template_states_the_built_in_defaults() -> Result<()> {
+        let raw: RawProjectConfig = toml::from_str(ANNOTATED_CONFIG_TEMPLATE)
+            .map_err(|_| RonaError::from(ConfigError::InvalidConfig))?;
+        let config = ProjectConfig::from(normalize_raw(raw));
+
+        assert_eq!(config.editor.as_deref(), Some("nano"));
+        assert_eq!(
+            config.commit_type_choices(),
+            DEFAULT_COMMIT_TYPES,
+            "the documented commit_types drifted from the default"
+        );
+        assert_eq!(
+            config.commit_template.as_deref(),
+            Some(DEFAULT_COMMIT_TEMPLATE),
+            "the documented commit_template drifted from the default"
+        );
+        assert_eq!(
+            config.branch_template.as_deref(),
+            Some(DEFAULT_BRANCH_TEMPLATE),
+            "the documented branch_template drifted from the default"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_commit_type_choices_fall_back_to_the_built_in_list() {
+        let config = ProjectConfig {
+            commit_types: None,
+            ..ProjectConfig::default()
+        };
+
+        assert_eq!(config.commit_type_choices(), DEFAULT_COMMIT_TYPES);
+    }
+
+    #[test]
+    fn test_commit_type_choices_prefer_the_configured_list() {
+        let config = ProjectConfig {
+            commit_types: Some(vec!["feat".to_string(), "fix".to_string()]),
+            ..ProjectConfig::default()
+        };
+
+        assert_eq!(config.commit_type_choices(), vec!["feat", "fix"]);
+    }
+
+    #[test]
+    fn test_branch_type_choices_default_to_the_commit_types() {
+        let config = ProjectConfig {
+            commit_types: Some(vec!["feat".to_string(), "fix".to_string()]),
+            branch_types: None,
+            ..ProjectConfig::default()
+        };
+
+        assert_eq!(config.branch_type_choices(), vec!["feat", "fix"]);
+    }
+
+    #[test]
+    fn test_branch_type_choices_replace_the_commit_types() {
+        let config = ProjectConfig {
+            commit_types: Some(vec!["feat".to_string(), "fix".to_string()]),
+            branch_types: Some(vec!["release".to_string()]),
+            merge_branch_and_commit_types: false,
+            ..ProjectConfig::default()
+        };
+
+        assert_eq!(config.branch_type_choices(), vec!["release"]);
+    }
+
+    #[test]
+    fn test_branch_type_choices_merge_without_duplicating() {
+        let config = ProjectConfig {
+            commit_types: Some(vec!["feat".to_string(), "fix".to_string()]),
+            branch_types: Some(vec!["release".to_string(), "feat".to_string()]),
+            merge_branch_and_commit_types: true,
+            ..ProjectConfig::default()
+        };
+
+        assert_eq!(
+            config.branch_type_choices(),
+            vec!["release", "feat", "fix"],
+            "branch types keep their order, and the commit types they name are not repeated"
+        );
     }
 
     /// Renders `value` as a TOML *literal* string (single-quoted), where backslashes
