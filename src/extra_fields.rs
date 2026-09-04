@@ -5,7 +5,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use dialoguer::{FuzzySelect, Input};
+use dialoguer::Input;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 
@@ -21,7 +21,7 @@ pub enum FieldKind {
     /// Free-form text input.
     #[default]
     Text,
-    /// Selection from a list, with an "Other (enter manually)" fallback.
+    /// Fuzzy pick from the candidate list, or a value typed on the spot.
     Select,
 }
 
@@ -157,9 +157,6 @@ fn extract_matches<'a>(
     results
 }
 
-const NONE_OPTION: &str = "(none)";
-const OTHER_OPTION: &str = "Other (enter manually)";
-
 /// Prompt the user for an extra field value.
 ///
 /// Returns `None` when the field is optional and the user chose to skip it.
@@ -202,7 +199,7 @@ pub fn prompt_extra_field(field: &ExtraField) -> Result<Option<String>> {
             ));
 
     if use_select {
-        prompt_as_select(field, prompt_text, candidates, validator_regex)
+        prompt_as_select(field, prompt_text, &candidates, validator_regex)
     } else {
         // Branch prefetch: the single extracted value becomes the text default
         let default_owned = candidates.into_iter().next();
@@ -215,31 +212,35 @@ pub fn prompt_extra_field(field: &ExtraField) -> Result<Option<String>> {
     }
 }
 
+/// Offers the prefetched candidates without closing the door on a value they do not hold: the
+/// picker filters the list as the user types and turns unmatched text into a new value, so adding
+/// a scope costs no more keystrokes than reusing one.
 fn prompt_as_select(
     field: &ExtraField,
     prompt_text: &str,
-    candidates: Vec<String>,
+    candidates: &[String],
     validator_regex: Option<Regex>,
 ) -> Result<Option<String>> {
-    let mut options = candidates;
-    if !field.required {
-        options.push(NONE_OPTION.to_string());
-    }
-    options.push(OTHER_OPTION.to_string());
+    let required = field.required;
+    let pattern = field.validation.clone();
 
-    let index = FuzzySelect::with_theme(&crate::theme::prompt_theme())
-        .with_prompt(prompt_text)
-        .items(&options)
-        .default(0)
-        .interact_opt()
-        .map_err(|_| RonaError::UserCancelled)?
-        .ok_or(RonaError::UserCancelled)?;
+    let validate = move |value: &str| -> std::result::Result<(), String> {
+        if required && value.trim().is_empty() {
+            return Err("This field is required.".to_string());
+        }
+        if let Some(ref re) = validator_regex
+            && !value.is_empty()
+            && !re.is_match(value)
+        {
+            return Err(format!(
+                "Must match pattern: {}",
+                pattern.as_deref().unwrap_or("")
+            ));
+        }
+        Ok(())
+    };
 
-    match options[index].as_str() {
-        s if s == NONE_OPTION => Ok(None),
-        s if s == OTHER_OPTION => prompt_as_text(field, prompt_text, None::<&str>, validator_regex),
-        value => Ok(Some(value.to_string())),
-    }
+    crate::prompt::select_or_create(prompt_text, candidates, !required, &validate)
 }
 
 fn prompt_as_text(

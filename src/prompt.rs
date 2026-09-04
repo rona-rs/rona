@@ -6,12 +6,16 @@
 //!
 //! The prompts for config-declared extra fields live in [`crate::extra_fields`], next to the
 //! declarations and the prefetch that feed them; this module drives them in the configured
-//! order via [`fields`].
+//! order via [`fields`], and lends them the [`select_or_create`] picker for their candidate lists.
+
+mod picker;
 
 use std::{collections::HashMap, fmt::Display};
 
 use dialoguer::{Confirm, FuzzySelect, Input, MultiSelect};
 use regex::Regex;
+
+pub(crate) use picker::select_or_create;
 
 use crate::{
     errors::{Result, RonaError},
