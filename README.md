@@ -203,7 +203,7 @@ template = "{?commit_number}[{commit_number}] {/commit_number}({commit_type} on 
 # ...
 ```
 
-**Note**: When no configuration exists, Rona falls back to: `["chore", "feat", "fix", "test"]`
+**Note**: When `commit_types` is not configured, Rona falls back to its single built-in list: `["feat", "fix", "perf", "revert", "docs", "quality", "style", "chore", "refactor", "test", "build", "ci"]`. It is the same list `rona config create` writes into a new config file, and the same one used to strip a type prefix from `{branch_name}`.
 
 ### Shared Configuration with `extends`
 
@@ -1151,8 +1151,7 @@ Single-choice prompts (commit type, branch type, and other selection fields) use
 **Commit Types:**
 
 - Uses commit types from your configuration (`.rona.toml` or `~/.config/rona.toml`)
-- Falls back to: `["chore", "feat", "fix", "test"]` when no configuration exists
-- Default configuration includes: `["feat", "fix", "docs", "test", "chore"]`
+- Falls back to the built-in list when `commit_types` is not configured: `["feat", "fix", "perf", "revert", "docs", "quality", "style", "chore", "refactor", "test", "build", "ci"]`
 
 ### `init` (`-i`)
 

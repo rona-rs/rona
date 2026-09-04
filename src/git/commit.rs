@@ -21,7 +21,6 @@ use super::{
 };
 
 pub const COMMIT_MESSAGE_FILE_PATH: &str = "commit_message.md";
-pub const COMMIT_TYPES: [&str; 4] = ["chore", "feat", "fix", "test"];
 
 /// Gets the total number of commits in the current branch.
 ///

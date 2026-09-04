@@ -462,6 +462,16 @@ pub fn validate_pr_template(template: &str, extra_variable_names: &[&str]) -> Re
     validate_template_with_vars(template, &valid)
 }
 
+/// Returns whether `template` uses the variable `name`.
+///
+/// A variable counts as used when it appears as `{name}` or as the head of a conditional block
+/// `{?name}...{/name}`. Commands rely on this to only prompt for what the active template
+/// actually renders.
+#[must_use]
+pub fn references(template: &str, name: &str) -> bool {
+    template.contains(&format!("{{{name}}}")) || template.contains(&format!("{{?{name}}}"))
+}
+
 /// Gets the current git author name and email from git config.
 fn get_git_author_info() -> Result<(String, String)> {
     use std::process::Command;
@@ -498,6 +508,30 @@ mod tests {
     use std::collections::HashMap;
 
     use super::*;
+
+    #[test]
+    fn test_references_plain_variable() {
+        assert!(references("({commit_type}) {message}", "commit_type"));
+        assert!(references("({commit_type}) {message}", "message"));
+    }
+
+    #[test]
+    fn test_references_conditional_block() {
+        let template = "{?commit_number}[{commit_number}] {/commit_number}{message}";
+        assert!(references(template, "commit_number"));
+    }
+
+    #[test]
+    fn test_references_ignores_unused_variables() {
+        assert!(!references("{message}", "commit_type"));
+        assert!(!references("{message}", "ticket"));
+    }
+
+    #[test]
+    fn test_references_requires_exact_name() {
+        // A longer name that merely contains the shorter one must not count as a reference.
+        assert!(!references("{commit_type_extra}", "commit_type"));
+    }
 
     #[test]
     fn test_template_processing() -> std::result::Result<(), Box<dyn std::error::Error>> {
