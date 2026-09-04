@@ -17,6 +17,7 @@
 //! - [`commit`] - Commit operations (commit counting, committing, commit message generation)
 //! - [`status`] - Git status parsing and processing
 //! - [`staging`] - File staging operations with pattern exclusion
+//! - [`stash`] - Stashing and restoring local changes around branch switches
 //! - [`forge`] - Forge detection and remote URL parsing (GitHub, GitLab, Bitbucket)
 //! - [`remote`] - Remote operations (git push)
 //! - [`files`] - File and exclusion handling utilities
@@ -32,6 +33,7 @@ pub mod forge;
 pub mod remote;
 pub mod repository;
 pub mod staging;
+pub mod stash;
 pub mod status;
 
 use colored::Colorize;
@@ -55,6 +57,7 @@ pub use repository::{find_git_root, get_top_level_path};
 pub use staging::{
     git_add_files, git_add_with_exclude_patterns, git_restore_files, git_unstage_files,
 };
+pub use stash::{StashHandle, has_local_changes, restore_stash, stash_local_changes};
 pub use status::{
     StatusEntry, get_all_staged_file_paths, get_restorable_files, get_stageable_files,
     get_staged_files, get_status_files,

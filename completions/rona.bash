@@ -1236,7 +1236,7 @@ _rona() {
             return 0
             ;;
         rona__subcmd__sync)
-            opts="-b -r -n -f -h --branch --rebase --new-branch --dry-run --config-file --help"
+            opts="-b -r -n -f -h --branch --rebase --new-branch --no-stash --dry-run --config-file --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0

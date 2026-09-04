@@ -308,6 +308,7 @@ Register-ArgumentCompleter -Native -CommandName 'rona' -ScriptBlock {
             [CompletionResult]::new('--config-file', '--config-file', [CompletionResultType]::ParameterName, 'Config file to use instead of the default global/project hierarchy')
             [CompletionResult]::new('-r', '-r', [CompletionResultType]::ParameterName, 'Use rebase instead of merge')
             [CompletionResult]::new('--rebase', '--rebase', [CompletionResultType]::ParameterName, 'Use rebase instead of merge')
+            [CompletionResult]::new('--no-stash', '--no-stash', [CompletionResultType]::ParameterName, 'Keep local changes in place instead of stashing them during the sync')
             [CompletionResult]::new('--dry-run', '--dry-run', [CompletionResultType]::ParameterName, 'Show what would be done without actually doing it')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')

@@ -1398,15 +1398,20 @@ rona sync [OPTIONS]
 - `-b, --branch <BRANCH>` - Branch to sync from (default: main)
 - `-r, --rebase` - Use rebase instead of merge
 - `-n, --new-branch <NAME>` - Create a new branch before syncing
+- `--no-stash` - Keep local changes in place instead of stashing them during the sync
 - `--dry-run` - Preview what would be done
 
 **Workflow:**
 
-1. Optionally creates a new branch (if `-n` specified)
-2. Switches to the source branch
-3. Pulls latest changes from remote
-4. Switches back to your target branch
-5. Merges or rebases the source branch into your target branch
+1. Stashes your local changes to tracked files, if there are any
+2. Optionally creates a new branch (if `-n` specified)
+3. Switches to the source branch
+4. Pulls latest changes from remote
+5. Switches back to your target branch
+6. Merges or rebases the source branch into your target branch
+7. Restores the stashed changes, staged files included
+
+Without the stash step, `git switch` refuses to move when local changes would be overwritten. If the sync fails, rona leaves your changes in the stash and tells you how to get them back. Untracked files are not stashed, because git carries them across a branch switch on its own.
 
 **Examples:**
 
@@ -1431,6 +1436,9 @@ rona sync -b develop -r -n feature/new-feature
 
 # Preview what would happen without making changes
 rona sync --dry-run
+
+# Fail on local changes instead of stashing them
+rona sync --no-stash
 
 # Combine all options
 rona sync -b develop -r -n feature/test --dry-run
