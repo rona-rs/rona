@@ -474,11 +474,13 @@ This replaces the need for a separate tool when a project requires additional st
 
 | `kind`   | Prefetch result               | Behaviour                                                    |
 | -------- | ----------------------------- | ------------------------------------------------------------ |
-| `select` | non-empty list                | Select from list + `(none)` (if optional) + `Other (enter manually)` |
+| `select` | non-empty list                | Fuzzy picker over the candidates, plus `(none)` when the field is optional. Typing filters the list and offers the typed text as a new value, so a value the list does not hold is one Enter away. |
 | `select` | empty                         | Falls back to a free-text prompt                             |
 | `text`   | non-empty list from `command` | Same as `select` with non-empty list                         |
 | `text`   | 0–1 values from `branch`      | Free-text prompt with the extracted value as the default     |
 | `text`   | nothing                       | Plain free-text prompt                                       |
+
+**Entering a value the list does not hold**: the candidates are suggestions, not a closed set. Type the value you want; the list filters as you type, and as soon as nothing matches, a `Create "..."` row takes its place. Pressing Enter accepts it, so a new scope costs the same keystrokes as an existing one. Arrow keys still walk the list, Esc cancels the prompt.
 
 When a field is skipped (optional + user chose `(none)`), the variable is simply absent. Use a conditional block in your template to handle this cleanly: `{?scope}({scope}){/scope}`.
 
@@ -544,7 +546,6 @@ $ Select scope
 > api
   auth
   (none)
-  Other (enter manually)
 
 $ Ticket reference (PROJ-42)
 > PROJ-42
@@ -575,7 +576,7 @@ feat: Add login endpoint [PROJ-42]
 
 #### Example: static select options (no prefetch)
 
-If you just want a fixed list without any prefetching, omit the `prefetch` block and list `kind = "select"` — but note that without prefetch, an empty candidate list causes the prompt to fall back to a free-text input. For a true fixed list, provide the options via `prefetch.command` using a shell command like `echo`:
+If you just want a fixed list without any prefetching, omit the `prefetch` block and list `kind = "select"` — but note that without prefetch, an empty candidate list causes the prompt to fall back to a free-text input. Provide the options via `prefetch.command` using a shell command like `echo`, and add a `validation` regex when only those options may be accepted, since the picker otherwise takes any value the user types:
 
 ```toml
 [[extra_fields]]

@@ -199,8 +199,14 @@ fn build_commit_message(
 
     let template = commit_template(config);
 
-    // Validate the template, including any extra field variable names.
-    let extra_names: Vec<&str> = extra_values.keys().map(String::as_str).collect();
+    // Validate the template against every declared extra field, not just the answered ones: a
+    // skipped optional field is absent from `extra_values`, but its `{?field}` block stays valid.
+    let extra_names: Vec<&str> = config
+        .project_config
+        .commit_extra_fields
+        .iter()
+        .map(|field| field.name.as_str())
+        .collect();
     if let Err(e) = validate_template(template, &extra_names) {
         println!(
             "{} Template validation error: {e}",
@@ -314,6 +320,33 @@ mod tests {
         let result = process_template(DEFAULT_COMMIT_TEMPLATE, &variables, &HashMap::new())?;
 
         assert_eq!(result, "[42] (feat on new-feature) Add feature");
+        Ok(())
+    }
+
+    /// REGRESSION TEST: skipping an optional extra field used to invalidate the whole template,
+    /// because validation only knew the fields that were answered, and the message fell back to
+    /// the built-in format. A declared field keeps its `{?field}` block valid either way.
+    #[test]
+    fn test_a_skipped_extra_field_keeps_the_template_valid() -> TestResult {
+        let template = "{commit_type}{?scope}({scope}){/scope}: {message}";
+
+        validate_template(template, &["scope"])?;
+
+        let variables = TemplateVariables {
+            commit_number: None,
+            commit_type: "feat".to_string(),
+            branch_name: "main".to_string(),
+            message: "Add login".to_string(),
+            date: "2024-01-15".to_string(),
+            time: "14:30:00".to_string(),
+            author: "Test User".to_string(),
+            email: "test@example.com".to_string(),
+        };
+
+        // The user skipped the scope, so it is absent from the values.
+        let result = process_template(template, &variables, &HashMap::new())?;
+
+        assert_eq!(result, "feat: Add login");
         Ok(())
     }
 
