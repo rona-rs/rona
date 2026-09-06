@@ -15,7 +15,7 @@ use std::{collections::HashMap, fmt::Display};
 use dialoguer::{Confirm, FuzzySelect, Input, MultiSelect};
 use regex::Regex;
 
-pub(crate) use picker::select_or_create;
+pub(crate) use picker::{select_or_create, select_or_create_many};
 
 use crate::{
     errors::{Result, RonaError},
@@ -230,6 +230,7 @@ mod tests {
             required: false,
             validation: None,
             prefetch: None,
+            separator: None,
         }
     }
 

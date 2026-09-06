@@ -225,22 +225,28 @@ branch_field_order = ["ticket", "description"]
 # Available keys per entry:
 #   name              (required) Variable name used in the template.
 #   prompt            Label shown to the user. Defaults to `name`.
-#   kind              "text" (default) or "select".
+#   kind              "text" (default), "select" or "multi-select".
 #   required          true / false (default). Reject empty answers when true.
 #   validation        Regex the answer must match. Shown as an error on mismatch.
+#                     A multi-select matches it against each ticked value.
+#   separator         What joins the ticked values of a multi-select. Default: ",".
 #   prefetch.source   "command" or "branch". Populates the prompt automatically.
 #   prefetch.command  Shell command whose stdout is parsed (source = "command").
 #   prefetch.extract_regex  Regex applied per line (command) or to branch name.
 #                     Extraction priority: named group `value`, capture group 1,
 #                     then the full match. A bare pattern like [A-Z]+-[0-9]+ works.
+#   prefetch.item_regex  Second-stage regex applied to every extracted value, to
+#                     split a group such as "records,pds,ui" into its entries.
+#                     Same extraction priority as extract_regex.
 #   prefetch.deduplicate  Remove duplicate results (source = "command"). Default: false.
 #
 # Prompt behaviour:
-#   select + non-empty prefetch  → select list with "(none)" and "Other" options
-#   select + empty prefetch      → falls back to free-text
-#   text   + command prefetch    → same as select with non-empty prefetch
-#   text   + branch prefetch     → free-text with the extracted value as default
-#   text   + no prefetch         → plain free-text
+#   select       + non-empty prefetch  → picker with "(none)" and a "Create ..." row
+#   select       + empty prefetch      → falls back to free-text
+#   multi-select + any prefetch        → same picker, ticking any number of rows
+#   text         + command prefetch    → same as select with non-empty prefetch
+#   text         + branch prefetch     → free-text with the extracted value as default
+#   text         + no prefetch         → plain free-text
 
 # --- scope ---
 # Conventional-commit component scope, e.g. feat(api): ...
@@ -254,6 +260,25 @@ prefetch.source = "command"
 prefetch.command = "git log -20 --pretty=format:%s"
 prefetch.extract_regex = "\\w+\\((?P<value>[^)]*)\\):"
 prefetch.deduplicate = true
+
+# --- scopes ---
+# Same candidates, ticked one by one: Space ticks the highlighted row, Enter
+# confirms, and the ticked values are joined by `separator`.
+# item_regex splits a group such as "records,pds,ui" into three candidates,
+# which a single extract_regex cannot do on its own.
+# Uncomment to enable, and drop the single-value `scope` field above.
+#
+# [[extra_fields]]
+# name = "scope"
+# prompt = "Select scopes"
+# kind = "multi-select"
+# required = false
+# separator = ","
+# prefetch.source = "command"
+# prefetch.command = "git log -50 --pretty=format:%s"
+# prefetch.extract_regex = "\\w+\\((?P<value>[^)]*)\\):"
+# prefetch.item_regex = "[\\w-]+"
+# prefetch.deduplicate = true
 
 # --- ticket ---
 # Issue / ticket reference such as PROJ-123.
