@@ -9,7 +9,7 @@
 //! through the shared [`crate::theme::prompt_theme`], so the picker looks like the other prompts.
 
 use dialoguer::{
-    console::{Key, Term, truncate_str},
+    console::{Key, Term, style, truncate_str},
     theme::{ColorfulTheme, Theme},
 };
 
@@ -17,6 +17,12 @@ use crate::errors::{Result, RonaError};
 
 /// Label of the row that skips an optional field.
 const NONE_LABEL: &str = "(none)";
+
+/// Shown under a multi pick, where Enter alone does not say what to press to tick a row.
+const MULTI_HINT: &str = "Space to tick, Enter to confirm";
+
+/// Refusal shown when a required multi pick has nothing ticked.
+const REQUIRED_MESSAGE: &str = "This field is required.";
 
 /// A row of the picker, and what accepting it means.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -133,6 +139,15 @@ fn render_error(error: std::fmt::Error) -> RonaError {
     RonaError::InvalidInput(format!("Failed to render prompt: {error}"))
 }
 
+/// How many values the picker returns, and how it draws its rows.
+#[derive(Debug)]
+enum Mode {
+    /// One row is accepted, and Enter returns it.
+    Single,
+    /// Rows are ticked, and Enter returns every ticked value in the order it was ticked.
+    Multi(Vec<String>),
+}
+
 /// Terminal state of one running picker.
 struct Picker<'a> {
     /// Terminal the prompt is drawn on; stderr, like every other prompt.
@@ -141,9 +156,13 @@ struct Picker<'a> {
     theme: ColorfulTheme,
     /// Label shown before the typed text.
     prompt: &'a str,
-    /// Values offered by the prefetch, in the order it returned them.
-    candidates: &'a [String],
-    /// Whether the skip row is offered.
+    /// Values offered by the prefetch, in the order it returned them. A created value joins them
+    /// so that a multi-select can show it ticked instead of dropping it out of the list.
+    candidates: Vec<String>,
+    /// Whether the picker takes one value or several.
+    mode: Mode,
+    /// Whether the field accepts no value at all: the skip row of a single pick, an empty
+    /// selection of a multi pick.
     allow_skip: bool,
     /// Text typed so far, which both filters the list and feeds the `Create` row.
     query: String,
@@ -164,20 +183,20 @@ impl Picker<'_> {
     fn run(
         &mut self,
         validate: &dyn Fn(&str) -> std::result::Result<(), String>,
-    ) -> Result<Option<String>> {
+    ) -> Result<Vec<String>> {
         self.term.hide_cursor()?;
         let outcome = self.interact(validate);
         let _ = self.term.show_cursor();
         outcome
     }
 
-    /// Draws the list and handles keys until the user accepts a row or cancels.
+    /// Draws the list and handles keys until the user accepts the selection or cancels.
     fn interact(
         &mut self,
         validate: &dyn Fn(&str) -> std::result::Result<(), String>,
-    ) -> Result<Option<String>> {
+    ) -> Result<Vec<String>> {
         loop {
-            let rows = rows(self.candidates, &self.query, self.allow_skip);
+            let rows = rows(&self.candidates, &self.query, self.skip_row());
             self.selected = self.selected.min(rows.len().saturating_sub(1));
             self.render(&rows)?;
 
@@ -187,22 +206,11 @@ impl Picker<'_> {
                     return Err(RonaError::UserCancelled);
                 }
                 Key::Enter => {
-                    let Some(row) = rows.get(self.selected) else {
-                        continue;
-                    };
-                    let Some(value) = row.value() else {
-                        self.report(NONE_LABEL)?;
-                        return Ok(None);
-                    };
-                    match validate(value) {
-                        Ok(()) => {
-                            let value = value.to_string();
-                            self.report(&value)?;
-                            return Ok(Some(value));
-                        }
-                        Err(message) => self.error = Some(message),
+                    if let Some(values) = self.accept(&rows, validate)? {
+                        return Ok(values);
                     }
                 }
+                Key::Char(' ') if self.is_multi() => self.toggle(&rows, validate),
                 Key::ArrowUp | Key::BackTab => self.move_selection(-1, rows.len()),
                 Key::ArrowDown | Key::Tab => self.move_selection(1, rows.len()),
                 Key::ArrowLeft => self.cursor = self.cursor.saturating_sub(1),
@@ -231,6 +239,105 @@ impl Picker<'_> {
         }
     }
 
+    /// Whether the picker takes several values.
+    const fn is_multi(&self) -> bool {
+        matches!(self.mode, Mode::Multi(_))
+    }
+
+    /// Whether the list offers the `(none)` row. Only a single pick has one: in a multi pick an
+    /// empty selection already says the same thing.
+    const fn skip_row(&self) -> bool {
+        self.allow_skip && !self.is_multi()
+    }
+
+    /// Handles Enter: the values to return, or `None` to keep the prompt open.
+    fn accept(
+        &mut self,
+        rows: &[Row],
+        validate: &dyn Fn(&str) -> std::result::Result<(), String>,
+    ) -> Result<Option<Vec<String>>> {
+        if let Mode::Multi(chosen) = &self.mode {
+            // Typed text that was never ticked would be lost on the way out, so Enter ticks the
+            // highlighted row while a filter is up, and the next one closes the prompt.
+            if !self.query.is_empty() {
+                self.toggle(rows, validate);
+                return Ok(None);
+            }
+
+            if chosen.is_empty() && !self.allow_skip {
+                self.error = Some(REQUIRED_MESSAGE.to_string());
+                return Ok(None);
+            }
+
+            let chosen = chosen.clone();
+            let echo = if chosen.is_empty() {
+                NONE_LABEL.to_string()
+            } else {
+                chosen.join(", ")
+            };
+            self.report(&echo)?;
+            return Ok(Some(chosen));
+        }
+
+        let Some(row) = rows.get(self.selected) else {
+            return Ok(None);
+        };
+        let Some(value) = row.value() else {
+            self.report(NONE_LABEL)?;
+            return Ok(Some(vec![]));
+        };
+
+        match validate(value) {
+            Ok(()) => {
+                let value = value.to_string();
+                self.report(&value)?;
+                Ok(Some(vec![value]))
+            }
+            Err(message) => {
+                self.error = Some(message);
+                Ok(None)
+            }
+        }
+    }
+
+    /// Ticks or unticks the highlighted row, and keeps a created value in the list so that it
+    /// shows up ticked instead of vanishing with the filter that produced it.
+    fn toggle(&mut self, rows: &[Row], validate: &dyn Fn(&str) -> std::result::Result<(), String>) {
+        let Some(row) = rows.get(self.selected) else {
+            return;
+        };
+        let Some(value) = row.value().map(str::to_string) else {
+            return;
+        };
+        let created = matches!(row, Row::Create(_));
+
+        let Mode::Multi(chosen) = &mut self.mode else {
+            return;
+        };
+
+        if let Some(position) = chosen.iter().position(|ticked| *ticked == value) {
+            chosen.remove(position);
+        } else {
+            if let Err(message) = validate(&value) {
+                self.error = Some(message);
+                return;
+            }
+            chosen.push(value.clone());
+            if created {
+                self.candidates.push(value);
+            }
+        }
+
+        // Ticking a row answers the filter that found it; the next value starts from a clean list.
+        // With no filter up the highlight stays where it is, so a run of Space keys walks the list.
+        self.error = None;
+        if !self.query.is_empty() {
+            self.query.clear();
+            self.cursor = 0;
+            self.reset_filter();
+        }
+    }
+
     /// Moves the highlight by `delta`, wrapping around the list.
     fn move_selection(&mut self, delta: isize, length: usize) {
         if length == 0 {
@@ -251,8 +358,9 @@ impl Picker<'_> {
     /// Redraws the prompt line, the visible rows, and any validation message.
     fn render(&mut self, rows: &[Row]) -> Result<()> {
         let (height, width) = self.term.size();
-        // Two lines are kept for the prompt and a validation message.
-        let visible = usize::from(height).saturating_sub(2).max(1);
+        // Two lines are kept for the prompt and a validation message, a third for the key hint.
+        let reserved = 2 + usize::from(self.is_multi());
+        let visible = usize::from(height).saturating_sub(reserved).max(1);
         let width = usize::from(width).max(1);
 
         if rows.len() <= visible {
@@ -269,7 +377,7 @@ impl Picker<'_> {
         self.theme
             .format_fuzzy_select_prompt(
                 &mut header,
-                self.prompt,
+                &self.header_label(),
                 &self.query,
                 byte_position(&self.query, self.cursor),
             )
@@ -278,10 +386,30 @@ impl Picker<'_> {
 
         for (index, row) in rows.iter().enumerate().skip(self.offset).take(visible) {
             let mut line = String::new();
-            self.theme
-                .format_select_prompt_item(&mut line, &row.label(), index == self.selected)
-                .map_err(render_error)?;
+            let active = index == self.selected;
+            match &self.mode {
+                Mode::Single => {
+                    self.theme
+                        .format_select_prompt_item(&mut line, &row.label(), active)
+                }
+                Mode::Multi(chosen) => {
+                    let ticked = row
+                        .value()
+                        .is_some_and(|value| chosen.iter().any(|chosen| chosen == value));
+                    self.theme.format_multi_select_prompt_item(
+                        &mut line,
+                        &row.label(),
+                        ticked,
+                        active,
+                    )
+                }
+            }
+            .map_err(render_error)?;
             lines.push(line);
+        }
+
+        if self.is_multi() {
+            lines.push(style(MULTI_HINT).dim().to_string());
         }
 
         if let Some(message) = &self.error {
@@ -301,6 +429,17 @@ impl Picker<'_> {
         self.drawn = lines.len();
 
         Ok(())
+    }
+
+    /// Prompt label, with the ticked values appended so that they stay in sight when the row that
+    /// holds one has scrolled off the list.
+    fn header_label(&self) -> String {
+        match &self.mode {
+            Mode::Multi(chosen) if !chosen.is_empty() => {
+                format!("{} [{}]", self.prompt, chosen.join(", "))
+            }
+            _ => self.prompt.to_string(),
+        }
     }
 
     /// Erases the frame currently on screen.
@@ -340,16 +479,50 @@ pub(crate) fn select_or_create(
     allow_skip: bool,
     validate: &dyn Fn(&str) -> std::result::Result<(), String>,
 ) -> Result<Option<String>> {
+    let picked = picker(prompt, candidates, Mode::Single, allow_skip)?.run(validate)?;
+
+    Ok(picked.into_iter().next())
+}
+
+/// Asks the user to tick any number of `candidates`, or to type values of their own.
+///
+/// Typing filters the list exactly as it does for a single pick, and the `Create "..."` row is
+/// ticked like any other, which is what lets one prompt hold both a known value and a new one.
+/// Space ticks the highlighted row; Enter ticks it too while a filter is up, and confirms the
+/// selection once the filter is empty. The values come back in the order they were ticked, and an
+/// empty `Vec` means the user picked nothing. `allow_empty` decides whether that is accepted.
+/// `validate` guards each value as it is ticked, never the joined result.
+///
+/// # Errors
+/// * If the terminal is not interactive
+/// * If the user cancels with Esc or Ctrl-C
+pub(crate) fn select_or_create_many(
+    prompt: &str,
+    candidates: &[String],
+    allow_empty: bool,
+    validate: &dyn Fn(&str) -> std::result::Result<(), String>,
+) -> Result<Vec<String>> {
+    picker(prompt, candidates, Mode::Multi(Vec::new()), allow_empty)?.run(validate)
+}
+
+/// Builds a picker on the terminal every other prompt writes to.
+fn picker<'a>(
+    prompt: &'a str,
+    candidates: &[String],
+    mode: Mode,
+    allow_skip: bool,
+) -> Result<Picker<'a>> {
     let term = Term::stderr();
     if !term.is_term() {
         return Err(RonaError::UserCancelled);
     }
 
-    Picker {
+    Ok(Picker {
         term,
         theme: crate::theme::prompt_theme(),
         prompt,
-        candidates,
+        candidates: candidates.to_vec(),
+        mode,
         allow_skip,
         query: String::new(),
         cursor: 0,
@@ -357,8 +530,7 @@ pub(crate) fn select_or_create(
         offset: 0,
         error: None,
         drawn: 0,
-    }
-    .run(validate)
+    })
 }
 
 #[cfg(test)]
@@ -374,6 +546,129 @@ mod tests {
 
     fn labels(rows: &[Row]) -> Vec<String> {
         rows.iter().map(Row::label).collect()
+    }
+
+    /// A picker in multi mode over the shared candidate list.
+    fn multi() -> Picker<'static> {
+        Picker {
+            term: Term::stderr(),
+            theme: crate::theme::prompt_theme(),
+            prompt: "Select scopes",
+            candidates: candidates(),
+            mode: Mode::Multi(Vec::new()),
+            allow_skip: true,
+            query: String::new(),
+            cursor: 0,
+            selected: 0,
+            offset: 0,
+            error: None,
+            drawn: 0,
+        }
+    }
+
+    /// Values ticked so far.
+    fn ticked(picker: &Picker<'_>) -> Vec<String> {
+        match &picker.mode {
+            Mode::Multi(chosen) => chosen.clone(),
+            Mode::Single => vec![],
+        }
+    }
+
+    /// Ticks the row `query` highlights, at `selected`.
+    fn tick(picker: &mut Picker<'_>, query: &str, selected: usize) {
+        picker.query = query.to_string();
+        picker.cursor = query.chars().count();
+        let rows = rows(&picker.candidates, query, picker.skip_row());
+        picker.selected = selected;
+        picker.toggle(&rows, &|_| Ok(()));
+    }
+
+    #[test]
+    fn test_a_multi_pick_ticks_and_unticks_a_candidate() {
+        let mut picker = multi();
+
+        tick(&mut picker, "", 1);
+        assert_eq!(ticked(&picker), vec!["auth".to_string()]);
+
+        tick(&mut picker, "", 1);
+        assert!(ticked(&picker).is_empty());
+    }
+
+    #[test]
+    fn test_a_multi_pick_keeps_the_order_the_values_were_ticked_in() {
+        let mut picker = multi();
+
+        tick(&mut picker, "", 2);
+        tick(&mut picker, "", 0);
+
+        assert_eq!(ticked(&picker), vec!["cli".to_string(), "api".to_string()]);
+    }
+
+    #[test]
+    fn test_a_ticked_new_value_joins_the_candidate_list() {
+        let mut picker = multi();
+
+        tick(&mut picker, "billing", 0);
+
+        assert_eq!(ticked(&picker), vec!["billing".to_string()]);
+        assert!(picker.candidates.contains(&"billing".to_string()));
+        assert!(picker.query.is_empty());
+    }
+
+    #[test]
+    fn test_ticking_clears_the_filter_that_found_the_row() {
+        let mut picker = multi();
+
+        tick(&mut picker, "au", 0);
+
+        assert_eq!(ticked(&picker), vec!["auth".to_string()]);
+        assert!(picker.query.is_empty());
+        assert_eq!(picker.cursor, 0);
+    }
+
+    #[test]
+    fn test_a_refused_value_is_not_ticked() {
+        let mut picker = multi();
+        let rows = rows(&picker.candidates, "", false);
+        picker.selected = 0;
+
+        picker.toggle(&rows, &|_| Err("Must match pattern: ^x".to_string()));
+
+        assert!(ticked(&picker).is_empty());
+        assert_eq!(picker.error.as_deref(), Some("Must match pattern: ^x"));
+    }
+
+    #[test]
+    fn test_unticking_a_value_never_asks_the_validator() {
+        let mut picker = multi();
+        let rows = rows(&picker.candidates, "", false);
+        picker.selected = 0;
+        picker.toggle(&rows, &|_| Ok(()));
+
+        picker.toggle(&rows, &|_| Err("refused".to_string()));
+
+        assert!(ticked(&picker).is_empty());
+        assert_eq!(picker.error, None);
+    }
+
+    #[test]
+    fn test_a_multi_pick_offers_no_skip_row() {
+        let picker = multi();
+
+        assert!(!picker.skip_row());
+        assert!(!rows(&picker.candidates, "", picker.skip_row()).contains(&Row::Skip));
+    }
+
+    #[test]
+    fn test_the_header_lists_the_ticked_values() {
+        let mut picker = multi();
+
+        assert_eq!(picker.header_label(), "Select scopes");
+
+        tick(&mut picker, "", 0);
+        tick(&mut picker, "", 1);
+
+        assert_eq!(picker.header_label(), "Select scopes [api, auth]");
     }
 
     #[test]

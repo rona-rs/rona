@@ -462,25 +462,56 @@ This replaces the need for a separate tool when a project requires additional st
 | ------------------------ | ------------------------- | -------- | ------------------------------------------------------------ |
 | `name`                   | string                    | yes      | Variable name used in templates (`{scope}`, `{ticket}`, etc.) |
 | `prompt`                 | string                    | no       | Label shown to the user. Defaults to `name`.                 |
-| `kind`                   | `"text"` \| `"select"`    | no       | Input style. Default: `"text"`.                              |
+| `kind`                   | `"text"` \| `"select"` \| `"multi-select"` | no       | Input style. Default: `"text"`.                              |
 | `required`               | bool                      | no       | Whether an empty answer is rejected. Default: `false`.       |
-| `validation`             | string                    | no       | Regex the answer must match.                                 |
+| `validation`             | string                    | no       | Regex the answer must match. A `multi-select` matches it against each ticked value, not the joined one. |
+| `separator`              | string                    | no       | What joins the ticked values of a `multi-select`. Default: `","`. |
 | `prefetch.source`        | `"command"` \| `"branch"` | no       | Where to fetch candidate values from.                        |
 | `prefetch.command`       | string                    | no       | Shell command to run (for `source = "command"`).             |
 | `prefetch.extract_regex` | string                    | no       | Regex applied to each output line or the branch name. Priority: named group `value`, then capture group 1, then full match. |
+| `prefetch.item_regex`    | string                    | no       | Second-stage regex applied to every value `extract_regex` returned, to split a group such as `records,pds,ui` into its entries. Same extraction priority. |
 | `prefetch.deduplicate`   | bool                      | no       | Remove duplicate results (for `source = "command"`). Default: `false`. |
 
 **Prompt behaviour by kind and prefetch:**
 
-| `kind`   | Prefetch result               | Behaviour                                                    |
-| -------- | ----------------------------- | ------------------------------------------------------------ |
-| `select` | non-empty list                | Fuzzy picker over the candidates, plus `(none)` when the field is optional. Typing filters the list and offers the typed text as a new value, so a value the list does not hold is one Enter away. |
-| `select` | empty                         | Falls back to a free-text prompt                             |
-| `text`   | non-empty list from `command` | Same as `select` with non-empty list                         |
-| `text`   | 0–1 values from `branch`      | Free-text prompt with the extracted value as the default     |
-| `text`   | nothing                       | Plain free-text prompt                                       |
+| `kind`         | Prefetch result               | Behaviour                                                    |
+| -------------- | ----------------------------- | ------------------------------------------------------------ |
+| `select`       | non-empty list                | Fuzzy picker over the candidates, plus `(none)` when the field is optional. Typing filters the list and offers the typed text as a new value, so a value the list does not hold is one Enter away. |
+| `select`       | empty                         | Falls back to a free-text prompt                             |
+| `multi-select` | any                           | Same picker, ticking any number of rows. The ticked values are joined by `separator`. An empty list still takes typed values, so the prompt is shown either way. |
+| `text`         | non-empty list from `command` | Same as `select` with non-empty list                         |
+| `text`         | 0–1 values from `branch`      | Free-text prompt with the extracted value as the default     |
+| `text`         | nothing                       | Plain free-text prompt                                       |
 
 **Entering a value the list does not hold**: the candidates are suggestions, not a closed set. Type the value you want; the list filters as you type, and as soon as nothing matches, a `Create "..."` row takes its place. Pressing Enter accepts it, so a new scope costs the same keystrokes as an existing one. Arrow keys still walk the list, Esc cancels the prompt.
+
+**Ticking several values**: a `multi-select` field turns the same picker into a checklist. Space ticks the highlighted row and Enter confirms the selection; while a filter is up Enter ticks the highlighted row too, so `ui` Enter `ux` Enter Enter picks two values without ever reaching for Space. The ticked values show next to the prompt label, a `Create "..."` row is ticked like any other, and the result is one template variable holding them joined by `separator` (`,` by default). An optional field with nothing ticked is skipped, exactly like `(none)`.
+
+**Splitting a prefetched group**: `prefetch.extract_regex` reads one value per match, which is a problem when that value is itself a list. A subject line such as `feat(records,pds,ui): ...` gives the whole `records,pds,ui` group, not three candidates. `prefetch.item_regex` runs over each extracted value and turns it into its entries, and `deduplicate` then applies to those entries, so the picker lists every scope used in the repository once:
+
+```toml
+[[extra_fields]]
+name = "scope"
+prompt = "Select scopes"
+kind = "multi-select"
+required = false
+prefetch.source = "command"
+prefetch.command = "git log -50 --pretty=format:%s"
+prefetch.extract_regex = "\\w+\\((?P<value>[^)]*)\\):"
+prefetch.item_regex = "[\\w-]+"
+prefetch.deduplicate = true
+```
+
+```text
+$ Select scopes [ui, ux] ›
+  [x] ui
+  [ ] records
+  [x] ux
+  [ ] pds
+  Space to tick, Enter to confirm
+```
+
+With the template `{commit_type}{?scope}({scope}){/scope}: {message}`, that selection writes `feat(ui,ux): ...`.
 
 When a field is skipped (optional + user chose `(none)`), the variable is simply absent. Use a conditional block in your template to handle this cleanly: `{?scope}({scope}){/scope}`.
 
@@ -593,7 +624,7 @@ For the full configuration reference including all options and edge cases, see t
 
 ### Branch Extra Fields
 
-`[[branch_extra_fields]]` entries work exactly like `[[extra_fields]]` but are shown during `rona branch` instead of `rona -g -i`. They support the same keys (`name`, `prompt`, `kind`, `required`, `validation`, `prefetch.*`) and the values become template variables in `branch_template`.
+`[[branch_extra_fields]]` entries work exactly like `[[extra_fields]]` but are shown during `rona branch` instead of `rona -g -i`. They support the same keys (`name`, `prompt`, `kind`, `required`, `validation`, `separator`, `prefetch.*`) and the values become template variables in `branch_template`.
 
 **Example: ticket reference prepended to the branch name**
 
