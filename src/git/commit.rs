@@ -158,7 +158,9 @@ fn handle_dry_run_output(
 /// `--no-gpg-sign`.
 ///
 /// # Arguments
-/// * `args` - Additional arguments (supports `--amend` to amend the previous commit)
+/// * `args` - Additional arguments forwarded to `git commit` (for example `-s` to add a
+///   `Signed-off-by` trailer). `--amend` is handled here instead of being forwarded, and rona's own
+///   `-c` / `--commit` flags are dropped so they never reach git.
 /// * `unsigned` - If true, creates an unsigned commit (passes `--no-gpg-sign`)
 /// * `dry_run` - If true, only show what would be committed without actually committing
 ///
@@ -181,6 +183,9 @@ fn handle_dry_run_output(
 ///
 /// // Amend the previous commit
 /// git_commit(&["--amend".to_string()], false, false)?;
+///
+/// // Add a `Signed-off-by` trailer
+/// git_commit(&["-s".to_string()], false, false)?;
 ///
 /// // Dry run to preview the commit
 /// git_commit(&[], false, true)?;
@@ -239,6 +244,7 @@ pub fn git_commit(args: &[String], unsigned: bool, dry_run: bool) -> Result<()> 
         cmd.arg("--no-gpg-sign");
     }
 
+    cmd.args(&filtered_args);
     cmd.args(["-F", commit_file_str]);
 
     // Use .status() so git inherits stdin/stdout/stderr.
@@ -360,7 +366,6 @@ mod tests {
     static DIR_MUTEX: Mutex<()> = Mutex::new(());
 
     /// Initializes a minimal git repo in `path` suitable for making real commits.
-    #[cfg(unix)]
     fn init_git_repo(
         path: &std::path::Path,
     ) -> std::result::Result<(), Box<dyn std::error::Error>> {
@@ -504,6 +509,48 @@ mod tests {
         assert!(
             result.is_err(),
             "commit should have been blocked by the pre-commit hook"
+        );
+        Ok(())
+    }
+
+    /// Verifies that extra arguments reach `git commit`.
+    ///
+    /// `-s` must add a `Signed-off-by` trailer to the recorded commit message.
+    #[test]
+    fn test_extra_args_are_forwarded() -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let _guard = DIR_MUTEX.lock().map_err(|e| e.to_string())?;
+
+        let temp_dir = TempDir::new()?;
+        let temp_path = temp_dir.path();
+
+        init_git_repo(temp_path)?;
+
+        write(temp_path.join("test.txt"), "hello")?;
+        Command::new("git")
+            .current_dir(temp_path)
+            .args(["add", "test.txt"])
+            .output()?;
+
+        write(temp_path.join("commit_message.md"), "signoff subject\n")?;
+
+        let original_dir = std::env::current_dir()?;
+        std::env::set_current_dir(temp_path)?;
+
+        let result = git_commit(&["-s".to_string()], true, false);
+
+        std::env::set_current_dir(&original_dir)?;
+
+        assert!(result.is_ok(), "commit failed: {result:?}");
+
+        let log = Command::new("git")
+            .current_dir(temp_path)
+            .args(["log", "-1", "--pretty=%B"])
+            .output()?;
+        let message = String::from_utf8_lossy(&log.stdout);
+
+        assert!(
+            message.contains("Signed-off-by: Test <test@example.com>"),
+            "the -s flag did not reach git commit: {message}"
         );
         Ok(())
     }
