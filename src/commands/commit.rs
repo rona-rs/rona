@@ -13,7 +13,9 @@ use crate::{
 /// Commits the working tree using the message prepared in `commit_message.md`.
 ///
 /// # Arguments
-/// * `args` - Additional arguments passed through to `git commit`
+/// * `args` - Additional arguments passed through to `git commit`. They belong to the commit only:
+///   the push triggered by `push` runs without them, since a commit flag such as `-s` is not a
+///   valid `git push` flag. Use `rona push` directly to pass extra arguments to the push.
 /// * `push` - Whether to push the commit once it is created
 /// * `unsigned` - Whether to skip commit signing
 /// * `yes` - Whether to skip the confirmation prompt
@@ -56,7 +58,7 @@ pub(crate) fn commit(
     git_commit(args, unsigned, config.dry_run)?;
 
     if push {
-        git_push(args, config.verbose, config.dry_run)?;
+        git_push(&[], config.verbose, config.dry_run)?;
     }
 
     Ok(())

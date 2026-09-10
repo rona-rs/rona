@@ -1005,7 +1005,11 @@ rona -c [-p | --push] [-u | --unsigned] [extra args]
 
 - `-p, --push` - Push after committing
 - `-u, --unsigned` - Create unsigned commit (explicitly disable signing)
+- `-y, --yes` - Skip the confirmation prompt
+- `--copy` - Copy the commit message to the clipboard instead of committing
 - `--dry-run` - Preview what would be committed
+
+Any extra argument is forwarded to `git commit`, right before the `-F commit_message.md` pair. `--amend` is handled by rona itself. Extra arguments stay with the commit: the push done by `-p` runs without them, so use `rona push` directly when you need to pass push flags.
 
 **Examples:**
 
@@ -1021,6 +1025,12 @@ rona -c -p
 
 # Explicitly unsigned commit with push
 rona -c -u -p
+
+# Add a `Signed-off-by` trailer
+rona -c -s
+
+# Amend the previous commit
+rona -c --amend
 ```
 
 ### `completion`

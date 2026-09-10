@@ -171,7 +171,8 @@ pub(crate) enum CliCommand {
         #[arg(long = "copy", default_value_t = false)]
         copy: bool,
 
-        /// Additional arguments to pass to the commit command
+        /// Additional arguments forwarded to `git commit` (for example `-s` or `--amend`). They are
+        /// not forwarded to the push done by `--push`
         #[arg(allow_hyphen_values = true)]
         args: Vec<String>,
     },

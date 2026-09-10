@@ -69,7 +69,7 @@ _arguments "${_arguments_options[@]}" : \
 '--copy[Copy commit message to clipboard instead of committing]' \
 '-h[Print help]' \
 '--help[Print help]' \
-'*::args -- Additional arguments to pass to the commit command:_default' \
+'*::args -- Additional arguments forwarded to `git commit` (for example `-s` or `--amend`). They are not forwarded to the push done by `--push`:_default' \
 && ret=0
 ;;
 (completion)
