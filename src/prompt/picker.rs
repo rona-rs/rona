@@ -591,7 +591,7 @@ mod tests {
         assert_eq!(ticked(&picker), vec!["auth".to_string()]);
 
         tick(&mut picker, "", 1);
-        assert!(ticked(&picker).is_empty());
+        assert_eq!(ticked(&picker), Vec::<String>::new());
     }
 
     #[test]
@@ -612,7 +612,7 @@ mod tests {
 
         assert_eq!(ticked(&picker), vec!["billing".to_string()]);
         assert!(picker.candidates.contains(&"billing".to_string()));
-        assert!(picker.query.is_empty());
+        assert_eq!(picker.query, "");
     }
 
     #[test]
@@ -622,7 +622,7 @@ mod tests {
         tick(&mut picker, "au", 0);
 
         assert_eq!(ticked(&picker), vec!["auth".to_string()]);
-        assert!(picker.query.is_empty());
+        assert_eq!(picker.query, "");
         assert_eq!(picker.cursor, 0);
     }
 
@@ -634,7 +634,7 @@ mod tests {
 
         picker.toggle(&rows, &|_| Err("Must match pattern: ^x".to_string()));
 
-        assert!(ticked(&picker).is_empty());
+        assert_eq!(ticked(&picker), Vec::<String>::new());
         assert_eq!(picker.error.as_deref(), Some("Must match pattern: ^x"));
     }
 
@@ -647,7 +647,7 @@ mod tests {
 
         picker.toggle(&rows, &|_| Err("refused".to_string()));
 
-        assert!(ticked(&picker).is_empty());
+        assert_eq!(ticked(&picker), Vec::<String>::new());
         assert_eq!(picker.error, None);
     }
 

@@ -959,7 +959,7 @@ mod tests {
         let (title, body) = split_title_and_body("# Just a title\n");
 
         assert_eq!(title, Some("Just a title".to_string()));
-        assert!(body.is_empty());
+        assert_eq!(body, "");
     }
 
     #[test]
@@ -1017,7 +1017,7 @@ mod tests {
         let (title, body) = split_title_and_body("");
 
         assert_eq!(title, None);
-        assert!(body.is_empty());
+        assert_eq!(body, "");
     }
 
     #[test]
@@ -1150,7 +1150,10 @@ mod tests {
         );
 
         // A GitHub template must not be offered for a GitLab remote.
-        assert!(find_description_templates(temp.path(), Forge::GitLab).is_empty());
+        assert_eq!(
+            find_description_templates(temp.path(), Forge::GitLab),
+            Vec::<std::path::PathBuf>::new()
+        );
         Ok(())
     }
 

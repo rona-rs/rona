@@ -469,7 +469,7 @@ mod tests {
 
     #[test]
     fn test_choose_title_is_empty_when_nothing_supplies_one() {
-        assert!(choose_title(None, None, "").is_empty());
+        assert_eq!(choose_title(None, None, ""), "");
     }
 
     #[test]
