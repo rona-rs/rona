@@ -25,7 +25,7 @@ fn test_add_basic() -> TestResult {
     else {
         return Err("Wrong command parsed".into());
     };
-    assert!(exclude.is_empty());
+    assert_eq!(exclude, Vec::<String>::new());
     assert!(!interactive);
     assert!(!dry_run);
     Ok(())
@@ -101,7 +101,7 @@ fn test_add_interactive() -> TestResult {
     else {
         return Err("Wrong command parsed".into());
     };
-    assert!(exclude.is_empty());
+    assert_eq!(exclude, Vec::<String>::new());
     assert!(interactive);
     assert!(!dry_run);
     Ok(())
@@ -133,7 +133,7 @@ fn test_reset_basic() -> TestResult {
     else {
         return Err("Wrong command parsed".into());
     };
-    assert!(files.is_empty());
+    assert_eq!(files, Vec::<String>::new());
     assert!(!interactive);
     assert!(!dry_run);
     Ok(())
@@ -187,7 +187,7 @@ fn test_restore_basic() -> TestResult {
     else {
         return Err("Wrong command parsed".into());
     };
-    assert!(files.is_empty());
+    assert_eq!(files, Vec::<String>::new());
     assert!(!interactive);
     assert!(!yes);
     assert!(!dry_run);
@@ -239,7 +239,7 @@ fn test_commit_basic() -> TestResult {
         return Err("Wrong command parsed".into());
     };
     assert!(!push);
-    assert!(args.is_empty());
+    assert_eq!(args, Vec::<String>::new());
     assert!(!dry_run);
     assert!(!unsigned);
     assert!(!yes);
@@ -264,7 +264,7 @@ fn test_commit_with_push_flag() -> TestResult {
         return Err("Wrong command parsed".into());
     };
     assert!(push);
-    assert!(args.is_empty());
+    assert_eq!(args, Vec::<String>::new());
     assert!(!dry_run);
     assert!(!unsigned);
     assert!(!yes);
@@ -407,7 +407,7 @@ fn test_push_basic() -> TestResult {
     let CliCommand::Push { args, dry_run } = cli.command else {
         return Err("Wrong command parsed".into());
     };
-    assert!(args.is_empty());
+    assert_eq!(args, Vec::<String>::new());
     assert!(!dry_run);
     Ok(())
 }
@@ -795,7 +795,7 @@ fn test_commit_unsigned_short_flag() -> TestResult {
         return Err("Wrong command parsed".into());
     };
     assert!(!push);
-    assert!(args.is_empty());
+    assert_eq!(args, Vec::<String>::new());
     assert!(!dry_run);
     assert!(unsigned);
     assert!(!yes);
@@ -820,7 +820,7 @@ fn test_commit_unsigned_long_flag() -> TestResult {
         return Err("Wrong command parsed".into());
     };
     assert!(!push);
-    assert!(args.is_empty());
+    assert_eq!(args, Vec::<String>::new());
     assert!(!dry_run);
     assert!(unsigned);
     assert!(!yes);
@@ -870,7 +870,7 @@ fn test_commit_dry_run_short_flag() -> TestResult {
         return Err("Wrong command parsed".into());
     };
     assert!(!push);
-    assert!(args.is_empty());
+    assert_eq!(args, Vec::<String>::new());
     assert!(dry_run);
     assert!(!unsigned);
     assert!(!yes);
@@ -895,7 +895,7 @@ fn test_commit_dry_run_long_flag() -> TestResult {
         return Err("Wrong command parsed".into());
     };
     assert!(!push);
-    assert!(args.is_empty());
+    assert_eq!(args, Vec::<String>::new());
     assert!(dry_run);
     assert!(!unsigned);
     assert!(!yes);
@@ -920,7 +920,7 @@ fn test_commit_dry_run_with_push() -> TestResult {
         return Err("Wrong command parsed".into());
     };
     assert!(push);
-    assert!(args.is_empty());
+    assert_eq!(args, Vec::<String>::new());
     assert!(dry_run);
     assert!(!unsigned);
     assert!(!yes);
@@ -947,7 +947,7 @@ fn test_commit_with_copy_flag() -> TestResult {
         return Err("Wrong command parsed".into());
     };
     assert!(!push);
-    assert!(args.is_empty());
+    assert_eq!(args, Vec::<String>::new());
     assert!(!dry_run);
     assert!(!unsigned);
     assert!(!yes);
@@ -972,7 +972,7 @@ fn test_commit_copy_flag_with_other_flags() -> TestResult {
         return Err("Wrong command parsed".into());
     };
     assert!(!push);
-    assert!(args.is_empty());
+    assert_eq!(args, Vec::<String>::new());
     assert!(dry_run);
     assert!(!unsigned);
     assert!(!yes);
@@ -1410,9 +1410,9 @@ fn test_pr_defaults() -> TestResult {
     assert!(!pr.no_push);
     assert!(!pr.yes);
     assert!(!pr.dry_run);
-    assert!(pr.labels.is_empty());
-    assert!(pr.reviewers.is_empty());
-    assert!(pr.assignees.is_empty());
+    assert_eq!(pr.labels, Vec::<String>::new());
+    assert_eq!(pr.reviewers, Vec::<String>::new());
+    assert_eq!(pr.assignees, Vec::<String>::new());
     Ok(())
 }
 

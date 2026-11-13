@@ -497,7 +497,7 @@ mod tests {
             deduplicate: false,
         };
         let result = run_prefetch(&prefetch)?;
-        assert!(result.is_empty());
+        assert_eq!(result, Vec::<String>::new());
         Ok(())
     }
 

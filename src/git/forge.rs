@@ -268,8 +268,9 @@ pub fn last_commit_subject() -> String {
         .output()
         .ok()
         .filter(|output| output.status.success())
-        .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_string())
-        .unwrap_or_default()
+        .map_or_else(String::new, |output| {
+            String::from_utf8_lossy(&output.stdout).trim().to_string()
+        })
 }
 
 /// Reports whether an executable of this name can be run.
